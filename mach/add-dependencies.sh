@@ -5,9 +5,7 @@ echo "Note: You should run gclient sync before this script"
 
 # Remove unneeded dependencies
 rm -rf build
-# rm -rf build_overrides
 rm -rf buildtools
-# rm -rf infra
 rm -rf testing
 rm -rf third_party/angle
 rm -rf third_party/catapult
@@ -24,6 +22,9 @@ rm -rf third_party/vulkan-deps/vulkan-tools
 rm -rf third_party/vulkan-deps/vulkan-validation-layers
 rm -rf third_party/zlib
 
+# Ensure vulkan-deps are committed
+rm third_party/vulkan-deps/.gitignore
+
 # Remove gitmodules, some third_party/ repositories contain these and leaving them around would
 # cause any recursive submodule clones to fail because e.g. some reference internal Google
 # repositories. We don't want them anyway.
@@ -39,10 +40,6 @@ find third_party -depth -type d -name samples -print -exec rm -rf {} \;
 rm -rf third_party/tint/test/
 rm -rf third_party/swiftshader/third_party/SPIRV-Tools # already in third_party/vulkan-deps/spirv-tools
 rm -rf third_party/swiftshader/third_party/SPIRV-Headers # already in third_party/vulkan-deps/spirv-headers
-
-# Remove gn/gni files
-# find . -type f -name '*.gn' -delete
-# find . -type f -name '*.gni' -delete
 
 git add third_party/
 echo "you may now 'git commit -s -m 'update dependencies' if you are happy with the staged changes"
