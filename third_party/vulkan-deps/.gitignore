@@ -1,0 +1,7 @@
+DEPS.old
+/glslang/src
+/spirv-cross/src
+/vulkan-headers/src
+/vulkan-loader/src
+/vulkan-tools/src
+/vulkan-validation-layers/src
