@@ -84,19 +84,19 @@ namespace dawn::native {
     }
 
     bool Format::HasDepth() const {
-        return (aspects & Aspect::Depth) != 0;
+        return (aspects & Aspect::Depth).value != 0;
     }
 
     bool Format::HasStencil() const {
-        return (aspects & Aspect::Stencil) != 0;
+        return (aspects & Aspect::Stencil).value != 0;
     }
 
     bool Format::HasDepthOrStencil() const {
-        return (aspects & (Aspect::Depth | Aspect::Stencil)) != 0;
+        return (aspects & (Aspect::Depth | Aspect::Stencil)).value != 0;
     }
 
     bool Format::IsMultiPlanar() const {
-        return (aspects & (Aspect::Plane0 | Aspect::Plane1)) != 0;
+        return (aspects & (Aspect::Plane0 | Aspect::Plane1)).value != 0;
     }
 
     bool Format::CopyCompatibleWith(const Format& format) const {
@@ -196,7 +196,7 @@ namespace dawn::native {
                             UNREACHABLE();
                     }
                 } else {
-                    ASSERT((sampleTypes & SampleTypeBit::Float) != 0);
+                    ASSERT((sampleTypes & SampleTypeBit::Float).value != 0);
                     firstAspect->baseType = wgpu::TextureComponentType::Float;
                 }
                 firstAspect->supportedSampleTypes = sampleTypes;

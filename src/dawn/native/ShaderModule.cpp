@@ -500,7 +500,7 @@ namespace dawn::native {
 
                     // TODO(dawn:563): Provide info about the sample types.
                     DAWN_INVALID_IF((SampleTypeToSampleTypeBit(layoutInfo.texture.sampleType) &
-                                     shaderInfo.texture.compatibleSampleTypes) == 0,
+                                     shaderInfo.texture.compatibleSampleTypes).value == 0,
                                     "The sample type in the shader is not compatible with the "
                                     "sample type of the layout.");
 

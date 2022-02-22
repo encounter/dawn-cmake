@@ -153,7 +153,7 @@ namespace dawn::native {
                         texture->GetSampleCount(), texture, bindingInfo.texture.multisampled);
 
                     // TODO(dawn:563): Improve error message.
-                    DAWN_INVALID_IF((supportedTypes & requiredType) == 0,
+                    DAWN_INVALID_IF((supportedTypes & requiredType).value == 0,
                                     "Texture component type usage mismatch.");
 
                     DAWN_INVALID_IF(

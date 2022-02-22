@@ -317,7 +317,7 @@ namespace dawn::native {
         // doesn't support depth/stencil formats on 3D textures.
         DAWN_INVALID_IF(
             descriptor->dimension != wgpu::TextureDimension::e2D &&
-                (format->aspects & (Aspect::Depth | Aspect::Stencil)) != 0,
+                (format->aspects & (Aspect::Depth | Aspect::Stencil)).value != 0,
             "The dimension (%s) of a texture with a depth/stencil format (%s) is not 2D.",
             descriptor->dimension, format->format);
 
