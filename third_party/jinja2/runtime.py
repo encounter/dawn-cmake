@@ -6,7 +6,7 @@ from types import MethodType
 
 from markupsafe import escape  # noqa: F401
 from markupsafe import Markup
-from markupsafe import soft_unicode
+from markupsafe import soft_str
 
 from ._compat import abc
 from ._compat import imap
@@ -62,7 +62,7 @@ def identity(x):
 def markup_join(seq):
     """Concatenation that escapes if necessary and converts to unicode."""
     buf = []
-    iterator = imap(soft_unicode, seq)
+    iterator = imap(soft_str, seq)
     for arg in iterator:
         buf.append(arg)
         if hasattr(arg, "__html__"):
