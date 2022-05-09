@@ -71,6 +71,11 @@ using f32 = float;
 
 namespace tint::number_suffixes {
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wreserved-identifier"
+#endif
+
 /// Literal suffix for i32 literals
 inline i32 operator"" _i(unsigned long long int value) {  // NOLINT
     return i32(static_cast<int32_t>(value));
@@ -80,6 +85,10 @@ inline i32 operator"" _i(unsigned long long int value) {  // NOLINT
 inline u32 operator"" _u(unsigned long long int value) {  // NOLINT
     return u32(static_cast<uint32_t>(value));
 }
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 }  // namespace tint::number_suffixes
 
