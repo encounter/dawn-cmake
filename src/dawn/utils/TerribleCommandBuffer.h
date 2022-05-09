@@ -12,31 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef UTILS_TERRIBLE_COMMAND_BUFFER_H_
-#define UTILS_TERRIBLE_COMMAND_BUFFER_H_
+#ifndef SRC_DAWN_UTILS_TERRIBLECOMMANDBUFFER_H_
+#define SRC_DAWN_UTILS_TERRIBLECOMMANDBUFFER_H_
 
 #include "dawn/wire/Wire.h"
 
 namespace utils {
 
-    class TerribleCommandBuffer : public dawn::wire::CommandSerializer {
-      public:
-        TerribleCommandBuffer();
-        TerribleCommandBuffer(dawn::wire::CommandHandler* handler);
+class TerribleCommandBuffer : public dawn::wire::CommandSerializer {
+  public:
+    TerribleCommandBuffer();
+    explicit TerribleCommandBuffer(dawn::wire::CommandHandler* handler);
 
-        void SetHandler(dawn::wire::CommandHandler* handler);
+    void SetHandler(dawn::wire::CommandHandler* handler);
 
-        size_t GetMaximumAllocationSize() const override;
+    size_t GetMaximumAllocationSize() const override;
 
-        void* GetCmdSpace(size_t size) override;
-        bool Flush() override;
+    void* GetCmdSpace(size_t size) override;
+    bool Flush() override;
 
-      private:
-        dawn::wire::CommandHandler* mHandler = nullptr;
-        size_t mOffset = 0;
-        char mBuffer[1000000];
-    };
+  private:
+    dawn::wire::CommandHandler* mHandler = nullptr;
+    size_t mOffset = 0;
+    char mBuffer[1000000];
+};
 
 }  // namespace utils
 
-#endif  // UTILS_TERRIBLE_COMMAND_BUFFER_H_
+#endif  // SRC_DAWN_UTILS_TERRIBLECOMMANDBUFFER_H_

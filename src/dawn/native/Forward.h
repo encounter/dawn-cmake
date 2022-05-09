@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_FORWARD_H_
-#define DAWNNATIVE_FORWARD_H_
+#ifndef SRC_DAWN_NATIVE_FORWARD_H_
+#define SRC_DAWN_NATIVE_FORWARD_H_
 
 #include <cstdint>
 
@@ -22,50 +22,51 @@ class Ref;
 
 namespace dawn::native {
 
-    enum class ObjectType : uint32_t;
+enum class ObjectType : uint32_t;
 
-    class AdapterBase;
-    class BindGroupBase;
-    class BindGroupLayoutBase;
-    class BufferBase;
-    class ComputePipelineBase;
-    class CommandBufferBase;
-    class CommandEncoder;
-    class ComputePassEncoder;
-    class ExternalTextureBase;
-    class InstanceBase;
-    class PipelineBase;
-    class PipelineLayoutBase;
-    class QuerySetBase;
-    class QueueBase;
-    class RenderBundleBase;
-    class RenderBundleEncoder;
-    class RenderPassEncoder;
-    class RenderPipelineBase;
-    class ResourceHeapBase;
-    class SamplerBase;
-    class Surface;
-    class ShaderModuleBase;
-    class StagingBufferBase;
-    class SwapChainBase;
-    class NewSwapChainBase;
-    class TextureBase;
-    class TextureViewBase;
+class AdapterBase;
+class BindGroupBase;
+class BindGroupLayoutBase;
+class BufferBase;
+class ComputePipelineBase;
+class CommandBufferBase;
+class CommandEncoder;
+class ComputePassEncoder;
+class ExternalTextureBase;
+class InstanceBase;
+class PipelineBase;
+class PipelineCacheBase;
+class PipelineLayoutBase;
+class QuerySetBase;
+class QueueBase;
+class RenderBundleBase;
+class RenderBundleEncoder;
+class RenderPassEncoder;
+class RenderPipelineBase;
+class ResourceHeapBase;
+class SamplerBase;
+class Surface;
+class ShaderModuleBase;
+class StagingBufferBase;
+class SwapChainBase;
+class NewSwapChainBase;
+class TextureBase;
+class TextureViewBase;
 
-    class DeviceBase;
+class DeviceBase;
 
-    template <typename T>
-    class PerStage;
+template <typename T>
+class PerStage;
 
-    struct Format;
+struct Format;
 
-    // Aliases for frontend-only types.
-    using CommandEncoderBase = CommandEncoder;
-    using ComputePassEncoderBase = ComputePassEncoder;
-    using RenderBundleEncoderBase = RenderBundleEncoder;
-    using RenderPassEncoderBase = RenderPassEncoder;
-    using SurfaceBase = Surface;
+// Aliases for frontend-only types.
+using CommandEncoderBase = CommandEncoder;
+using ComputePassEncoderBase = ComputePassEncoder;
+using RenderBundleEncoderBase = RenderBundleEncoder;
+using RenderPassEncoderBase = RenderPassEncoder;
+using SurfaceBase = Surface;
 
 }  // namespace dawn::native
 
-#endif  // DAWNNATIVE_FORWARD_H_
+#endif  // SRC_DAWN_NATIVE_FORWARD_H_

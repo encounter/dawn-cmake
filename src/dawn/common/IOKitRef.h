@@ -12,22 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef COMMON_IOKITREF_H_
-#define COMMON_IOKITREF_H_
-
-#include "dawn/common/RefBase.h"
+#ifndef SRC_DAWN_COMMON_IOKITREF_H_
+#define SRC_DAWN_COMMON_IOKITREF_H_
 
 #include <IOKit/IOKitLib.h>
+
+#include "dawn/common/RefBase.h"
 
 template <typename T>
 struct IOKitRefTraits {
     static constexpr T kNullValue = IO_OBJECT_NULL;
-    static void Reference(T value) {
-        IOObjectRetain(value);
-    }
-    static void Release(T value) {
-        IOObjectRelease(value);
-    }
+    static void Reference(T value) { IOObjectRetain(value); }
+    static void Release(T value) { IOObjectRelease(value); }
 };
 
 template <typename T>
@@ -43,4 +39,4 @@ IORef<T> AcquireIORef(T pointee) {
     return ref;
 }
 
-#endif  // COMMON_IOKITREF_H_
+#endif  // SRC_DAWN_COMMON_IOKITREF_H_

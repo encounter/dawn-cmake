@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_PROGRAMMABLEENCODER_H_
-#define DAWNNATIVE_PROGRAMMABLEENCODER_H_
+#ifndef SRC_DAWN_NATIVE_PROGRAMMABLEENCODER_H_
+#define SRC_DAWN_NATIVE_PROGRAMMABLEENCODER_H_
 
 #include "dawn/native/CommandEncoder.h"
 #include "dawn/native/Error.h"
@@ -25,48 +25,44 @@
 
 namespace dawn::native {
 
-    class DeviceBase;
+class DeviceBase;
 
-    // Base class for shared functionality between programmable encoders.
-    class ProgrammableEncoder : public ApiObjectBase {
-      public:
-        ProgrammableEncoder(DeviceBase* device,
-                            const char* label,
-                            EncodingContext* encodingContext);
+// Base class for shared functionality between programmable encoders.
+class ProgrammableEncoder : public ApiObjectBase {
+  public:
+    ProgrammableEncoder(DeviceBase* device, const char* label, EncodingContext* encodingContext);
 
-        void APIInsertDebugMarker(const char* groupLabel);
-        void APIPopDebugGroup();
-        void APIPushDebugGroup(const char* groupLabel);
+    void APIInsertDebugMarker(const char* groupLabel);
+    void APIPopDebugGroup();
+    void APIPushDebugGroup(const char* groupLabel);
 
-      protected:
-        bool IsValidationEnabled() const;
-        MaybeError ValidateProgrammableEncoderEnd() const;
+  protected:
+    bool IsValidationEnabled() const;
+    MaybeError ValidateProgrammableEncoderEnd() const;
 
-        // Compute and render passes do different things on SetBindGroup. These are helper functions
-        // for the logic they have in common.
-        MaybeError ValidateSetBindGroup(BindGroupIndex index,
-                                        BindGroupBase* group,
-                                        uint32_t dynamicOffsetCountIn,
-                                        const uint32_t* dynamicOffsetsIn) const;
-        void RecordSetBindGroup(CommandAllocator* allocator,
-                                BindGroupIndex index,
-                                BindGroupBase* group,
-                                uint32_t dynamicOffsetCount,
-                                const uint32_t* dynamicOffsets) const;
+    // Compute and render passes do different things on SetBindGroup. These are helper functions
+    // for the logic they have in common.
+    MaybeError ValidateSetBindGroup(BindGroupIndex index,
+                                    BindGroupBase* group,
+                                    uint32_t dynamicOffsetCountIn,
+                                    const uint32_t* dynamicOffsetsIn) const;
+    void RecordSetBindGroup(CommandAllocator* allocator,
+                            BindGroupIndex index,
+                            BindGroupBase* group,
+                            uint32_t dynamicOffsetCount,
+                            const uint32_t* dynamicOffsets) const;
 
-        // Construct an "error" programmable pass encoder.
-        ProgrammableEncoder(DeviceBase* device,
-                            EncodingContext* encodingContext,
-                            ErrorTag errorTag);
+    // Construct an "error" programmable pass encoder.
+    ProgrammableEncoder(DeviceBase* device, EncodingContext* encodingContext, ErrorTag errorTag);
 
-        EncodingContext* mEncodingContext = nullptr;
+    EncodingContext* mEncodingContext = nullptr;
 
-        uint64_t mDebugGroupStackSize = 0;
+    uint64_t mDebugGroupStackSize = 0;
 
-      private:
-        const bool mValidationEnabled;
-    };
+  private:
+    const bool mValidationEnabled;
+};
 
 }  // namespace dawn::native
 
-#endif  // DAWNNATIVE_PROGRAMMABLEENCODER_H_
+#endif  // SRC_DAWN_NATIVE_PROGRAMMABLEENCODER_H_

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_METAL_COMMANDBUFFERMTL_H_
-#define DAWNNATIVE_METAL_COMMANDBUFFERMTL_H_
+#ifndef SRC_DAWN_NATIVE_METAL_COMMANDBUFFERMTL_H_
+#define SRC_DAWN_NATIVE_METAL_COMMANDBUFFERMTL_H_
 
 #include "dawn/native/CommandBuffer.h"
 #include "dawn/native/Error.h"
@@ -21,49 +21,41 @@
 #import <Metal/Metal.h>
 
 namespace dawn::native {
-    class CommandEncoder;
+class CommandEncoder;
 }
 
 namespace dawn::native::metal {
 
-    class CommandRecordingContext;
-    class Device;
-    class Texture;
+class CommandRecordingContext;
+class Device;
+class Texture;
 
-    void RecordCopyBufferToTexture(CommandRecordingContext* commandContext,
-                                   id<MTLBuffer> mtlBuffer,
-                                   uint64_t bufferSize,
-                                   uint64_t offset,
-                                   uint32_t bytesPerRow,
-                                   uint32_t rowsPerImage,
-                                   Texture* texture,
-                                   uint32_t mipLevel,
-                                   const Origin3D& origin,
-                                   Aspect aspect,
-                                   const Extent3D& copySize);
+void RecordCopyBufferToTexture(CommandRecordingContext* commandContext,
+                               id<MTLBuffer> mtlBuffer,
+                               uint64_t bufferSize,
+                               uint64_t offset,
+                               uint32_t bytesPerRow,
+                               uint32_t rowsPerImage,
+                               Texture* texture,
+                               uint32_t mipLevel,
+                               const Origin3D& origin,
+                               Aspect aspect,
+                               const Extent3D& copySize);
 
-    class CommandBuffer final : public CommandBufferBase {
-      public:
-        static Ref<CommandBuffer> Create(CommandEncoder* encoder,
-                                         const CommandBufferDescriptor* descriptor);
+class CommandBuffer final : public CommandBufferBase {
+  public:
+    static Ref<CommandBuffer> Create(CommandEncoder* encoder,
+                                     const CommandBufferDescriptor* descriptor);
 
-        MaybeError FillCommands(CommandRecordingContext* commandContext);
+    MaybeError FillCommands(CommandRecordingContext* commandContext);
 
-      private:
-        using CommandBufferBase::CommandBufferBase;
+  private:
+    using CommandBufferBase::CommandBufferBase;
 
-        MaybeError EncodeComputePass(CommandRecordingContext* commandContext);
-        MaybeError EncodeRenderPass(CommandRecordingContext* commandContext,
-                                    MTLRenderPassDescriptor* mtlRenderPass,
-                                    uint32_t width,
-                                    uint32_t height);
-
-        MaybeError EncodeRenderPassInternal(CommandRecordingContext* commandContext,
-                                            MTLRenderPassDescriptor* mtlRenderPass,
-                                            uint32_t width,
-                                            uint32_t height);
-    };
+    MaybeError EncodeComputePass(CommandRecordingContext* commandContext);
+    MaybeError EncodeRenderPass(id<MTLRenderCommandEncoder> encoder);
+};
 
 }  // namespace dawn::native::metal
 
-#endif  // DAWNNATIVE_METAL_COMMANDBUFFERMTL_H_
+#endif  // SRC_DAWN_NATIVE_METAL_COMMANDBUFFERMTL_H_

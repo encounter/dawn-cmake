@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_D3D12_RESIDENCYMANAGERD3D12_H_
-#define DAWNNATIVE_D3D12_RESIDENCYMANAGERD3D12_H_
+#ifndef SRC_DAWN_NATIVE_D3D12_RESIDENCYMANAGERD3D12_H_
+#define SRC_DAWN_NATIVE_D3D12_RESIDENCYMANAGERD3D12_H_
 
 #include "dawn/common/LinkedList.h"
 #include "dawn/native/D3D12Backend.h"
@@ -24,59 +24,58 @@
 
 namespace dawn::native::d3d12 {
 
-    class Device;
-    class Heap;
-    class Pageable;
+class Device;
+class Heap;
+class Pageable;
 
-    class ResidencyManager {
-      public:
-        ResidencyManager(Device* device);
+class ResidencyManager {
+  public:
+    explicit ResidencyManager(Device* device);
 
-        MaybeError LockAllocation(Pageable* pageable);
-        void UnlockAllocation(Pageable* pageable);
+    MaybeError LockAllocation(Pageable* pageable);
+    void UnlockAllocation(Pageable* pageable);
 
-        MaybeError EnsureCanAllocate(uint64_t allocationSize, MemorySegment memorySegment);
-        MaybeError EnsureHeapsAreResident(Heap** heaps, size_t heapCount);
+    MaybeError EnsureCanAllocate(uint64_t allocationSize, MemorySegment memorySegment);
+    MaybeError EnsureHeapsAreResident(Heap** heaps, size_t heapCount);
 
-        uint64_t SetExternalMemoryReservation(MemorySegment segment,
-                                              uint64_t requestedReservationSize);
+    uint64_t SetExternalMemoryReservation(MemorySegment segment, uint64_t requestedReservationSize);
 
-        void TrackResidentAllocation(Pageable* pageable);
+    void TrackResidentAllocation(Pageable* pageable);
 
-        void RestrictBudgetForTesting(uint64_t artificialBudgetCap);
+    void RestrictBudgetForTesting(uint64_t artificialBudgetCap);
 
-      private:
-        struct MemorySegmentInfo {
-            const DXGI_MEMORY_SEGMENT_GROUP dxgiSegment;
-            LinkedList<Pageable> lruCache = {};
-            uint64_t budget = 0;
-            uint64_t usage = 0;
-            uint64_t externalReservation = 0;
-            uint64_t externalRequest = 0;
-        };
-
-        struct VideoMemoryInfo {
-            MemorySegmentInfo local = {DXGI_MEMORY_SEGMENT_GROUP_LOCAL};
-            MemorySegmentInfo nonLocal = {DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL};
-        };
-
-        MemorySegmentInfo* GetMemorySegmentInfo(MemorySegment memorySegment);
-        ResultOrError<uint64_t> EnsureCanMakeResident(uint64_t allocationSize,
-                                                      MemorySegmentInfo* memorySegment);
-        ResultOrError<Pageable*> RemoveSingleEntryFromLRU(MemorySegmentInfo* memorySegment);
-        MaybeError MakeAllocationsResident(MemorySegmentInfo* segment,
-                                           uint64_t sizeToMakeResident,
-                                           uint64_t numberOfObjectsToMakeResident,
-                                           ID3D12Pageable** allocations);
-        void UpdateVideoMemoryInfo();
-        void UpdateMemorySegmentInfo(MemorySegmentInfo* segmentInfo);
-
-        Device* mDevice;
-        bool mResidencyManagementEnabled = false;
-        bool mRestrictBudgetForTesting = false;
-        VideoMemoryInfo mVideoMemoryInfo = {};
+  private:
+    struct MemorySegmentInfo {
+        const DXGI_MEMORY_SEGMENT_GROUP dxgiSegment;
+        LinkedList<Pageable> lruCache = {};
+        uint64_t budget = 0;
+        uint64_t usage = 0;
+        uint64_t externalReservation = 0;
+        uint64_t externalRequest = 0;
     };
+
+    struct VideoMemoryInfo {
+        MemorySegmentInfo local = {DXGI_MEMORY_SEGMENT_GROUP_LOCAL};
+        MemorySegmentInfo nonLocal = {DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL};
+    };
+
+    MemorySegmentInfo* GetMemorySegmentInfo(MemorySegment memorySegment);
+    ResultOrError<uint64_t> EnsureCanMakeResident(uint64_t allocationSize,
+                                                  MemorySegmentInfo* memorySegment);
+    ResultOrError<Pageable*> RemoveSingleEntryFromLRU(MemorySegmentInfo* memorySegment);
+    MaybeError MakeAllocationsResident(MemorySegmentInfo* segment,
+                                       uint64_t sizeToMakeResident,
+                                       uint64_t numberOfObjectsToMakeResident,
+                                       ID3D12Pageable** allocations);
+    void UpdateVideoMemoryInfo();
+    void UpdateMemorySegmentInfo(MemorySegmentInfo* segmentInfo);
+
+    Device* mDevice;
+    bool mResidencyManagementEnabled = false;
+    bool mRestrictBudgetForTesting = false;
+    VideoMemoryInfo mVideoMemoryInfo = {};
+};
 
 }  // namespace dawn::native::d3d12
 
-#endif  // DAWNNATIVE_D3D12_RESIDENCYMANAGERD3D12_H_
+#endif  // SRC_DAWN_NATIVE_D3D12_RESIDENCYMANAGERD3D12_H_

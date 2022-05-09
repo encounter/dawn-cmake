@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGL_QUERYSETGL_H_
-#define DAWNNATIVE_OPENGL_QUERYSETGL_H_
+#ifndef SRC_DAWN_NATIVE_OPENGL_QUERYSETGL_H_
+#define SRC_DAWN_NATIVE_OPENGL_QUERYSETGL_H_
 
 #include "dawn/native/QuerySet.h"
 
 namespace dawn::native::opengl {
 
-    class Device;
+class Device;
 
-    class QuerySet final : public QuerySetBase {
-      public:
-        QuerySet(Device* device, const QuerySetDescriptor* descriptor);
+class QuerySet final : public QuerySetBase {
+  public:
+    QuerySet(Device* device, const QuerySetDescriptor* descriptor);
 
-      private:
-        ~QuerySet() override;
-    };
+  private:
+    ~QuerySet() override;
+};
 
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGL_QUERYSETGL_H_
+#endif  // SRC_DAWN_NATIVE_OPENGL_QUERYSETGL_H_

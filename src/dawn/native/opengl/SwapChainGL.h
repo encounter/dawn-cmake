@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGL_SWAPCHAINGL_H_
-#define DAWNNATIVE_OPENGL_SWAPCHAINGL_H_
+#ifndef SRC_DAWN_NATIVE_OPENGL_SWAPCHAINGL_H_
+#define SRC_DAWN_NATIVE_OPENGL_SWAPCHAINGL_H_
 
 #include "dawn/native/SwapChain.h"
 
@@ -21,18 +21,18 @@
 
 namespace dawn::native::opengl {
 
-    class Device;
+class Device;
 
-    class SwapChain final : public OldSwapChainBase {
-      public:
-        SwapChain(Device* device, const SwapChainDescriptor* descriptor);
+class SwapChain final : public OldSwapChainBase {
+  public:
+    SwapChain(Device* device, const SwapChainDescriptor* descriptor);
 
-      protected:
-        ~SwapChain() override;
-        TextureBase* GetNextTextureImpl(const TextureDescriptor* descriptor) override;
-        MaybeError OnBeforePresent(TextureViewBase* view) override;
-    };
+  protected:
+    ~SwapChain() override;
+    TextureBase* GetNextTextureImpl(const TextureDescriptor* descriptor) override;
+    MaybeError OnBeforePresent(TextureViewBase* view) override;
+};
 
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGL_SWAPCHAINGL_H_
+#endif  // SRC_DAWN_NATIVE_OPENGL_SWAPCHAINGL_H_

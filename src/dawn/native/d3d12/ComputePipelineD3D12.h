@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_D3D12_COMPUTEPIPELINED3D12_H_
-#define DAWNNATIVE_D3D12_COMPUTEPIPELINED3D12_H_
+#ifndef SRC_DAWN_NATIVE_D3D12_COMPUTEPIPELINED3D12_H_
+#define SRC_DAWN_NATIVE_D3D12_COMPUTEPIPELINED3D12_H_
 
 #include "dawn/native/ComputePipeline.h"
 
@@ -21,38 +21,37 @@
 
 namespace dawn::native::d3d12 {
 
-    class Device;
+class Device;
 
-    class ComputePipeline final : public ComputePipelineBase {
-      public:
-        static Ref<ComputePipeline> CreateUninitialized(
-            Device* device,
-            const ComputePipelineDescriptor* descriptor);
-        static void InitializeAsync(Ref<ComputePipelineBase> computePipeline,
-                                    WGPUCreateComputePipelineAsyncCallback callback,
-                                    void* userdata);
-        ComputePipeline() = delete;
+class ComputePipeline final : public ComputePipelineBase {
+  public:
+    static Ref<ComputePipeline> CreateUninitialized(Device* device,
+                                                    const ComputePipelineDescriptor* descriptor);
+    static void InitializeAsync(Ref<ComputePipelineBase> computePipeline,
+                                WGPUCreateComputePipelineAsyncCallback callback,
+                                void* userdata);
+    ComputePipeline() = delete;
 
-        ID3D12PipelineState* GetPipelineState() const;
+    ID3D12PipelineState* GetPipelineState() const;
 
-        MaybeError Initialize() override;
+    MaybeError Initialize() override;
 
-        // Dawn API
-        void SetLabelImpl() override;
+    // Dawn API
+    void SetLabelImpl() override;
 
-        bool UsesNumWorkgroups() const;
+    bool UsesNumWorkgroups() const;
 
-        ComPtr<ID3D12CommandSignature> GetDispatchIndirectCommandSignature();
+    ComPtr<ID3D12CommandSignature> GetDispatchIndirectCommandSignature();
 
-      private:
-        ~ComputePipeline() override;
+  private:
+    ~ComputePipeline() override;
 
-        void DestroyImpl() override;
+    void DestroyImpl() override;
 
-        using ComputePipelineBase::ComputePipelineBase;
-        ComPtr<ID3D12PipelineState> mPipelineState;
-    };
+    using ComputePipelineBase::ComputePipelineBase;
+    ComPtr<ID3D12PipelineState> mPipelineState;
+};
 
 }  // namespace dawn::native::d3d12
 
-#endif  // DAWNNATIVE_D3D12_COMPUTEPIPELINED3D12_H_
+#endif  // SRC_DAWN_NATIVE_D3D12_COMPUTEPIPELINED3D12_H_

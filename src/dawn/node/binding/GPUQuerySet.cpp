@@ -14,26 +14,27 @@
 
 #include "src/dawn/node/binding/GPUQuerySet.h"
 
+#include <utility>
+
 #include "src/dawn/node/utils/Debug.h"
 
 namespace wgpu::binding {
 
-    ////////////////////////////////////////////////////////////////////////////////
-    // wgpu::bindings::GPUQuerySet
-    ////////////////////////////////////////////////////////////////////////////////
-    GPUQuerySet::GPUQuerySet(wgpu::QuerySet query_set) : query_set_(std::move(query_set)) {
-    }
+////////////////////////////////////////////////////////////////////////////////
+// wgpu::bindings::GPUQuerySet
+////////////////////////////////////////////////////////////////////////////////
+GPUQuerySet::GPUQuerySet(wgpu::QuerySet query_set) : query_set_(std::move(query_set)) {}
 
-    void GPUQuerySet::destroy(Napi::Env) {
-        query_set_.Destroy();
-    }
+void GPUQuerySet::destroy(Napi::Env) {
+    query_set_.Destroy();
+}
 
-    std::optional<std::string> GPUQuerySet::getLabel(Napi::Env) {
-        UNIMPLEMENTED();
-    }
+std::string GPUQuerySet::getLabel(Napi::Env) {
+    UNIMPLEMENTED();
+}
 
-    void GPUQuerySet::setLabel(Napi::Env, std::optional<std::string> value) {
-        UNIMPLEMENTED();
-    }
+void GPUQuerySet::setLabel(Napi::Env, std::string value) {
+    UNIMPLEMENTED();
+}
 
 }  // namespace wgpu::binding

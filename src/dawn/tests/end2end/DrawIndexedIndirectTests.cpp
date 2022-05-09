@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
+#include <vector>
 
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderBundleEncoderDescriptor.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
@@ -22,6 +23,14 @@ constexpr uint32_t kRTSize = 4;
 
 class DrawIndexedIndirectTest : public DawnTest {
   protected:
+    wgpu::RequiredLimits GetRequiredLimits(const wgpu::SupportedLimits& supported) override {
+        // Force larger limits, that might reach into the upper 32 bits of the 64bit limit values,
+        // to help detect integer arithmetic bugs like overflows and truncations.
+        wgpu::RequiredLimits required = {};
+        required.limits = supported.limits;
+        return required;
+    }
+
     void SetUp() override {
         DawnTest::SetUp();
 
@@ -647,12 +656,12 @@ TEST_P(DrawIndexedIndirectTest, ValidateReusedBundleWithChangingParams) {
 
     wgpu::ShaderModule paramWriterModule = utils::CreateShaderModule(device,
                                                                      R"(
-            struct Input { firstIndex: u32; };
+            struct Input { firstIndex: u32 }
             struct Params {
-                indexCount: u32;
-                instanceCount: u32;
-                firstIndex: u32;
-            };
+                indexCount: u32,
+                instanceCount: u32,
+                firstIndex: u32,
+            }
             @group(0) @binding(0) var<uniform> input: Input;
             @group(0) @binding(1) var<storage, write> params: Params;
             @stage(compute) @workgroup_size(1) fn main() {
@@ -678,7 +687,7 @@ TEST_P(DrawIndexedIndirectTest, ValidateReusedBundleWithChangingParams) {
         wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
         pass.SetPipeline(computePipeline);
         pass.SetBindGroup(0, bindGroup);
-        pass.Dispatch(1);
+        pass.DispatchWorkgroups(1);
         pass.End();
     };
 

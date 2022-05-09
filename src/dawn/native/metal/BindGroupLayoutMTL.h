@@ -12,35 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_METAL_BINDGROUPLAYOUTMTL_H_
-#define DAWNNATIVE_METAL_BINDGROUPLAYOUTMTL_H_
+#ifndef SRC_DAWN_NATIVE_METAL_BINDGROUPLAYOUTMTL_H_
+#define SRC_DAWN_NATIVE_METAL_BINDGROUPLAYOUTMTL_H_
 
 #include "dawn/common/SlabAllocator.h"
 #include "dawn/native/BindGroupLayout.h"
 
 namespace dawn::native::metal {
 
-    class BindGroup;
-    class Device;
+class BindGroup;
+class Device;
 
-    class BindGroupLayout final : public BindGroupLayoutBase {
-      public:
-        static Ref<BindGroupLayout> Create(DeviceBase* device,
-                                           const BindGroupLayoutDescriptor* descriptor,
-                                           PipelineCompatibilityToken pipelineCompatibilityToken);
+class BindGroupLayout final : public BindGroupLayoutBase {
+  public:
+    static Ref<BindGroupLayout> Create(DeviceBase* device,
+                                       const BindGroupLayoutDescriptor* descriptor,
+                                       PipelineCompatibilityToken pipelineCompatibilityToken);
 
-        Ref<BindGroup> AllocateBindGroup(Device* device, const BindGroupDescriptor* descriptor);
-        void DeallocateBindGroup(BindGroup* bindGroup);
+    Ref<BindGroup> AllocateBindGroup(Device* device, const BindGroupDescriptor* descriptor);
+    void DeallocateBindGroup(BindGroup* bindGroup);
 
-      private:
-        BindGroupLayout(DeviceBase* device,
-                        const BindGroupLayoutDescriptor* descriptor,
-                        PipelineCompatibilityToken pipelineCompatibilityToken);
-        ~BindGroupLayout() override = default;
+  private:
+    BindGroupLayout(DeviceBase* device,
+                    const BindGroupLayoutDescriptor* descriptor,
+                    PipelineCompatibilityToken pipelineCompatibilityToken);
+    ~BindGroupLayout() override = default;
 
-        SlabAllocator<BindGroup> mBindGroupAllocator;
-    };
+    SlabAllocator<BindGroup> mBindGroupAllocator;
+};
 
 }  // namespace dawn::native::metal
 
-#endif  // DAWNNATIVE_METAL_BINDGROUPLAYOUTMTL_H_
+#endif  // SRC_DAWN_NATIVE_METAL_BINDGROUPLAYOUTMTL_H_

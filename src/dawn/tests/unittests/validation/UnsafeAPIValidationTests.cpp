@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/unittests/validation/ValidationTest.h"
+#include <vector>
 
 #include "dawn/tests/MockCallback.h"
+#include "dawn/tests/unittests/validation/ValidationTest.h"
 #include "dawn/utils/ComboRenderBundleEncoderDescriptor.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
 namespace {
-    using testing::HasSubstr;
+using testing::HasSubstr;
 }  // anonymous namespace
 
 class UnsafeAPIValidationTest : public ValidationTest {
@@ -36,16 +37,10 @@ class UnsafeAPIValidationTest : public ValidationTest {
     }
 };
 
-// Check that explicit user device.destroy() is disallowed as part of unsafe APIs.
-// TODO(crbug.com/dawn/628) Remove when CTS testing is in place and passing.
-TEST_F(UnsafeAPIValidationTest, ExplicitDeviceDestroy) {
-    ASSERT_DEVICE_ERROR(device.Destroy(), HasSubstr("Explicit device.destroy() is disallowed"));
-}
-
 // Check that pipeline overridable constants are disallowed as part of unsafe APIs.
 // TODO(dawn:1041) Remove when implementation for all backend is added
 TEST_F(UnsafeAPIValidationTest, PipelineOverridableConstants) {
-    // Create the dummy compute pipeline.
+    // Create the placeholder compute pipeline.
     wgpu::ComputePipelineDescriptor pipelineDescBase;
     pipelineDescBase.compute.entryPoint = "main";
 
@@ -61,8 +56,8 @@ TEST_F(UnsafeAPIValidationTest, PipelineOverridableConstants) {
     // Error case: shader with overridable constant with default value
     {
         ASSERT_DEVICE_ERROR(utils::CreateShaderModule(device, R"(
-@override(1000) let c0: u32 = 1u;
-@override(1000) let c1: u32;
+@id(1000) override c0: u32 = 1u;
+@id(1000) override c1: u32;
 
 @stage(compute) @workgroup_size(1) fn main() {
     _ = c0;

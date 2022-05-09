@@ -12,30 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TESTS_UNITTESTS_NATIVE_MOCKS_RENDERPIPELINE_MOCK_H_
-#define TESTS_UNITTESTS_NATIVE_MOCKS_RENDERPIPELINE_MOCK_H_
+#ifndef SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_RENDERPIPELINEMOCK_H_
+#define SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_RENDERPIPELINEMOCK_H_
+
+#include "gmock/gmock.h"
 
 #include "dawn/native/Device.h"
 #include "dawn/native/RenderPipeline.h"
 
-#include <gmock/gmock.h>
-
 namespace dawn::native {
 
-    class RenderPipelineMock : public RenderPipelineBase {
-      public:
-        RenderPipelineMock(DeviceBase* device) : RenderPipelineBase(device) {
-            ON_CALL(*this, DestroyImpl).WillByDefault([this]() {
-                this->RenderPipelineBase::DestroyImpl();
-            });
-        }
-        ~RenderPipelineMock() override = default;
+class RenderPipelineMock : public RenderPipelineBase {
+  public:
+    explicit RenderPipelineMock(DeviceBase* device) : RenderPipelineBase(device) {
+        ON_CALL(*this, DestroyImpl).WillByDefault([this]() {
+            this->RenderPipelineBase::DestroyImpl();
+        });
+    }
+    ~RenderPipelineMock() override = default;
 
-        MOCK_METHOD(MaybeError, Initialize, (), (override));
-        MOCK_METHOD(size_t, ComputeContentHash, (), (override));
-        MOCK_METHOD(void, DestroyImpl, (), (override));
-    };
+    MOCK_METHOD(MaybeError, Initialize, (), (override));
+    MOCK_METHOD(size_t, ComputeContentHash, (), (override));
+    MOCK_METHOD(void, DestroyImpl, (), (override));
+};
 
 }  // namespace dawn::native
 
-#endif  // TESTS_UNITTESTS_NATIVE_MOCKS_RENDERPIPELINE_MOCK_H_
+#endif  // SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_RENDERPIPELINEMOCK_H_

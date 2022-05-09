@@ -12,22 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef COMMON_COREFOUNDATIONREF_H_
-#define COMMON_COREFOUNDATIONREF_H_
-
-#include "dawn/common/RefBase.h"
+#ifndef SRC_DAWN_COMMON_COREFOUNDATIONREF_H_
+#define SRC_DAWN_COMMON_COREFOUNDATIONREF_H_
 
 #include <CoreFoundation/CoreFoundation.h>
+
+#include "dawn/common/RefBase.h"
 
 template <typename T>
 struct CoreFoundationRefTraits {
     static constexpr T kNullValue = nullptr;
-    static void Reference(T value) {
-        CFRetain(value);
-    }
-    static void Release(T value) {
-        CFRelease(value);
-    }
+    static void Reference(T value) { CFRetain(value); }
+    static void Release(T value) { CFRelease(value); }
 };
 
 template <typename T>
@@ -43,4 +39,4 @@ CFRef<T> AcquireCFRef(T pointee) {
     return ref;
 }
 
-#endif  // COMMON_COREFOUNDATIONREF_H_
+#endif  // SRC_DAWN_COMMON_COREFOUNDATIONREF_H_

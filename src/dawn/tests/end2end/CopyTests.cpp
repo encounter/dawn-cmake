@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
-
+#include <algorithm>
 #include <array>
+#include <vector>
+
 #include "dawn/common/Constants.h"
 #include "dawn/common/Math.h"
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/TestUtils.h"
 #include "dawn/utils/TextureUtils.h"
 #include "dawn/utils/WGPUHelpers.h"
@@ -323,13 +325,13 @@ class CopyTests_B2T : public CopyTests, public DawnTest {
 };
 
 namespace {
-    // The CopyTests Texture to Texture in this class will validate both CopyTextureToTexture and
-    // CopyTextureToTextureInternal.
-    using UsageCopySrc = bool;
-    DAWN_TEST_PARAM_STRUCT(CopyTestsParams, UsageCopySrc);
+// The CopyTests Texture to Texture in this class will validate both CopyTextureToTexture and
+// CopyTextureToTextureInternal.
+using UsageCopySrc = bool;
+DAWN_TEST_PARAM_STRUCT(CopyTestsParams, UsageCopySrc);
 
-    using SrcColorFormat = wgpu::TextureFormat;
-    DAWN_TEST_PARAM_STRUCT(SrcColorFormatParams, SrcColorFormat);
+using SrcColorFormat = wgpu::TextureFormat;
+DAWN_TEST_PARAM_STRUCT(SrcColorFormatParams, SrcColorFormat);
 }  // namespace
 
 template <typename Parent>
@@ -1022,6 +1024,10 @@ TEST_P(CopyTests_T2B, BytesPerRowShouldNotCauseBufferOOBIfCopyHeightIsOne) {
 // A regression test for a bug on D3D12 backend that causes crash when doing texture-to-texture
 // copy one row with the texture format Depth32Float.
 TEST_P(CopyTests_T2B, CopyOneRowWithDepth32Float) {
+    // TODO(crbug.com/dawn/667): Work around the fact that some platforms do not support reading
+    // depth.
+    DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("disable_depth_read"));
+
     // TODO(crbug.com/dawn/727): currently this test fails on many D3D12 drivers.
     DAWN_SUPPRESS_TEST_IF(IsD3D12());
 
@@ -1039,7 +1045,8 @@ TEST_P(CopyTests_T2B, CopyOneRowWithDepth32Float) {
     // Initialize the depth texture with 0.5f.
     constexpr float kClearDepthValue = 0.5f;
     utils::ComboRenderPassDescriptor renderPass({}, texture.CreateView());
-    renderPass.cDepthStencilAttachmentInfo.clearDepth = kClearDepthValue;
+    renderPass.UnsetDepthStencilLoadStoreOpsForFormat(kFormat);
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = kClearDepthValue;
     renderPass.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Clear;
     renderPass.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Store;
     wgpu::RenderPassEncoder renderPassEncoder = encoder.BeginRenderPass(&renderPass);
@@ -1193,8 +1200,6 @@ TEST_P(CopyTests_T2B, Texture3DFull) {
 
 // Test that copying a range of texture 3D depths in one texture-to-buffer-copy works.
 TEST_P(CopyTests_T2B, Texture3DSubRegion) {
-    DAWN_TEST_UNSUPPORTED_IF(IsANGLE());  // TODO(crbug.com/angleproject/5967)
-
     constexpr uint32_t kWidth = 256;
     constexpr uint32_t kHeight = 128;
     constexpr uint32_t kDepth = 6;
@@ -1788,8 +1793,6 @@ TEST_P(CopyTests_B2T, Texture3DFull) {
 
 // Test that copying a range of texture 3D Depths in one texture-to-buffer-copy works.
 TEST_P(CopyTests_B2T, Texture3DSubRegion) {
-    DAWN_TEST_UNSUPPORTED_IF(IsANGLE());  // TODO(crbug.com/angleproject/5967)
-
     constexpr uint32_t kWidth = 256;
     constexpr uint32_t kHeight = 128;
     constexpr uint32_t kDepth = 6;
@@ -2182,6 +2185,9 @@ TEST_P(CopyTests_T2T, CopyFromNonZeroMipLevelWithTexelBlockSizeLessThan4Bytes) {
     // try bots.
     DAWN_SUPPRESS_TEST_IF(IsVulkan() && IsWindows() && IsIntel());
 
+    // This test also fails on D3D12 on Intel Windows. See http://crbug.com/1312066 for details.
+    DAWN_SUPPRESS_TEST_IF(IsD3D12() && IsWindows() && IsIntel());
+
     constexpr std::array<wgpu::TextureFormat, 11> kFormats = {
         {wgpu::TextureFormat::RG8Sint, wgpu::TextureFormat::RG8Uint, wgpu::TextureFormat::RG8Snorm,
          wgpu::TextureFormat::RG8Unorm, wgpu::TextureFormat::R16Float, wgpu::TextureFormat::R16Sint,
@@ -2298,7 +2304,6 @@ TEST_P(CopyTests_T2T, Texture3DTo2DArrayFull) {
 // Test that copying between 3D texture and 2D array textures works. It includes partial copy
 // for src and/or dst texture, non-zero offset (copy origin), non-zero mip level.
 TEST_P(CopyTests_T2T, Texture3DAnd2DArraySubRegion) {
-    DAWN_TEST_UNSUPPORTED_IF(IsANGLE());  // TODO(crbug.com/angleproject/5967)
     // TODO(crbug.com/dawn/1216): Remove this suppression.
     DAWN_SUPPRESS_TEST_IF(IsD3D12() && IsNvidia());
 
@@ -2373,7 +2378,6 @@ TEST_P(CopyTests_T2T, Texture2DArrayTo3DFull) {
 
 // Test that copying subregion of a 3D texture in one texture-to-texture-copy works.
 TEST_P(CopyTests_T2T, Texture3DSubRegion) {
-    DAWN_TEST_UNSUPPORTED_IF(IsANGLE());  // TODO(crbug.com/angleproject/5967)
     constexpr uint32_t kWidth = 256;
     constexpr uint32_t kHeight = 128;
     constexpr uint32_t kDepth = 6u;
@@ -2401,7 +2405,6 @@ TEST_P(CopyTests_T2T, Texture3DTo2DArraySubRegion) {
 // Test that copying subregion of a 2D array to a 3D texture to in one texture-to-texture-copy
 // works.
 TEST_P(CopyTests_T2T, Texture2DArrayTo3DSubRegion) {
-    DAWN_TEST_UNSUPPORTED_IF(IsANGLE());  // TODO(crbug.com/angleproject/5967)
     // TODO(crbug.com/dawn/1216): Remove this suppression.
     DAWN_SUPPRESS_TEST_IF(IsD3D12() && IsNvidia());
     constexpr uint32_t kWidth = 256;

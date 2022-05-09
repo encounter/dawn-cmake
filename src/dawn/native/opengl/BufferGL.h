@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGL_BUFFERGL_H_
-#define DAWNNATIVE_OPENGL_BUFFERGL_H_
+#ifndef SRC_DAWN_NATIVE_OPENGL_BUFFERGL_H_
+#define SRC_DAWN_NATIVE_OPENGL_BUFFERGL_H_
 
 #include "dawn/native/Buffer.h"
 
@@ -21,38 +21,38 @@
 
 namespace dawn::native::opengl {
 
-    class Device;
+class Device;
 
-    class Buffer final : public BufferBase {
-      public:
-        static ResultOrError<Ref<Buffer>> CreateInternalBuffer(Device* device,
-                                                               const BufferDescriptor* descriptor,
-                                                               bool shouldLazyClear);
+class Buffer final : public BufferBase {
+  public:
+    static ResultOrError<Ref<Buffer>> CreateInternalBuffer(Device* device,
+                                                           const BufferDescriptor* descriptor,
+                                                           bool shouldLazyClear);
 
-        Buffer(Device* device, const BufferDescriptor* descriptor);
+    Buffer(Device* device, const BufferDescriptor* descriptor);
 
-        GLuint GetHandle() const;
+    GLuint GetHandle() const;
 
-        bool EnsureDataInitialized();
-        bool EnsureDataInitializedAsDestination(uint64_t offset, uint64_t size);
-        bool EnsureDataInitializedAsDestination(const CopyTextureToBufferCmd* copy);
+    bool EnsureDataInitialized();
+    bool EnsureDataInitializedAsDestination(uint64_t offset, uint64_t size);
+    bool EnsureDataInitializedAsDestination(const CopyTextureToBufferCmd* copy);
 
-      private:
-        Buffer(Device* device, const BufferDescriptor* descriptor, bool shouldLazyClear);
-        ~Buffer() override;
-        MaybeError MapAsyncImpl(wgpu::MapMode mode, size_t offset, size_t size) override;
-        void UnmapImpl() override;
-        void DestroyImpl() override;
-        bool IsCPUWritableAtCreation() const override;
-        MaybeError MapAtCreationImpl() override;
-        void* GetMappedPointerImpl() override;
+  private:
+    Buffer(Device* device, const BufferDescriptor* descriptor, bool shouldLazyClear);
+    ~Buffer() override;
+    MaybeError MapAsyncImpl(wgpu::MapMode mode, size_t offset, size_t size) override;
+    void UnmapImpl() override;
+    void DestroyImpl() override;
+    bool IsCPUWritableAtCreation() const override;
+    MaybeError MapAtCreationImpl() override;
+    void* GetMappedPointerImpl() override;
 
-        void InitializeToZero();
+    void InitializeToZero();
 
-        GLuint mBuffer = 0;
-        void* mMappedData = nullptr;
-    };
+    GLuint mBuffer = 0;
+    void* mMappedData = nullptr;
+};
 
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGL_BUFFERGL_H_
+#endif  // SRC_DAWN_NATIVE_OPENGL_BUFFERGL_H_

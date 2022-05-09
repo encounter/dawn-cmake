@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/native/Error.h"
+#ifndef SRC_DAWN_NATIVE_SPIRVVALIDATION_H_
+#define SRC_DAWN_NATIVE_SPIRVVALIDATION_H_
 
 #include <vector>
 
+#include "dawn/native/Error.h"
+
 namespace dawn::native {
 
-    class DeviceBase;
+class DeviceBase;
 
-    MaybeError ValidateSpirv(DeviceBase* device,
-                             const std::vector<uint32_t>& spirv,
-                             bool dumpSpirv);
+MaybeError ValidateSpirv(DeviceBase* device, const std::vector<uint32_t>& spirv, bool dumpSpirv);
 
 }  // namespace dawn::native
+
+#endif  // SRC_DAWN_NATIVE_SPIRVVALIDATION_H_

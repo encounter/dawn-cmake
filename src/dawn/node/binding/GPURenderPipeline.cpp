@@ -14,32 +14,33 @@
 
 #include "src/dawn/node/binding/GPURenderPipeline.h"
 
+#include <utility>
+
 #include "src/dawn/node/binding/GPUBindGroupLayout.h"
 #include "src/dawn/node/binding/GPUBuffer.h"
 #include "src/dawn/node/utils/Debug.h"
 
 namespace wgpu::binding {
 
-    ////////////////////////////////////////////////////////////////////////////////
-    // wgpu::bindings::GPURenderPipeline
-    ////////////////////////////////////////////////////////////////////////////////
-    GPURenderPipeline::GPURenderPipeline(wgpu::RenderPipeline pipeline)
-        : pipeline_(std::move(pipeline)) {
-    }
+////////////////////////////////////////////////////////////////////////////////
+// wgpu::bindings::GPURenderPipeline
+////////////////////////////////////////////////////////////////////////////////
+GPURenderPipeline::GPURenderPipeline(wgpu::RenderPipeline pipeline)
+    : pipeline_(std::move(pipeline)) {}
 
-    interop::Interface<interop::GPUBindGroupLayout> GPURenderPipeline::getBindGroupLayout(
-        Napi::Env env,
-        uint32_t index) {
-        return interop::GPUBindGroupLayout::Create<GPUBindGroupLayout>(
-            env, pipeline_.GetBindGroupLayout(index));
-    }
+interop::Interface<interop::GPUBindGroupLayout> GPURenderPipeline::getBindGroupLayout(
+    Napi::Env env,
+    uint32_t index) {
+    return interop::GPUBindGroupLayout::Create<GPUBindGroupLayout>(
+        env, pipeline_.GetBindGroupLayout(index));
+}
 
-    std::optional<std::string> GPURenderPipeline::getLabel(Napi::Env) {
-        UNIMPLEMENTED();
-    }
+std::string GPURenderPipeline::getLabel(Napi::Env) {
+    UNIMPLEMENTED();
+}
 
-    void GPURenderPipeline::setLabel(Napi::Env, std::optional<std::string> value) {
-        UNIMPLEMENTED();
-    }
+void GPURenderPipeline::setLabel(Napi::Env, std::string value) {
+    UNIMPLEMENTED();
+}
 
 }  // namespace wgpu::binding

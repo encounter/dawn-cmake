@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef UTILS_DAWNHELPERS_H_
-#define UTILS_DAWNHELPERS_H_
-
-#include <dawn/webgpu_cpp.h>
+#ifndef SRC_DAWN_UTILS_WGPUHELPERS_H_
+#define SRC_DAWN_UTILS_WGPUHELPERS_H_
 
 #include <array>
 #include <initializer_list>
@@ -23,158 +21,160 @@
 
 #include "dawn/common/Constants.h"
 #include "dawn/utils/TextureUtils.h"
+#include "dawn/webgpu_cpp.h"
 
 namespace utils {
 
-    enum Expectation { Success, Failure };
+enum Expectation { Success, Failure };
 
-    wgpu::ShaderModule CreateShaderModuleFromASM(const wgpu::Device& device, const char* source);
-    wgpu::ShaderModule CreateShaderModule(const wgpu::Device& device, const char* source);
+wgpu::ShaderModule CreateShaderModuleFromASM(const wgpu::Device& device, const char* source);
+wgpu::ShaderModule CreateShaderModule(const wgpu::Device& device, const char* source);
 
-    wgpu::Buffer CreateBufferFromData(const wgpu::Device& device,
-                                      const void* data,
-                                      uint64_t size,
-                                      wgpu::BufferUsage usage);
+wgpu::Buffer CreateBufferFromData(const wgpu::Device& device,
+                                  const void* data,
+                                  uint64_t size,
+                                  wgpu::BufferUsage usage);
 
-    template <typename T>
-    wgpu::Buffer CreateBufferFromData(const wgpu::Device& device,
-                                      wgpu::BufferUsage usage,
-                                      std::initializer_list<T> data) {
-        return CreateBufferFromData(device, data.begin(), uint32_t(sizeof(T) * data.size()), usage);
-    }
+template <typename T>
+wgpu::Buffer CreateBufferFromData(const wgpu::Device& device,
+                                  wgpu::BufferUsage usage,
+                                  std::initializer_list<T> data) {
+    return CreateBufferFromData(device, data.begin(), uint32_t(sizeof(T) * data.size()), usage);
+}
 
-    wgpu::ImageCopyBuffer CreateImageCopyBuffer(wgpu::Buffer buffer,
-                                                uint64_t offset,
+wgpu::ImageCopyBuffer CreateImageCopyBuffer(wgpu::Buffer buffer,
+                                            uint64_t offset = 0,
+                                            uint32_t bytesPerRow = wgpu::kCopyStrideUndefined,
+                                            uint32_t rowsPerImage = wgpu::kCopyStrideUndefined);
+wgpu::ImageCopyTexture CreateImageCopyTexture(
+    wgpu::Texture texture,
+    uint32_t level = 0,
+    wgpu::Origin3D origin = {0, 0, 0},
+    wgpu::TextureAspect aspect = wgpu::TextureAspect::All);
+wgpu::TextureDataLayout CreateTextureDataLayout(uint64_t offset,
                                                 uint32_t bytesPerRow,
                                                 uint32_t rowsPerImage = wgpu::kCopyStrideUndefined);
-    wgpu::ImageCopyTexture CreateImageCopyTexture(
-        wgpu::Texture texture,
-        uint32_t level,
-        wgpu::Origin3D origin,
-        wgpu::TextureAspect aspect = wgpu::TextureAspect::All);
-    wgpu::TextureDataLayout CreateTextureDataLayout(
-        uint64_t offset,
-        uint32_t bytesPerRow,
-        uint32_t rowsPerImage = wgpu::kCopyStrideUndefined);
 
-    struct ComboRenderPassDescriptor : public wgpu::RenderPassDescriptor {
-      public:
-        ComboRenderPassDescriptor(std::initializer_list<wgpu::TextureView> colorAttachmentInfo,
-                                  wgpu::TextureView depthStencil = wgpu::TextureView());
+struct ComboRenderPassDescriptor : public wgpu::RenderPassDescriptor {
+  public:
+    ComboRenderPassDescriptor(std::initializer_list<wgpu::TextureView> colorAttachmentInfo,
+                              wgpu::TextureView depthStencil = wgpu::TextureView());
 
-        ComboRenderPassDescriptor(const ComboRenderPassDescriptor& otherRenderPass);
-        const ComboRenderPassDescriptor& operator=(
-            const ComboRenderPassDescriptor& otherRenderPass);
+    ComboRenderPassDescriptor(const ComboRenderPassDescriptor& otherRenderPass);
+    const ComboRenderPassDescriptor& operator=(const ComboRenderPassDescriptor& otherRenderPass);
 
-        std::array<wgpu::RenderPassColorAttachment, kMaxColorAttachments> cColorAttachments;
-        wgpu::RenderPassDepthStencilAttachment cDepthStencilAttachmentInfo = {};
-    };
+    void UnsetDepthStencilLoadStoreOpsForFormat(wgpu::TextureFormat format);
 
-    struct BasicRenderPass {
-      public:
-        BasicRenderPass();
-        BasicRenderPass(uint32_t width,
-                        uint32_t height,
-                        wgpu::Texture color,
-                        wgpu::TextureFormat texture = kDefaultColorFormat);
+    std::array<wgpu::RenderPassColorAttachment, kMaxColorAttachments> cColorAttachments;
+    wgpu::RenderPassDepthStencilAttachment cDepthStencilAttachmentInfo = {};
+};
 
-        static constexpr wgpu::TextureFormat kDefaultColorFormat = wgpu::TextureFormat::RGBA8Unorm;
+struct BasicRenderPass {
+  public:
+    BasicRenderPass();
+    BasicRenderPass(uint32_t width,
+                    uint32_t height,
+                    wgpu::Texture color,
+                    wgpu::TextureFormat texture = kDefaultColorFormat);
 
-        uint32_t width;
-        uint32_t height;
-        wgpu::Texture color;
-        wgpu::TextureFormat colorFormat;
-        utils::ComboRenderPassDescriptor renderPassInfo;
-    };
-    BasicRenderPass CreateBasicRenderPass(
-        const wgpu::Device& device,
-        uint32_t width,
-        uint32_t height,
-        wgpu::TextureFormat format = BasicRenderPass::kDefaultColorFormat);
+    static constexpr wgpu::TextureFormat kDefaultColorFormat = wgpu::TextureFormat::RGBA8Unorm;
 
-    wgpu::PipelineLayout MakeBasicPipelineLayout(const wgpu::Device& device,
-                                                 const wgpu::BindGroupLayout* bindGroupLayout);
+    uint32_t width;
+    uint32_t height;
+    wgpu::Texture color;
+    wgpu::TextureFormat colorFormat;
+    utils::ComboRenderPassDescriptor renderPassInfo;
+};
+BasicRenderPass CreateBasicRenderPass(
+    const wgpu::Device& device,
+    uint32_t width,
+    uint32_t height,
+    wgpu::TextureFormat format = BasicRenderPass::kDefaultColorFormat);
 
-    wgpu::PipelineLayout MakePipelineLayout(const wgpu::Device& device,
-                                            std::vector<wgpu::BindGroupLayout> bgls);
+wgpu::PipelineLayout MakeBasicPipelineLayout(const wgpu::Device& device,
+                                             const wgpu::BindGroupLayout* bindGroupLayout);
 
-    extern wgpu::ExternalTextureBindingLayout kExternalTextureBindingLayout;
+wgpu::PipelineLayout MakePipelineLayout(const wgpu::Device& device,
+                                        std::vector<wgpu::BindGroupLayout> bgls);
 
-    // Helpers to make creating bind group layouts look nicer:
-    //
-    //   utils::MakeBindGroupLayout(device, {
-    //       {0, wgpu::ShaderStage::Vertex, wgpu::BufferBindingType::Uniform},
-    //       {1, wgpu::ShaderStage::Fragment, wgpu::SamplerBindingType::Filtering},
-    //       {3, wgpu::ShaderStage::Fragment, wgpu::TextureSampleType::Float}
-    //   });
+extern wgpu::ExternalTextureBindingLayout kExternalTextureBindingLayout;
 
-    struct BindingLayoutEntryInitializationHelper : wgpu::BindGroupLayoutEntry {
-        BindingLayoutEntryInitializationHelper(uint32_t entryBinding,
-                                               wgpu::ShaderStage entryVisibility,
-                                               wgpu::BufferBindingType bufferType,
-                                               bool bufferHasDynamicOffset = false,
-                                               uint64_t bufferMinBindingSize = 0);
-        BindingLayoutEntryInitializationHelper(uint32_t entryBinding,
-                                               wgpu::ShaderStage entryVisibility,
-                                               wgpu::SamplerBindingType samplerType);
-        BindingLayoutEntryInitializationHelper(
-            uint32_t entryBinding,
-            wgpu::ShaderStage entryVisibility,
-            wgpu::TextureSampleType textureSampleType,
-            wgpu::TextureViewDimension viewDimension = wgpu::TextureViewDimension::e2D,
-            bool textureMultisampled = false);
-        BindingLayoutEntryInitializationHelper(
-            uint32_t entryBinding,
-            wgpu::ShaderStage entryVisibility,
-            wgpu::StorageTextureAccess storageTextureAccess,
-            wgpu::TextureFormat format,
-            wgpu::TextureViewDimension viewDimension = wgpu::TextureViewDimension::e2D);
-        BindingLayoutEntryInitializationHelper(uint32_t entryBinding,
-                                               wgpu::ShaderStage entryVisibility,
-                                               wgpu::ExternalTextureBindingLayout* bindingLayout);
+// Helpers to make creating bind group layouts look nicer:
+//
+//   utils::MakeBindGroupLayout(device, {
+//       {0, wgpu::ShaderStage::Vertex, wgpu::BufferBindingType::Uniform},
+//       {1, wgpu::ShaderStage::Fragment, wgpu::SamplerBindingType::Filtering},
+//       {3, wgpu::ShaderStage::Fragment, wgpu::TextureSampleType::Float}
+//   });
 
-        BindingLayoutEntryInitializationHelper(const wgpu::BindGroupLayoutEntry& entry);
-    };
+struct BindingLayoutEntryInitializationHelper : wgpu::BindGroupLayoutEntry {
+    BindingLayoutEntryInitializationHelper(uint32_t entryBinding,
+                                           wgpu::ShaderStage entryVisibility,
+                                           wgpu::BufferBindingType bufferType,
+                                           bool bufferHasDynamicOffset = false,
+                                           uint64_t bufferMinBindingSize = 0);
+    BindingLayoutEntryInitializationHelper(uint32_t entryBinding,
+                                           wgpu::ShaderStage entryVisibility,
+                                           wgpu::SamplerBindingType samplerType);
+    BindingLayoutEntryInitializationHelper(
+        uint32_t entryBinding,
+        wgpu::ShaderStage entryVisibility,
+        wgpu::TextureSampleType textureSampleType,
+        wgpu::TextureViewDimension viewDimension = wgpu::TextureViewDimension::e2D,
+        bool textureMultisampled = false);
+    BindingLayoutEntryInitializationHelper(
+        uint32_t entryBinding,
+        wgpu::ShaderStage entryVisibility,
+        wgpu::StorageTextureAccess storageTextureAccess,
+        wgpu::TextureFormat format,
+        wgpu::TextureViewDimension viewDimension = wgpu::TextureViewDimension::e2D);
+    BindingLayoutEntryInitializationHelper(uint32_t entryBinding,
+                                           wgpu::ShaderStage entryVisibility,
+                                           wgpu::ExternalTextureBindingLayout* bindingLayout);
 
-    wgpu::BindGroupLayout MakeBindGroupLayout(
-        const wgpu::Device& device,
-        std::initializer_list<BindingLayoutEntryInitializationHelper> entriesInitializer);
+    // NOLINTNEXTLINE(runtime/explicit)
+    BindingLayoutEntryInitializationHelper(const wgpu::BindGroupLayoutEntry& entry);
+};
 
-    // Helpers to make creating bind groups look nicer:
-    //
-    //   utils::MakeBindGroup(device, layout, {
-    //       {0, mySampler},
-    //       {1, myBuffer, offset, size},
-    //       {3, myTextureView}
-    //   });
+wgpu::BindGroupLayout MakeBindGroupLayout(
+    const wgpu::Device& device,
+    std::initializer_list<BindingLayoutEntryInitializationHelper> entriesInitializer);
 
-    // Structure with one constructor per-type of bindings, so that the initializer_list accepts
-    // bindings with the right type and no extra information.
-    struct BindingInitializationHelper {
-        BindingInitializationHelper(uint32_t binding, const wgpu::Sampler& sampler);
-        BindingInitializationHelper(uint32_t binding, const wgpu::TextureView& textureView);
-        BindingInitializationHelper(uint32_t binding, const wgpu::ExternalTexture& externalTexture);
-        BindingInitializationHelper(uint32_t binding,
-                                    const wgpu::Buffer& buffer,
-                                    uint64_t offset = 0,
-                                    uint64_t size = wgpu::kWholeSize);
+// Helpers to make creating bind groups look nicer:
+//
+//   utils::MakeBindGroup(device, layout, {
+//       {0, mySampler},
+//       {1, myBuffer, offset, size},
+//       {3, myTextureView}
+//   });
 
-        wgpu::BindGroupEntry GetAsBinding() const;
+// Structure with one constructor per-type of bindings, so that the initializer_list accepts
+// bindings with the right type and no extra information.
+struct BindingInitializationHelper {
+    BindingInitializationHelper(uint32_t binding, const wgpu::Sampler& sampler);
+    BindingInitializationHelper(uint32_t binding, const wgpu::TextureView& textureView);
+    BindingInitializationHelper(uint32_t binding, const wgpu::ExternalTexture& externalTexture);
+    BindingInitializationHelper(uint32_t binding,
+                                const wgpu::Buffer& buffer,
+                                uint64_t offset = 0,
+                                uint64_t size = wgpu::kWholeSize);
 
-        uint32_t binding;
-        wgpu::Sampler sampler;
-        wgpu::TextureView textureView;
-        wgpu::Buffer buffer;
-        wgpu::ExternalTextureBindingEntry externalTextureBindingEntry;
-        uint64_t offset = 0;
-        uint64_t size = 0;
-    };
+    wgpu::BindGroupEntry GetAsBinding() const;
 
-    wgpu::BindGroup MakeBindGroup(
-        const wgpu::Device& device,
-        const wgpu::BindGroupLayout& layout,
-        std::initializer_list<BindingInitializationHelper> entriesInitializer);
+    uint32_t binding;
+    wgpu::Sampler sampler;
+    wgpu::TextureView textureView;
+    wgpu::Buffer buffer;
+    wgpu::ExternalTextureBindingEntry externalTextureBindingEntry;
+    uint64_t offset = 0;
+    uint64_t size = 0;
+};
+
+wgpu::BindGroup MakeBindGroup(
+    const wgpu::Device& device,
+    const wgpu::BindGroupLayout& layout,
+    std::initializer_list<BindingInitializationHelper> entriesInitializer);
 
 }  // namespace utils
 
-#endif  // UTILS_DAWNHELPERS_H_
+#endif  // SRC_DAWN_UTILS_WGPUHELPERS_H_

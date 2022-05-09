@@ -101,7 +101,7 @@ Open or create the `.vscode/launch.json` file, and add:
             "outFiles": [ "./**/*.js" ],
             "args": [
                 "-e", "require('./src/common/tools/setup-ts-in-node.js');require('./src/common/runtime/cmdline.ts');",
-                "--", "dummy-arg",
+                "--", "placeholder-arg",
                 "--gpu-provider",
                 "[path-to-dawn.node]", // REPLACE: [path-to-dawn.node]
                 "[test-query]", // REPLACE: [test-query]
@@ -118,6 +118,21 @@ Replacing:
 - `[path-to-dawn.node]` this the path to the `dawn.node` module built by the [build step](#Build)
 - `test-query` with the test query string. Example: `webgpu:shader,execution,builtin,abs:*`
 
+## Debugging dawn-node issues in gdb/lldb
+
+It is possible to run the CTS with dawn-node directly similarly to Debugging TypeScript with VSCode:
+
+```sh
+cd <cts-root-dir>
+[path-to-node] \ # for example <dawn-root-dir>/third_party/node/<arch>/node
+    -e "require('./src/common/tools/setup-ts-in-node.js');require('./src/common/runtime/cmdline.ts');" \
+    -- \
+    placeholder-arg \
+    --gpu-provider [path to dawn.node] \
+    [test-query]
+```
+
+This command is then possible to run in your debugger of choice.
 
 ## Known issues
 

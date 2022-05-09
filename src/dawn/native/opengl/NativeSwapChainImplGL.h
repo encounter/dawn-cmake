@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGL_NATIVESWAPCHAINIMPLGL_H_
-#define DAWNNATIVE_OPENGL_NATIVESWAPCHAINIMPLGL_H_
+#ifndef SRC_DAWN_NATIVE_OPENGL_NATIVESWAPCHAINIMPLGL_H_
+#define SRC_DAWN_NATIVE_OPENGL_NATIVESWAPCHAINIMPLGL_H_
 
 #include "dawn/native/OpenGLBackend.h"
 
@@ -22,37 +22,37 @@
 
 namespace dawn::native::opengl {
 
-    class Device;
+class Device;
 
-    class NativeSwapChainImpl {
-      public:
-        using WSIContext = DawnWSIContextGL;
+class NativeSwapChainImpl {
+  public:
+    using WSIContext = DawnWSIContextGL;
 
-        NativeSwapChainImpl(Device* device, PresentCallback present, void* presentUserdata);
-        ~NativeSwapChainImpl();
+    NativeSwapChainImpl(Device* device, PresentCallback present, void* presentUserdata);
+    ~NativeSwapChainImpl();
 
-        void Init(DawnWSIContextGL* context);
-        DawnSwapChainError Configure(WGPUTextureFormat format,
-                                     WGPUTextureUsage,
-                                     uint32_t width,
-                                     uint32_t height);
-        DawnSwapChainError GetNextTexture(DawnSwapChainNextTexture* nextTexture);
-        DawnSwapChainError Present();
+    void Init(DawnWSIContextGL* context);
+    DawnSwapChainError Configure(WGPUTextureFormat format,
+                                 WGPUTextureUsage,
+                                 uint32_t width,
+                                 uint32_t height);
+    DawnSwapChainError GetNextTexture(DawnSwapChainNextTexture* nextTexture);
+    DawnSwapChainError Present();
 
-        wgpu::TextureFormat GetPreferredFormat() const;
+    wgpu::TextureFormat GetPreferredFormat() const;
 
-      private:
-        PresentCallback mPresentCallback;
-        void* mPresentUserdata;
+  private:
+    PresentCallback mPresentCallback;
+    void* mPresentUserdata;
 
-        uint32_t mWidth = 0;
-        uint32_t mHeight = 0;
-        GLuint mBackFBO = 0;
-        GLuint mBackTexture = 0;
+    uint32_t mWidth = 0;
+    uint32_t mHeight = 0;
+    GLuint mBackFBO = 0;
+    GLuint mBackTexture = 0;
 
-        Device* mDevice = nullptr;
-    };
+    Device* mDevice = nullptr;
+};
 
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGL_NATIVESWAPCHAINIMPLGL_H_
+#endif  // SRC_DAWN_NATIVE_OPENGL_NATIVESWAPCHAINIMPLGL_H_

@@ -12,25 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
+#include <vector>
 
 #include "dawn/common/Math.h"
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
 namespace {
-    // https://github.com/gpuweb/gpuweb/issues/108
-    // Vulkan, Metal, and D3D11 have the same standard multisample pattern. D3D12 is the same as
-    // D3D11 but it was left out of the documentation.
-    // {0.375, 0.125}, {0.875, 0.375}, {0.125 0.625}, {0.625, 0.875}
-    // In this test, we store them in -1 to 1 space because it makes it
-    // simpler to upload vertex data. Y is flipped because there is a flip between clip space and
-    // rasterization space.
-    static constexpr std::array<std::array<float, 2>, 4> kSamplePositions = {
-        {{0.375 * 2 - 1, 1 - 0.125 * 2},
-         {0.875 * 2 - 1, 1 - 0.375 * 2},
-         {0.125 * 2 - 1, 1 - 0.625 * 2},
-         {0.625 * 2 - 1, 1 - 0.875 * 2}}};
+// https://github.com/gpuweb/gpuweb/issues/108
+// Vulkan, Metal, and D3D11 have the same standard multisample pattern. D3D12 is the same as
+// D3D11 but it was left out of the documentation.
+// {0.375, 0.125}, {0.875, 0.375}, {0.125 0.625}, {0.625, 0.875}
+// In this test, we store them in -1 to 1 space because it makes it
+// simpler to upload vertex data. Y is flipped because there is a flip between clip space and
+// rasterization space.
+static constexpr std::array<std::array<float, 2>, 4> kSamplePositions = {
+    {{0.375 * 2 - 1, 1 - 0.125 * 2},
+     {0.875 * 2 - 1, 1 - 0.375 * 2},
+     {0.125 * 2 - 1, 1 - 0.625 * 2},
+     {0.625 * 2 - 1, 1 - 0.875 * 2}}};
 }  // anonymous namespace
 
 class MultisampledSamplingTest : public DawnTest {
@@ -50,9 +51,6 @@ class MultisampledSamplingTest : public DawnTest {
     void SetUp() override {
         DawnTest::SetUp();
 
-        // TODO(crbug.com/dawn/1030): Compute pipeline compilation crashes.
-        DAWN_SUPPRESS_TEST_IF(IsLinux() && IsVulkan() && IsIntel());
-
         {
             utils::ComboRenderPipelineDescriptor desc;
 
@@ -64,9 +62,9 @@ class MultisampledSamplingTest : public DawnTest {
 
             desc.cFragment.module = utils::CreateShaderModule(device, R"(
                 struct FragmentOut {
-                    @location(0) color : f32;
-                    @builtin(frag_depth) depth : f32;
-                };
+                    @location(0) color : f32,
+                    @builtin(frag_depth) depth : f32,
+                }
 
                 @stage(fragment) fn main() -> FragmentOut {
                     var output : FragmentOut;
@@ -100,9 +98,9 @@ class MultisampledSamplingTest : public DawnTest {
                 @group(0) @binding(1) var texture1 : texture_depth_multisampled_2d;
 
                 struct Results {
-                    colorSamples : array<f32, 4>;
-                    depthSamples : array<f32, 4>;
-                };
+                    colorSamples : array<f32, 4>,
+                    depthSamples : array<f32, 4>,
+                }
                 @group(0) @binding(2) var<storage, read_write> results : Results;
 
                 @stage(compute) @workgroup_size(1) fn main() {
@@ -198,7 +196,9 @@ TEST_P(MultisampledSamplingTest, SamplePositions) {
             uint32_t sampleOffset = (iter * kSampleCount + sample);
 
             utils::ComboRenderPassDescriptor renderPass({colorView}, depthView);
-            renderPass.cDepthStencilAttachmentInfo.clearDepth = 0.f;
+            renderPass.cDepthStencilAttachmentInfo.depthClearValue = 0.f;
+            renderPass.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Undefined;
+            renderPass.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Undefined;
 
             wgpu::RenderPassEncoder renderPassEncoder = commandEncoder.BeginRenderPass(&renderPass);
             renderPassEncoder.SetPipeline(drawPipeline);
@@ -215,7 +215,7 @@ TEST_P(MultisampledSamplingTest, SamplePositions) {
                        {{0, colorView},
                         {1, depthView},
                         {2, outputBuffer, alignedResultSize * sampleOffset, kResultSize}}));
-            computePassEncoder.Dispatch(1);
+            computePassEncoder.DispatchWorkgroups(1);
             computePassEncoder.End();
         }
     }

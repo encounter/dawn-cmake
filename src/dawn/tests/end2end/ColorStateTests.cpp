@@ -15,11 +15,12 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-
-#include "dawn/tests/DawnTest.h"
+#include <utility>
+#include <vector>
 
 #include "dawn/common/Assert.h"
 #include "dawn/common/Constants.h"
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
@@ -62,8 +63,8 @@ class ColorStateTest : public DawnTest {
     void SetupSingleSourcePipelines(wgpu::ColorTargetState colorTargetState) {
         wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
                 struct MyBlock {
-                    color : vec4<f32>;
-                };
+                    color : vec4<f32>
+                }
 
                 @group(0) @binding(0) var<uniform> myUbo : MyBlock;
 
@@ -219,83 +220,83 @@ class ColorStateTest : public DawnTest {
 };
 
 namespace {
-    // Add two colors and clamp
-    constexpr RGBA8 operator+(const RGBA8& col1, const RGBA8& col2) {
-        int r = static_cast<int>(col1.r) + static_cast<int>(col2.r);
-        int g = static_cast<int>(col1.g) + static_cast<int>(col2.g);
-        int b = static_cast<int>(col1.b) + static_cast<int>(col2.b);
-        int a = static_cast<int>(col1.a) + static_cast<int>(col2.a);
-        r = (r > 255 ? 255 : (r < 0 ? 0 : r));
-        g = (g > 255 ? 255 : (g < 0 ? 0 : g));
-        b = (b > 255 ? 255 : (b < 0 ? 0 : b));
-        a = (a > 255 ? 255 : (a < 0 ? 0 : a));
+// Add two colors and clamp
+constexpr RGBA8 operator+(const RGBA8& col1, const RGBA8& col2) {
+    int r = static_cast<int>(col1.r) + static_cast<int>(col2.r);
+    int g = static_cast<int>(col1.g) + static_cast<int>(col2.g);
+    int b = static_cast<int>(col1.b) + static_cast<int>(col2.b);
+    int a = static_cast<int>(col1.a) + static_cast<int>(col2.a);
+    r = (r > 255 ? 255 : (r < 0 ? 0 : r));
+    g = (g > 255 ? 255 : (g < 0 ? 0 : g));
+    b = (b > 255 ? 255 : (b < 0 ? 0 : b));
+    a = (a > 255 ? 255 : (a < 0 ? 0 : a));
 
-        return RGBA8(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b),
-                     static_cast<uint8_t>(a));
-    }
+    return RGBA8(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b),
+                 static_cast<uint8_t>(a));
+}
 
-    // Subtract two colors and clamp
-    constexpr RGBA8 operator-(const RGBA8& col1, const RGBA8& col2) {
-        int r = static_cast<int>(col1.r) - static_cast<int>(col2.r);
-        int g = static_cast<int>(col1.g) - static_cast<int>(col2.g);
-        int b = static_cast<int>(col1.b) - static_cast<int>(col2.b);
-        int a = static_cast<int>(col1.a) - static_cast<int>(col2.a);
-        r = (r > 255 ? 255 : (r < 0 ? 0 : r));
-        g = (g > 255 ? 255 : (g < 0 ? 0 : g));
-        b = (b > 255 ? 255 : (b < 0 ? 0 : b));
-        a = (a > 255 ? 255 : (a < 0 ? 0 : a));
+// Subtract two colors and clamp
+constexpr RGBA8 operator-(const RGBA8& col1, const RGBA8& col2) {
+    int r = static_cast<int>(col1.r) - static_cast<int>(col2.r);
+    int g = static_cast<int>(col1.g) - static_cast<int>(col2.g);
+    int b = static_cast<int>(col1.b) - static_cast<int>(col2.b);
+    int a = static_cast<int>(col1.a) - static_cast<int>(col2.a);
+    r = (r > 255 ? 255 : (r < 0 ? 0 : r));
+    g = (g > 255 ? 255 : (g < 0 ? 0 : g));
+    b = (b > 255 ? 255 : (b < 0 ? 0 : b));
+    a = (a > 255 ? 255 : (a < 0 ? 0 : a));
 
-        return RGBA8(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b),
-                     static_cast<uint8_t>(a));
-    }
+    return RGBA8(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b),
+                 static_cast<uint8_t>(a));
+}
 
-    // Get the component-wise minimum of two colors
-    RGBA8 min(const RGBA8& col1, const RGBA8& col2) {
-        return RGBA8(std::min(col1.r, col2.r), std::min(col1.g, col2.g), std::min(col1.b, col2.b),
-                     std::min(col1.a, col2.a));
-    }
+// Get the component-wise minimum of two colors
+RGBA8 min(const RGBA8& col1, const RGBA8& col2) {
+    return RGBA8(std::min(col1.r, col2.r), std::min(col1.g, col2.g), std::min(col1.b, col2.b),
+                 std::min(col1.a, col2.a));
+}
 
-    // Get the component-wise maximum of two colors
-    RGBA8 max(const RGBA8& col1, const RGBA8& col2) {
-        return RGBA8(std::max(col1.r, col2.r), std::max(col1.g, col2.g), std::max(col1.b, col2.b),
-                     std::max(col1.a, col2.a));
-    }
+// Get the component-wise maximum of two colors
+RGBA8 max(const RGBA8& col1, const RGBA8& col2) {
+    return RGBA8(std::max(col1.r, col2.r), std::max(col1.g, col2.g), std::max(col1.b, col2.b),
+                 std::max(col1.a, col2.a));
+}
 
-    // Blend two RGBA8 color values parameterized by the provided factors in the range [0.f, 1.f]
-    RGBA8 mix(const RGBA8& col1, const RGBA8& col2, std::array<float, 4> fac) {
-        float r = static_cast<float>(col1.r) * (1.f - fac[0]) + static_cast<float>(col2.r) * fac[0];
-        float g = static_cast<float>(col1.g) * (1.f - fac[1]) + static_cast<float>(col2.g) * fac[1];
-        float b = static_cast<float>(col1.b) * (1.f - fac[2]) + static_cast<float>(col2.b) * fac[2];
-        float a = static_cast<float>(col1.a) * (1.f - fac[3]) + static_cast<float>(col2.a) * fac[3];
+// Blend two RGBA8 color values parameterized by the provided factors in the range [0.f, 1.f]
+RGBA8 mix(const RGBA8& col1, const RGBA8& col2, std::array<float, 4> fac) {
+    float r = static_cast<float>(col1.r) * (1.f - fac[0]) + static_cast<float>(col2.r) * fac[0];
+    float g = static_cast<float>(col1.g) * (1.f - fac[1]) + static_cast<float>(col2.g) * fac[1];
+    float b = static_cast<float>(col1.b) * (1.f - fac[2]) + static_cast<float>(col2.b) * fac[2];
+    float a = static_cast<float>(col1.a) * (1.f - fac[3]) + static_cast<float>(col2.a) * fac[3];
 
-        return RGBA8({static_cast<uint8_t>(std::round(r)), static_cast<uint8_t>(std::round(g)),
-                      static_cast<uint8_t>(std::round(b)), static_cast<uint8_t>(std::round(a))});
-    }
+    return RGBA8({static_cast<uint8_t>(std::round(r)), static_cast<uint8_t>(std::round(g)),
+                  static_cast<uint8_t>(std::round(b)), static_cast<uint8_t>(std::round(a))});
+}
 
-    // Blend two RGBA8 color values parameterized by the provided RGBA8 factor
-    RGBA8 mix(const RGBA8& col1, const RGBA8& col2, const RGBA8& fac) {
-        std::array<float, 4> f = {{
-            static_cast<float>(fac.r) / 255.f,
-            static_cast<float>(fac.g) / 255.f,
-            static_cast<float>(fac.b) / 255.f,
-            static_cast<float>(fac.a) / 255.f,
-        }};
-        return mix(col1, col2, f);
-    }
-
-    constexpr std::array<RGBA8, 8> kColors = {{
-        // check operations over multiple channels
-        RGBA8(64, 0, 0, 0),
-        RGBA8(0, 64, 0, 0),
-        RGBA8(64, 0, 32, 0),
-        RGBA8(0, 64, 32, 0),
-        RGBA8(128, 0, 128, 128),
-        RGBA8(0, 128, 128, 128),
-
-        // check cases that may cause overflow
-        RGBA8(0, 0, 0, 0),
-        RGBA8(255, 255, 255, 255),
+// Blend two RGBA8 color values parameterized by the provided RGBA8 factor
+RGBA8 mix(const RGBA8& col1, const RGBA8& col2, const RGBA8& fac) {
+    std::array<float, 4> f = {{
+        static_cast<float>(fac.r) / 255.f,
+        static_cast<float>(fac.g) / 255.f,
+        static_cast<float>(fac.b) / 255.f,
+        static_cast<float>(fac.a) / 255.f,
     }};
+    return mix(col1, col2, f);
+}
+
+constexpr std::array<RGBA8, 8> kColors = {{
+    // check operations over multiple channels
+    RGBA8(64, 0, 0, 0),
+    RGBA8(0, 64, 0, 0),
+    RGBA8(64, 0, 32, 0),
+    RGBA8(0, 64, 32, 0),
+    RGBA8(128, 0, 128, 128),
+    RGBA8(0, 128, 128, 128),
+
+    // check cases that may cause overflow
+    RGBA8(0, 0, 0, 0),
+    RGBA8(255, 255, 255, 255),
+}};
 }  // namespace
 
 // Test compilation and usage of the fixture
@@ -792,20 +793,20 @@ TEST_P(ColorStateTest, IndependentColorState) {
 
     wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
         struct MyBlock {
-            color0 : vec4<f32>;
-            color1 : vec4<f32>;
-            color2 : vec4<f32>;
-            color3 : vec4<f32>;
-        };
+            color0 : vec4<f32>,
+            color1 : vec4<f32>,
+            color2 : vec4<f32>,
+            color3 : vec4<f32>,
+        }
 
         @group(0) @binding(0) var<uniform> myUbo : MyBlock;
 
         struct FragmentOut {
-            @location(0) fragColor0 : vec4<f32>;
-            @location(1) fragColor1 : vec4<f32>;
-            @location(2) fragColor2 : vec4<f32>;
-            @location(3) fragColor3 : vec4<f32>;
-        };
+            @location(0) fragColor0 : vec4<f32>,
+            @location(1) fragColor1 : vec4<f32>,
+            @location(2) fragColor2 : vec4<f32>,
+            @location(3) fragColor3 : vec4<f32>,
+        }
 
         @stage(fragment) fn main() -> FragmentOut {
             var output : FragmentOut;
@@ -916,8 +917,8 @@ TEST_P(ColorStateTest, IndependentColorState) {
 TEST_P(ColorStateTest, DefaultBlendColor) {
     wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
         struct MyBlock {
-            color : vec4<f32>;
-        };
+            color : vec4<f32>
+        }
 
         @group(0) @binding(0) var<uniform> myUbo : MyBlock;
 
@@ -1042,8 +1043,8 @@ TEST_P(ColorStateTest, DefaultBlendColor) {
 TEST_P(ColorStateTest, ColorWriteMaskDoesNotAffectRenderPassLoadOpClear) {
     wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
         struct MyBlock {
-            color : vec4<f32>;
-        };
+            color : vec4<f32>
+        }
 
         @group(0) @binding(0) var<uniform> myUbo : MyBlock;
 
@@ -1093,6 +1094,69 @@ TEST_P(ColorStateTest, ColorWriteMaskDoesNotAffectRenderPassLoadOpClear) {
     queue.Submit(1, &commands);
 
     EXPECT_PIXEL_RGBA8_EQ(expected, renderPass.color, kRTSize / 2, kRTSize / 2);
+}
+
+TEST_P(ColorStateTest, SparseAttachmentsDifferentColorMask) {
+    DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("disable_indexed_draw_buffers"));
+
+    wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
+        struct Outputs {
+            @location(1) o1 : vec4<f32>,
+            @location(3) o3 : vec4<f32>,
+        }
+
+        @stage(fragment) fn main() -> Outputs {
+            return Outputs(vec4<f32>(1.0), vec4<f32>(0.0, 1.0, 1.0, 1.0));
+        }
+    )");
+
+    utils::ComboRenderPipelineDescriptor pipelineDesc;
+    pipelineDesc.vertex.module = vsModule;
+    pipelineDesc.cFragment.module = fsModule;
+    pipelineDesc.cFragment.targetCount = 4;
+    pipelineDesc.cTargets[0].format = wgpu::TextureFormat::Undefined;
+    pipelineDesc.cTargets[0].writeMask = wgpu::ColorWriteMask::None;
+    pipelineDesc.cTargets[1].format = wgpu::TextureFormat::RGBA8Unorm;
+    pipelineDesc.cTargets[2].format = wgpu::TextureFormat::Undefined;
+    pipelineDesc.cTargets[2].writeMask = wgpu::ColorWriteMask::None;
+    pipelineDesc.cTargets[3].format = wgpu::TextureFormat::RGBA8Unorm;
+    pipelineDesc.cTargets[3].writeMask = wgpu::ColorWriteMask::Green | wgpu::ColorWriteMask::Alpha;
+    wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&pipelineDesc);
+
+    wgpu::TextureDescriptor texDesc;
+    texDesc.dimension = wgpu::TextureDimension::e2D;
+    texDesc.format = wgpu::TextureFormat::RGBA8Unorm;
+    texDesc.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
+    texDesc.size = {1, 1};
+    wgpu::Texture attachment1 = device.CreateTexture(&texDesc);
+    wgpu::Texture attachment3 = device.CreateTexture(&texDesc);
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    {
+        wgpu::RenderPassColorAttachment colorAttachments[4]{};
+        colorAttachments[0].view = nullptr;
+        colorAttachments[1].view = attachment1.CreateView();
+        colorAttachments[1].loadOp = wgpu::LoadOp::Load;
+        colorAttachments[1].storeOp = wgpu::StoreOp::Store;
+        colorAttachments[2].view = nullptr;
+        colorAttachments[3].view = attachment3.CreateView();
+        colorAttachments[3].loadOp = wgpu::LoadOp::Load;
+        colorAttachments[3].storeOp = wgpu::StoreOp::Store;
+
+        wgpu::RenderPassDescriptor rpDesc;
+        rpDesc.colorAttachmentCount = 4;
+        rpDesc.colorAttachments = colorAttachments;
+
+        wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&rpDesc);
+        pass.SetPipeline(pipeline);
+        pass.Draw(3);
+        pass.End();
+    }
+    wgpu::CommandBuffer commands = encoder.Finish();
+    queue.Submit(1, &commands);
+
+    EXPECT_PIXEL_RGBA8_EQ(RGBA8::kWhite, attachment1, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(RGBA8::kGreen, attachment3, 0, 0);
 }
 
 DAWN_INSTANTIATE_TEST(ColorStateTest,

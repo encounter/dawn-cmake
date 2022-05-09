@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <vector>
+
 #include "dawn/native/D3D12Backend.h"
 #include "dawn/native/d3d12/BufferD3D12.h"
 #include "dawn/native/d3d12/DeviceD3D12.h"
@@ -20,8 +22,6 @@
 #include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
-
-#include <vector>
 
 constexpr uint32_t kRestrictedBudgetSize = 100000000;         // 100MB
 constexpr uint32_t kDirectlyAllocatedResourceSize = 5000000;  // 5MB
@@ -354,8 +354,8 @@ TEST_P(D3D12DescriptorResidencyTests, SwitchedViewHeapResidency) {
 
     renderPipelineDescriptor.cFragment.module = utils::CreateShaderModule(device, R"(
             struct U {
-                color : vec4<f32>;
-            };
+                color : vec4<f32>
+            }
             @group(0) @binding(0) var<uniform> colorBuffer : U;
 
             @stage(fragment) fn main() -> @location(0) vec4<f32> {

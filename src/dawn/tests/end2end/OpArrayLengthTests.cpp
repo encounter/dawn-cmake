@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
+#include <string>
 
 #include "dawn/common/Assert.h"
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
@@ -54,8 +55,8 @@ class OpArrayLengthTest : public DawnTest {
         // 0.
         mShaderInterface = R"(
             struct DataBuffer {
-                data : @stride(4) array<f32>;
-            };
+                data : array<f32>
+            }
 
             // The length should be 1 because the buffer is 4-byte long.
             @group(0) @binding(0) var<storage, read> buffer1 : DataBuffer;
@@ -66,14 +67,14 @@ class OpArrayLengthTest : public DawnTest {
             // The length should be (512 - 16*4) / 8 = 56 because the buffer is 512 bytes long
             // and the structure is 8 bytes big.
             struct Buffer3Data {
-                a : f32;
-                b : i32;
-            };
+                a : f32,
+                b : i32,
+            }
 
             struct Buffer3 {
-                @size(64) garbage : mat4x4<f32>;
-                data : @stride(8) array<Buffer3Data>;
-            };
+                @size(64) garbage : mat4x4<f32>,
+                data : array<Buffer3Data>,
+            }
             @group(0) @binding(2) var<storage, read> buffer3 : Buffer3;
         )";
 
@@ -125,8 +126,8 @@ TEST_P(OpArrayLengthTest, Compute) {
     pipelineDesc.compute.entryPoint = "main";
     pipelineDesc.compute.module = utils::CreateShaderModule(device, (R"(
         struct ResultBuffer {
-            data : @stride(4) array<u32, 3>;
-        };
+            data : array<u32, 3>
+        }
         @group(1) @binding(0) var<storage, read_write> result : ResultBuffer;
         )" + mShaderInterface + R"(
         @stage(compute) @workgroup_size(1) fn main() {
@@ -143,7 +144,7 @@ TEST_P(OpArrayLengthTest, Compute) {
     pass.SetPipeline(pipeline);
     pass.SetBindGroup(0, mBindGroup);
     pass.SetBindGroup(1, resultBindGroup);
-    pass.Dispatch(1);
+    pass.DispatchWorkgroups(1);
     pass.End();
 
     wgpu::CommandBuffer commands = encoder.Finish();
@@ -224,9 +225,9 @@ TEST_P(OpArrayLengthTest, Vertex) {
     // pass pixel.
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, (mShaderInterface + R"(
         struct VertexOut {
-            @location(0) color : vec4<f32>;
-            @builtin(position) position : vec4<f32>;
-        };
+            @location(0) color : vec4<f32>,
+            @builtin(position) position : vec4<f32>,
+        }
 
         @stage(vertex) fn main() -> VertexOut {
             var output : VertexOut;

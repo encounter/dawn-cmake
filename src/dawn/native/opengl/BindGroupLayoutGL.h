@@ -12,31 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGL_BINDGROUPLAYOUTGL_H_
-#define DAWNNATIVE_OPENGL_BINDGROUPLAYOUTGL_H_
+#ifndef SRC_DAWN_NATIVE_OPENGL_BINDGROUPLAYOUTGL_H_
+#define SRC_DAWN_NATIVE_OPENGL_BINDGROUPLAYOUTGL_H_
 
 #include "dawn/common/SlabAllocator.h"
 #include "dawn/native/BindGroupLayout.h"
+#include "dawn/native/opengl/BindGroupGL.h"
 
 namespace dawn::native::opengl {
 
-    class BindGroup;
-    class Device;
+class Device;
 
-    class BindGroupLayout final : public BindGroupLayoutBase {
-      public:
-        BindGroupLayout(DeviceBase* device,
-                        const BindGroupLayoutDescriptor* descriptor,
-                        PipelineCompatibilityToken pipelineCompatibilityToken);
+class BindGroupLayout final : public BindGroupLayoutBase {
+  public:
+    BindGroupLayout(DeviceBase* device,
+                    const BindGroupLayoutDescriptor* descriptor,
+                    PipelineCompatibilityToken pipelineCompatibilityToken);
 
-        Ref<BindGroup> AllocateBindGroup(Device* device, const BindGroupDescriptor* descriptor);
-        void DeallocateBindGroup(BindGroup* bindGroup);
+    Ref<BindGroup> AllocateBindGroup(Device* device, const BindGroupDescriptor* descriptor);
+    void DeallocateBindGroup(BindGroup* bindGroup);
 
-      private:
-        ~BindGroupLayout() override = default;
-        SlabAllocator<BindGroup> mBindGroupAllocator;
-    };
+  private:
+    ~BindGroupLayout() override = default;
+    SlabAllocator<BindGroup> mBindGroupAllocator;
+};
 
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGL_BINDGROUPLAYOUTGL_H_
+#endif  // SRC_DAWN_NATIVE_OPENGL_BINDGROUPLAYOUTGL_H_

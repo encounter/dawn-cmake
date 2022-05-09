@@ -14,26 +14,26 @@
 
 #include "src/dawn/node/binding/GPURenderBundle.h"
 
+#include <utility>
+
 #include "src/dawn/node/binding/Converter.h"
 #include "src/dawn/node/binding/GPUBuffer.h"
-#include "src/dawn/node/binding/GPURenderBundle.h"
 #include "src/dawn/node/binding/GPURenderPipeline.h"
 #include "src/dawn/node/utils/Debug.h"
 
 namespace wgpu::binding {
 
-    ////////////////////////////////////////////////////////////////////////////////
-    // wgpu::bindings::GPURenderBundle
-    ////////////////////////////////////////////////////////////////////////////////
-    GPURenderBundle::GPURenderBundle(wgpu::RenderBundle bundle) : bundle_(std::move(bundle)) {
-    }
+////////////////////////////////////////////////////////////////////////////////
+// wgpu::bindings::GPURenderBundle
+////////////////////////////////////////////////////////////////////////////////
+GPURenderBundle::GPURenderBundle(wgpu::RenderBundle bundle) : bundle_(std::move(bundle)) {}
 
-    std::optional<std::string> GPURenderBundle::getLabel(Napi::Env) {
-        UNIMPLEMENTED();
-    }
+std::string GPURenderBundle::getLabel(Napi::Env) {
+    UNIMPLEMENTED();
+}
 
-    void GPURenderBundle::setLabel(Napi::Env, std::optional<std::string> value) {
-        UNIMPLEMENTED();
-    }
+void GPURenderBundle::setLabel(Napi::Env, std::string value) {
+    UNIMPLEMENTED();
+}
 
 }  // namespace wgpu::binding

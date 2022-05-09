@@ -12,25 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGL_BACKENDGL_H_
-#define DAWNNATIVE_OPENGL_BACKENDGL_H_
+#ifndef SRC_DAWN_NATIVE_OPENGL_BACKENDGL_H_
+#define SRC_DAWN_NATIVE_OPENGL_BACKENDGL_H_
+
+#include <vector>
 
 #include "dawn/native/BackendConnection.h"
 
 namespace dawn::native::opengl {
 
-    class Backend : public BackendConnection {
-      public:
-        Backend(InstanceBase* instance, wgpu::BackendType backendType);
+class Backend : public BackendConnection {
+  public:
+    Backend(InstanceBase* instance, wgpu::BackendType backendType);
 
-        std::vector<Ref<AdapterBase>> DiscoverDefaultAdapters() override;
-        ResultOrError<std::vector<Ref<AdapterBase>>> DiscoverAdapters(
-            const AdapterDiscoveryOptionsBase* options) override;
+    std::vector<Ref<AdapterBase>> DiscoverDefaultAdapters() override;
+    ResultOrError<std::vector<Ref<AdapterBase>>> DiscoverAdapters(
+        const AdapterDiscoveryOptionsBase* options) override;
 
-      private:
-        bool mCreatedAdapter = false;
-    };
+  private:
+    bool mCreatedAdapter = false;
+};
 
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGL_BACKENDGL_H_
+#endif  // SRC_DAWN_NATIVE_OPENGL_BACKENDGL_H_

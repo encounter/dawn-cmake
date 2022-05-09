@@ -144,12 +144,12 @@ class VertexOnlyRenderPipelineTest : public DawnTest {
         utils::ComboRenderPassDescriptor clearPass =
             utils::ComboRenderPassDescriptor({renderTargetColor.CreateView()}, depthStencilView);
         clearPass.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Clear;
-        clearPass.cDepthStencilAttachmentInfo.clearDepth = 0.0f;
+        clearPass.cDepthStencilAttachmentInfo.depthClearValue = 0.0f;
         clearPass.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Clear;
-        clearPass.cDepthStencilAttachmentInfo.clearStencil = 0x0;
+        clearPass.cDepthStencilAttachmentInfo.stencilClearValue = 0x0;
         for (auto& t : clearPass.cColorAttachments) {
             t.loadOp = wgpu::LoadOp::Clear;
-            t.clearColor = {0.0, 0.0, 0.0, 0.0};
+            t.clearValue = {0.0, 0.0, 0.0, 0.0};
         }
 
         auto pass = encoder.BeginRenderPass(&clearPass);
@@ -308,12 +308,12 @@ TEST_P(VertexOnlyRenderPipelineTest, MultiplePass) {
 
 DAWN_INSTANTIATE_TEST(VertexOnlyRenderPipelineTest,
                       D3D12Backend(),
-                      D3D12Backend({"use_dummy_fragment_in_vertex_only_pipeline"}),
+                      D3D12Backend({"use_placeholder_fragment_in_vertex_only_pipeline"}),
                       MetalBackend(),
-                      MetalBackend({"use_dummy_fragment_in_vertex_only_pipeline"}),
+                      MetalBackend({"use_placeholder_fragment_in_vertex_only_pipeline"}),
                       OpenGLBackend(),
-                      OpenGLBackend({"use_dummy_fragment_in_vertex_only_pipeline"}),
+                      OpenGLBackend({"use_placeholder_fragment_in_vertex_only_pipeline"}),
                       OpenGLESBackend(),
-                      OpenGLESBackend({"use_dummy_fragment_in_vertex_only_pipeline"}),
+                      OpenGLESBackend({"use_placeholder_fragment_in_vertex_only_pipeline"}),
                       VulkanBackend(),
-                      VulkanBackend({"use_dummy_fragment_in_vertex_only_pipeline"}));
+                      VulkanBackend({"use_placeholder_fragment_in_vertex_only_pipeline"}));

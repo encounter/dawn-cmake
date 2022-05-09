@@ -12,46 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_D3D12_COMMANDBUFFERD3D12_H_
-#define DAWNNATIVE_D3D12_COMMANDBUFFERD3D12_H_
+#ifndef SRC_DAWN_NATIVE_D3D12_COMMANDBUFFERD3D12_H_
+#define SRC_DAWN_NATIVE_D3D12_COMMANDBUFFERD3D12_H_
 
 #include "dawn/native/CommandBuffer.h"
 #include "dawn/native/Error.h"
 
 namespace dawn::native {
-    struct BeginRenderPassCmd;
+struct BeginRenderPassCmd;
 }  // namespace dawn::native
 
 namespace dawn::native::d3d12 {
 
-    class BindGroupStateTracker;
-    class CommandRecordingContext;
-    class RenderPassBuilder;
+class BindGroupStateTracker;
+class CommandRecordingContext;
+class RenderPassBuilder;
 
-    class CommandBuffer final : public CommandBufferBase {
-      public:
-        static Ref<CommandBuffer> Create(CommandEncoder* encoder,
-                                         const CommandBufferDescriptor* descriptor);
+class CommandBuffer final : public CommandBufferBase {
+  public:
+    static Ref<CommandBuffer> Create(CommandEncoder* encoder,
+                                     const CommandBufferDescriptor* descriptor);
 
-        MaybeError RecordCommands(CommandRecordingContext* commandContext);
+    MaybeError RecordCommands(CommandRecordingContext* commandContext);
 
-      private:
-        CommandBuffer(CommandEncoder* encoder, const CommandBufferDescriptor* descriptor);
+  private:
+    CommandBuffer(CommandEncoder* encoder, const CommandBufferDescriptor* descriptor);
 
-        MaybeError RecordComputePass(CommandRecordingContext* commandContext,
-                                     BindGroupStateTracker* bindingTracker,
-                                     const ComputePassResourceUsage& resourceUsages);
-        MaybeError RecordRenderPass(CommandRecordingContext* commandContext,
-                                    BindGroupStateTracker* bindingTracker,
-                                    BeginRenderPassCmd* renderPass,
-                                    bool passHasUAV);
-        MaybeError SetupRenderPass(CommandRecordingContext* commandContext,
-                                   BeginRenderPassCmd* renderPass,
-                                   RenderPassBuilder* renderPassBuilder);
-        void EmulateBeginRenderPass(CommandRecordingContext* commandContext,
-                                    const RenderPassBuilder* renderPassBuilder) const;
-    };
+    MaybeError RecordComputePass(CommandRecordingContext* commandContext,
+                                 BindGroupStateTracker* bindingTracker,
+                                 const ComputePassResourceUsage& resourceUsages);
+    MaybeError RecordRenderPass(CommandRecordingContext* commandContext,
+                                BindGroupStateTracker* bindingTracker,
+                                BeginRenderPassCmd* renderPass,
+                                bool passHasUAV);
+    MaybeError SetupRenderPass(CommandRecordingContext* commandContext,
+                               BeginRenderPassCmd* renderPass,
+                               RenderPassBuilder* renderPassBuilder);
+    void EmulateBeginRenderPass(CommandRecordingContext* commandContext,
+                                const RenderPassBuilder* renderPassBuilder) const;
+};
 
 }  // namespace dawn::native::d3d12
 
-#endif  // DAWNNATIVE_D3D12_COMMANDBUFFERD3D12_H_
+#endif  // SRC_DAWN_NATIVE_D3D12_COMMANDBUFFERD3D12_H_

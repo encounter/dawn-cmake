@@ -12,57 +12,57 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_ERRORINJECTOR_H_
-#define DAWNNATIVE_ERRORINJECTOR_H_
+#ifndef SRC_DAWN_NATIVE_ERRORINJECTOR_H_
+#define SRC_DAWN_NATIVE_ERRORINJECTOR_H_
 
 #include <stdint.h>
 #include <type_traits>
 
 namespace dawn::native {
 
-    template <typename ErrorType>
-    struct InjectedErrorResult {
-        ErrorType error;
-        bool injected;
-    };
+template <typename ErrorType>
+struct InjectedErrorResult {
+    ErrorType error;
+    bool injected;
+};
 
-    bool ErrorInjectorEnabled();
+bool ErrorInjectorEnabled();
 
-    bool ShouldInjectError();
+bool ShouldInjectError();
 
-    template <typename ErrorType>
-    InjectedErrorResult<ErrorType> MaybeInjectError(ErrorType errorType) {
-        return InjectedErrorResult<ErrorType>{errorType, ShouldInjectError()};
+template <typename ErrorType>
+InjectedErrorResult<ErrorType> MaybeInjectError(ErrorType errorType) {
+    return InjectedErrorResult<ErrorType>{errorType, ShouldInjectError()};
+}
+
+template <typename ErrorType, typename... ErrorTypes>
+InjectedErrorResult<ErrorType> MaybeInjectError(ErrorType errorType, ErrorTypes... errorTypes) {
+    if (ShouldInjectError()) {
+        return InjectedErrorResult<ErrorType>{errorType, true};
     }
-
-    template <typename ErrorType, typename... ErrorTypes>
-    InjectedErrorResult<ErrorType> MaybeInjectError(ErrorType errorType, ErrorTypes... errorTypes) {
-        if (ShouldInjectError()) {
-            return InjectedErrorResult<ErrorType>{errorType, true};
-        }
-        return MaybeInjectError(errorTypes...);
-    }
+    return MaybeInjectError(errorTypes...);
+}
 
 }  // namespace dawn::native
 
 #if defined(DAWN_ENABLE_ERROR_INJECTION)
 
-#    define INJECT_ERROR_OR_RUN(stmt, ...)                                                   \
-        [&]() {                                                                              \
-            if (DAWN_UNLIKELY(::dawn::native::ErrorInjectorEnabled())) {                     \
-                /* Only used for testing and fuzzing, so it's okay if this is deoptimized */ \
-                auto injectedError = ::dawn::native::MaybeInjectError(__VA_ARGS__);          \
-                if (injectedError.injected) {                                                \
-                    return injectedError.error;                                              \
-                }                                                                            \
-            }                                                                                \
-            return (stmt);                                                                   \
-        }()
+#define INJECT_ERROR_OR_RUN(stmt, ...)                                                   \
+    [&]() {                                                                              \
+        if (DAWN_UNLIKELY(::dawn::native::ErrorInjectorEnabled())) {                     \
+            /* Only used for testing and fuzzing, so it's okay if this is deoptimized */ \
+            auto injectedError = ::dawn::native::MaybeInjectError(__VA_ARGS__);          \
+            if (injectedError.injected) {                                                \
+                return injectedError.error;                                              \
+            }                                                                            \
+        }                                                                                \
+        return (stmt);                                                                   \
+    }()
 
 #else
 
-#    define INJECT_ERROR_OR_RUN(stmt, ...) stmt
+#define INJECT_ERROR_OR_RUN(stmt, ...) stmt
 
 #endif
 
-#endif  // DAWNNATIVE_ERRORINJECTOR_H_
+#endif  // SRC_DAWN_NATIVE_ERRORINJECTOR_H_

@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef COMMON_NSREF_H_
-#define COMMON_NSREF_H_
+#ifndef SRC_DAWN_COMMON_NSREF_H_
+#define SRC_DAWN_COMMON_NSREF_H_
 
 #include "dawn/common/RefBase.h"
 
 #import <Foundation/NSObject.h>
 
 #if !defined(__OBJC__)
-#    error "NSRef can only be used in Objective C/C++ code."
+#error "NSRef can only be used in Objective C/C++ code."
 #endif
 
 // This file contains smart pointers that automatically reference and release Objective C objects
@@ -67,12 +67,8 @@
 template <typename T>
 struct NSRefTraits {
     static constexpr T kNullValue = nullptr;
-    static void Reference(T value) {
-        [value retain];
-    }
-    static void Release(T value) {
-        [value release];
-    }
+    static void Reference(T value) { [value retain]; }
+    static void Release(T value) { [value release]; }
 };
 
 template <typename T>
@@ -80,13 +76,9 @@ class NSRef : public RefBase<T*, NSRefTraits<T*>> {
   public:
     using RefBase<T*, NSRefTraits<T*>>::RefBase;
 
-    const T* operator*() const {
-        return this->Get();
-    }
+    const T* operator*() const { return this->Get(); }
 
-    T* operator*() {
-        return this->Get();
-    }
+    T* operator*() { return this->Get(); }
 };
 
 template <typename T>
@@ -104,13 +96,9 @@ class NSPRef : public RefBase<T, NSRefTraits<T>> {
   public:
     using RefBase<T, NSRefTraits<T>>::RefBase;
 
-    const T operator*() const {
-        return this->Get();
-    }
+    const T operator*() const { return this->Get(); }
 
-    T operator*() {
-        return this->Get();
-    }
+    T operator*() { return this->Get(); }
 };
 
 template <typename T>
@@ -120,4 +108,4 @@ NSPRef<T> AcquireNSPRef(T pointee) {
     return ref;
 }
 
-#endif  // COMMON_NSREF_H_
+#endif  // SRC_DAWN_COMMON_NSREF_H_

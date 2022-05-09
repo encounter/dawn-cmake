@@ -11,30 +11,31 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#ifndef DAWNNATIVE_VULKAN_COMMANDRECORDINGCONTEXT_H_
-#define DAWNNATIVE_VULKAN_COMMANDRECORDINGCONTEXT_H_
+#ifndef SRC_DAWN_NATIVE_VULKAN_COMMANDRECORDINGCONTEXT_H_
+#define SRC_DAWN_NATIVE_VULKAN_COMMANDRECORDINGCONTEXT_H_
+
+#include <vector>
 
 #include "dawn/common/vulkan_platform.h"
-
 #include "dawn/native/vulkan/BufferVk.h"
 
 namespace dawn::native::vulkan {
-    // Used to track operations that are handled after recording.
-    // Currently only tracks semaphores, but may be used to do barrier coalescing in the future.
-    struct CommandRecordingContext {
-        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-        std::vector<VkSemaphore> waitSemaphores = {};
-        std::vector<VkSemaphore> signalSemaphores = {};
+// Used to track operations that are handled after recording.
+// Currently only tracks semaphores, but may be used to do barrier coalescing in the future.
+struct CommandRecordingContext {
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    std::vector<VkSemaphore> waitSemaphores = {};
+    std::vector<VkSemaphore> signalSemaphores = {};
 
-        // The internal buffers used in the workaround of texture-to-texture copies with compressed
-        // formats.
-        std::vector<Ref<Buffer>> tempBuffers;
+    // The internal buffers used in the workaround of texture-to-texture copies with compressed
+    // formats.
+    std::vector<Ref<Buffer>> tempBuffers;
 
-        // For Device state tracking only.
-        VkCommandPool commandPool = VK_NULL_HANDLE;
-        bool used = false;
-    };
+    // For Device state tracking only.
+    VkCommandPool commandPool = VK_NULL_HANDLE;
+    bool used = false;
+};
 
 }  // namespace dawn::native::vulkan
 
-#endif  // DAWNNATIVE_VULKAN_COMMANDRECORDINGCONTEXT_H_
+#endif  // SRC_DAWN_NATIVE_VULKAN_COMMANDRECORDINGCONTEXT_H_

@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
+#include <vector>
 
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
@@ -117,8 +118,10 @@ class ViewportTest : public DawnTest {
 
         // Render the three points with the viewport call.
         utils::ComboRenderPassDescriptor rpDesc({}, depthTexture.CreateView());
-        rpDesc.cDepthStencilAttachmentInfo.clearDepth = 0.0f;
+        rpDesc.cDepthStencilAttachmentInfo.depthClearValue = 0.0f;
         rpDesc.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Clear;
+        rpDesc.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Undefined;
+        rpDesc.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Undefined;
         wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
         wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&rpDesc);
         pass.SetPipeline(pipeline);
@@ -169,11 +172,19 @@ TEST_P(ViewportTest, SubBoxes) {
 
 // Test that by default the [0, 1] depth range is used.
 TEST_P(ViewportTest, DefaultViewportDepth) {
+    // TODO(crbug.com/dawn/667): Work around the fact that some platforms do not support reading
+    // depth.
+    DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("disable_depth_read"));
+
     TestViewportDepth(0.0, 1.0, false);
 }
 
 // Test various viewport depth ranges
 TEST_P(ViewportTest, ViewportDepth) {
+    // TODO(crbug.com/dawn/667): Work around the fact that some platforms do not support reading
+    // depth.
+    DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("disable_depth_read"));
+
     TestViewportDepth(0.0, 0.5);
     TestViewportDepth(0.5, 1.0);
 }

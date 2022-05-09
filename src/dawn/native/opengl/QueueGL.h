@@ -12,31 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGL_QUEUEGL_H_
-#define DAWNNATIVE_OPENGL_QUEUEGL_H_
+#ifndef SRC_DAWN_NATIVE_OPENGL_QUEUEGL_H_
+#define SRC_DAWN_NATIVE_OPENGL_QUEUEGL_H_
 
 #include "dawn/native/Queue.h"
 
 namespace dawn::native::opengl {
 
-    class Device;
+class Device;
 
-    class Queue final : public QueueBase {
-      public:
-        Queue(Device* device);
+class Queue final : public QueueBase {
+  public:
+    Queue(Device* device, const QueueDescriptor* descriptor);
 
-      private:
-        MaybeError SubmitImpl(uint32_t commandCount, CommandBufferBase* const* commands) override;
-        MaybeError WriteBufferImpl(BufferBase* buffer,
-                                   uint64_t bufferOffset,
-                                   const void* data,
-                                   size_t size) override;
-        MaybeError WriteTextureImpl(const ImageCopyTexture& destination,
-                                    const void* data,
-                                    const TextureDataLayout& dataLayout,
-                                    const Extent3D& writeSizePixel) override;
-    };
+  private:
+    MaybeError SubmitImpl(uint32_t commandCount, CommandBufferBase* const* commands) override;
+    MaybeError WriteBufferImpl(BufferBase* buffer,
+                               uint64_t bufferOffset,
+                               const void* data,
+                               size_t size) override;
+    MaybeError WriteTextureImpl(const ImageCopyTexture& destination,
+                                const void* data,
+                                const TextureDataLayout& dataLayout,
+                                const Extent3D& writeSizePixel) override;
+};
 
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGL_QUEUEGL_H_
+#endif  // SRC_DAWN_NATIVE_OPENGL_QUEUEGL_H_

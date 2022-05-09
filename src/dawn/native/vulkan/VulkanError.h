@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_VULKAN_VULKANERROR_H_
-#define DAWNNATIVE_VULKAN_VULKANERROR_H_
+#ifndef SRC_DAWN_NATIVE_VULKAN_VULKANERROR_H_
+#define SRC_DAWN_NATIVE_VULKAN_VULKANERROR_H_
 
 #include "dawn/native/ErrorInjector.h"
 #include "dawn/native/vulkan/VulkanFunctions.h"
@@ -23,11 +23,11 @@ constexpr VkResult VK_FAKE_DEVICE_OOM_FOR_TESTING = static_cast<VkResult>(VK_RES
 
 namespace dawn::native::vulkan {
 
-    // Returns a string version of the result.
-    const char* VkResultAsString(::VkResult result);
+// Returns a string version of the result.
+const char* VkResultAsString(::VkResult result);
 
-    MaybeError CheckVkSuccessImpl(VkResult result, const char* context);
-    MaybeError CheckVkOOMThenSuccessImpl(VkResult result, const char* context);
+MaybeError CheckVkSuccessImpl(VkResult result, const char* context);
+MaybeError CheckVkOOMThenSuccessImpl(VkResult result, const char* context);
 
 // Returns a success only if result if VK_SUCCESS, an error with the context and stringified
 // result value instead. Can be used like this:
@@ -47,4 +47,4 @@ namespace dawn::native::vulkan {
 
 }  // namespace dawn::native::vulkan
 
-#endif  // DAWNNATIVE_VULKAN_VULKANERROR_H_
+#endif  // SRC_DAWN_NATIVE_VULKAN_VULKANERROR_H_

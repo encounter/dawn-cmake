@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNWIRE_WIRERESULT_H_
-#define DAWNWIRE_WIRERESULT_H_
+#ifndef SRC_DAWN_WIRE_WIRERESULT_H_
+#define SRC_DAWN_WIRE_WIRERESULT_H_
 
 #include "dawn/common/Compiler.h"
 
 namespace dawn::wire {
 
-    enum class [[nodiscard]] WireResult{
-        Success,
-        FatalError,
-    };
+enum class [[nodiscard]] WireResult{
+    Success,
+    FatalError,
+};
 
 // Macro to simplify error handling, similar to DAWN_TRY but for WireResult.
 #define WIRE_TRY(EXPR)                                          \
@@ -35,4 +35,4 @@ namespace dawn::wire {
 
 }  // namespace dawn::wire
 
-#endif  // DAWNWIRE_WIRERESULT_H_
+#endif  // SRC_DAWN_WIRE_WIRERESULT_H_

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGL_PIPELINELAYOUTGL_H_
-#define DAWNNATIVE_OPENGL_PIPELINELAYOUTGL_H_
+#ifndef SRC_DAWN_NATIVE_OPENGL_PIPELINELAYOUTGL_H_
+#define SRC_DAWN_NATIVE_OPENGL_PIPELINELAYOUTGL_H_
 
 #include "dawn/native/PipelineLayout.h"
 
@@ -24,27 +24,27 @@
 
 namespace dawn::native::opengl {
 
-    class Device;
+class Device;
 
-    class PipelineLayout final : public PipelineLayoutBase {
-      public:
-        PipelineLayout(Device* device, const PipelineLayoutDescriptor* descriptor);
+class PipelineLayout final : public PipelineLayoutBase {
+  public:
+    PipelineLayout(Device* device, const PipelineLayoutDescriptor* descriptor);
 
-        using BindingIndexInfo =
-            ityp::array<BindGroupIndex, ityp::vector<BindingIndex, GLuint>, kMaxBindGroups>;
-        const BindingIndexInfo& GetBindingIndexInfo() const;
+    using BindingIndexInfo =
+        ityp::array<BindGroupIndex, ityp::vector<BindingIndex, GLuint>, kMaxBindGroups>;
+    const BindingIndexInfo& GetBindingIndexInfo() const;
 
-        GLuint GetTextureUnitsUsed() const;
-        size_t GetNumSamplers() const;
-        size_t GetNumSampledTextures() const;
+    GLuint GetTextureUnitsUsed() const;
+    size_t GetNumSamplers() const;
+    size_t GetNumSampledTextures() const;
 
-      private:
-        ~PipelineLayout() override = default;
-        BindingIndexInfo mIndexInfo;
-        size_t mNumSamplers;
-        size_t mNumSampledTextures;
-    };
+  private:
+    ~PipelineLayout() override = default;
+    BindingIndexInfo mIndexInfo;
+    size_t mNumSamplers;
+    size_t mNumSampledTextures;
+};
 
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGL_PIPELINELAYOUTGL_H_
+#endif  // SRC_DAWN_NATIVE_OPENGL_PIPELINELAYOUTGL_H_

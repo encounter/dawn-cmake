@@ -12,28 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TESTS_UNITTESTS_NATIVE_MOCKS_EXTERNALTEXTURE_MOCK_H_
-#define TESTS_UNITTESTS_NATIVE_MOCKS_EXTERNALTEXTURE_MOCK_H_
+#ifndef SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_EXTERNALTEXTUREMOCK_H_
+#define SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_EXTERNALTEXTUREMOCK_H_
+
+#include "gmock/gmock.h"
 
 #include "dawn/native/Device.h"
 #include "dawn/native/ExternalTexture.h"
 
-#include <gmock/gmock.h>
-
 namespace dawn::native {
 
-    class ExternalTextureMock : public ExternalTextureBase {
-      public:
-        ExternalTextureMock(DeviceBase* device) : ExternalTextureBase(device) {
-            ON_CALL(*this, DestroyImpl).WillByDefault([this]() {
-                this->ExternalTextureBase::DestroyImpl();
-            });
-        }
-        ~ExternalTextureMock() override = default;
+class ExternalTextureMock : public ExternalTextureBase {
+  public:
+    explicit ExternalTextureMock(DeviceBase* device) : ExternalTextureBase(device) {
+        ON_CALL(*this, DestroyImpl).WillByDefault([this]() {
+            this->ExternalTextureBase::DestroyImpl();
+        });
+    }
+    ~ExternalTextureMock() override = default;
 
-        MOCK_METHOD(void, DestroyImpl, (), (override));
-    };
+    MOCK_METHOD(void, DestroyImpl, (), (override));
+};
 
 }  // namespace dawn::native
 
-#endif  // TESTS_UNITTESTS_NATIVE_MOCKS_EXTERNALTEXTURE_MOCK_H_
+#endif  // SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_EXTERNALTEXTUREMOCK_H_

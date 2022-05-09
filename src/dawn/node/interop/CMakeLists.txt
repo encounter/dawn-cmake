@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Paths to generated files
-set(INTEROP_GEN_DIR    "${GEN_DIR}/src/dawn/node/interop")
+set(INTEROP_GEN_DIR    "${DAWN_NODE_GEN_DIR}/src/dawn/node/interop")
 set(INTEROP_WEBGPU_H   "${INTEROP_GEN_DIR}/WebGPU.h")
 set(INTEROP_WEBGPU_CPP "${INTEROP_GEN_DIR}/WebGPU.cpp")
 
@@ -47,13 +47,14 @@ add_library(dawn_node_interop STATIC
     "${INTEROP_WEBGPU_H}"
     "${INTEROP_WEBGPU_CPP}"
 )
+common_compile_options(dawn_node_interop)
 
 target_include_directories(dawn_node_interop
     PRIVATE
         "${CMAKE_SOURCE_DIR}"
+        "${DAWN_THIRD_PARTY_DIR}"
         "${NODE_API_HEADERS_DIR}/include"
-        "${NODE_ADDON_API_DIR}"
-        "${GEN_DIR}"
+        "${DAWN_NODE_GEN_DIR}"
 )
 
 target_link_libraries(dawn_node_interop

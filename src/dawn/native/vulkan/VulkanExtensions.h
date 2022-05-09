@@ -12,151 +12,156 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_VULKAN_VULKANEXTENSIONS_H_
-#define DAWNNATIVE_VULKAN_VULKANEXTENSIONS_H_
+#ifndef SRC_DAWN_NATIVE_VULKAN_VULKANEXTENSIONS_H_
+#define SRC_DAWN_NATIVE_VULKAN_VULKANEXTENSIONS_H_
+
+#include <string>
+#include <unordered_map>
 
 #include "dawn/common/ityp_bitset.h"
 
-#include <unordered_map>
-
 namespace dawn::native::vulkan {
 
-    // The list of known instance extensions. They must be in dependency order (this is checked
-    // inside EnsureDependencies)
-    enum class InstanceExt {
-        // Promoted to 1.1
-        GetPhysicalDeviceProperties2,
-        ExternalMemoryCapabilities,
-        ExternalSemaphoreCapabilities,
+// The list of known instance extensions. They must be in dependency order (this is checked
+// inside EnsureDependencies)
+enum class InstanceExt {
+    // Promoted to 1.1
+    GetPhysicalDeviceProperties2,
+    ExternalMemoryCapabilities,
+    ExternalSemaphoreCapabilities,
 
-        // Surface extensions
-        Surface,
-        FuchsiaImagePipeSurface,
-        MetalSurface,
-        WaylandSurface,
-        Win32Surface,
-        XcbSurface,
-        XlibSurface,
+    // Surface extensions
+    Surface,
+    FuchsiaImagePipeSurface,
+    MetalSurface,
+    WaylandSurface,
+    Win32Surface,
+    XcbSurface,
+    XlibSurface,
+    AndroidSurface,
 
-        // Others
-        DebugUtils,
-        ValidationFeatures,
+    // Others
+    DebugUtils,
+    ValidationFeatures,
 
-        EnumCount,
-    };
+    EnumCount,
+};
 
-    // A bitset that is indexed with InstanceExt.
-    using InstanceExtSet = ityp::bitset<InstanceExt, static_cast<uint32_t>(InstanceExt::EnumCount)>;
+// A bitset that is indexed with InstanceExt.
+using InstanceExtSet = ityp::bitset<InstanceExt, static_cast<uint32_t>(InstanceExt::EnumCount)>;
 
-    // Information about a known instance extension.
-    struct InstanceExtInfo {
-        InstanceExt index;
-        const char* name;
-        // The version in which this extension was promoted as built with VK_MAKE_VERSION,
-        // or NeverPromoted if it was never promoted.
-        uint32_t versionPromoted;
-    };
+// Information about a known instance extension.
+struct InstanceExtInfo {
+    InstanceExt index;
+    const char* name;
+    // The version in which this extension was promoted as built with VK_MAKE_VERSION,
+    // or NeverPromoted if it was never promoted.
+    uint32_t versionPromoted;
+};
 
-    // Returns the information about a known InstanceExt
-    const InstanceExtInfo& GetInstanceExtInfo(InstanceExt ext);
-    // Returns a map that maps a Vulkan extension name to its InstanceExt.
-    std::unordered_map<std::string, InstanceExt> CreateInstanceExtNameMap();
+// Returns the information about a known InstanceExt
+const InstanceExtInfo& GetInstanceExtInfo(InstanceExt ext);
+// Returns a map that maps a Vulkan extension name to its InstanceExt.
+std::unordered_map<std::string, InstanceExt> CreateInstanceExtNameMap();
 
-    // Sets entries in `extensions` to true if that entry was promoted in Vulkan version `version`
-    void MarkPromotedExtensions(InstanceExtSet* extensions, uint32_t version);
-    // From a set of extensions advertised as supported by the instance (or promoted), remove all
-    // extensions that don't have all their transitive dependencies in advertisedExts.
-    InstanceExtSet EnsureDependencies(const InstanceExtSet& advertisedExts);
+// Sets entries in `extensions` to true if that entry was promoted in Vulkan version `version`
+void MarkPromotedExtensions(InstanceExtSet* extensions, uint32_t version);
+// From a set of extensions advertised as supported by the instance (or promoted), remove all
+// extensions that don't have all their transitive dependencies in advertisedExts.
+InstanceExtSet EnsureDependencies(const InstanceExtSet& advertisedExts);
 
-    // The list of known device extensions. They must be in dependency order (this is checked
-    // inside EnsureDependencies)
-    enum class DeviceExt {
-        // Promoted to 1.1
-        BindMemory2,
-        Maintenance1,
-        StorageBufferStorageClass,
-        GetPhysicalDeviceProperties2,
-        GetMemoryRequirements2,
-        ExternalMemoryCapabilities,
-        ExternalSemaphoreCapabilities,
-        ExternalMemory,
-        ExternalSemaphore,
-        _16BitStorage,
-        SamplerYCbCrConversion,
+// The list of known device extensions. They must be in dependency order (this is checked
+// inside EnsureDependencies)
+enum class DeviceExt {
+    // Promoted to 1.1
+    BindMemory2,
+    Maintenance1,
+    StorageBufferStorageClass,
+    GetPhysicalDeviceProperties2,
+    GetMemoryRequirements2,
+    ExternalMemoryCapabilities,
+    ExternalSemaphoreCapabilities,
+    ExternalMemory,
+    ExternalSemaphore,
+    _16BitStorage,
+    SamplerYCbCrConversion,
 
-        // Promoted to 1.2
-        DriverProperties,
-        ImageFormatList,
-        ShaderFloat16Int8,
+    // Promoted to 1.2
+    DriverProperties,
+    ImageFormatList,
+    ShaderFloat16Int8,
 
-        // External* extensions
-        ExternalMemoryFD,
-        ExternalMemoryDmaBuf,
-        ExternalMemoryZirconHandle,
-        ExternalSemaphoreFD,
-        ExternalSemaphoreZirconHandle,
+    // Promoted to 1.3
+    ZeroInitializeWorkgroupMemory,
 
-        // Others
-        ImageDrmFormatModifier,
-        Swapchain,
-        SubgroupSizeControl,
+    // External* extensions
+    ExternalMemoryFD,
+    ExternalMemoryDmaBuf,
+    ExternalMemoryZirconHandle,
+    ExternalSemaphoreFD,
+    ExternalSemaphoreZirconHandle,
 
-        EnumCount,
-    };
+    // Others
+    ImageDrmFormatModifier,
+    Swapchain,
+    SubgroupSizeControl,
 
-    // A bitset that is indexed with DeviceExt.
-    using DeviceExtSet = ityp::bitset<DeviceExt, static_cast<uint32_t>(DeviceExt::EnumCount)>;
+    EnumCount,
+};
 
-    // Information about a known device extension.
-    struct DeviceExtInfo {
-        DeviceExt index;
-        const char* name;
-        // The version in which this extension was promoted as built with VK_MAKE_VERSION,
-        // or NeverPromoted if it was never promoted.
-        uint32_t versionPromoted;
-    };
+// A bitset that is indexed with DeviceExt.
+using DeviceExtSet = ityp::bitset<DeviceExt, static_cast<uint32_t>(DeviceExt::EnumCount)>;
 
-    // Returns the information about a known DeviceExt
-    const DeviceExtInfo& GetDeviceExtInfo(DeviceExt ext);
-    // Returns a map that maps a Vulkan extension name to its DeviceExt.
-    std::unordered_map<std::string, DeviceExt> CreateDeviceExtNameMap();
+// Information about a known device extension.
+struct DeviceExtInfo {
+    DeviceExt index;
+    const char* name;
+    // The version in which this extension was promoted as built with VK_MAKE_VERSION,
+    // or NeverPromoted if it was never promoted.
+    uint32_t versionPromoted;
+};
 
-    // Sets entries in `extensions` to true if that entry was promoted in Vulkan version `version`
-    void MarkPromotedExtensions(DeviceExtSet* extensions, uint32_t version);
-    // From a set of extensions advertised as supported by the device (or promoted), remove all
-    // extensions that don't have all their transitive dependencies in advertisedExts or in
-    // instanceExts.
-    DeviceExtSet EnsureDependencies(const DeviceExtSet& advertisedExts,
-                                    const InstanceExtSet& instanceExts,
-                                    uint32_t icdVersion);
+// Returns the information about a known DeviceExt
+const DeviceExtInfo& GetDeviceExtInfo(DeviceExt ext);
+// Returns a map that maps a Vulkan extension name to its DeviceExt.
+std::unordered_map<std::string, DeviceExt> CreateDeviceExtNameMap();
 
-    // The list of all known Vulkan layers.
-    enum class VulkanLayer {
-        Validation,
-        LunargVkTrace,
-        RenderDocCapture,
+// Sets entries in `extensions` to true if that entry was promoted in Vulkan version `version`
+void MarkPromotedExtensions(DeviceExtSet* extensions, uint32_t version);
+// From a set of extensions advertised as supported by the device (or promoted), remove all
+// extensions that don't have all their transitive dependencies in advertisedExts or in
+// instanceExts.
+DeviceExtSet EnsureDependencies(const DeviceExtSet& advertisedExts,
+                                const InstanceExtSet& instanceExts,
+                                uint32_t icdVersion);
 
-        // Fuchsia implements the swapchain through a layer (VK_LAYER_FUCHSIA_image_pipe_swapchain),
-        // which adds an instance extensions (VK_FUCHSIA_image_surface) to all ICDs.
-        FuchsiaImagePipeSwapchain,
+// The list of all known Vulkan layers.
+enum class VulkanLayer {
+    Validation,
+    LunargVkTrace,
+    RenderDocCapture,
 
-        EnumCount,
-    };
+    // Fuchsia implements the swapchain through a layer (VK_LAYER_FUCHSIA_image_pipe_swapchain),
+    // which adds an instance extensions (VK_FUCHSIA_image_surface) to all ICDs.
+    FuchsiaImagePipeSwapchain,
 
-    // A bitset that is indexed with VulkanLayer.
-    using VulkanLayerSet = ityp::bitset<VulkanLayer, static_cast<uint32_t>(VulkanLayer::EnumCount)>;
+    EnumCount,
+};
 
-    // Information about a known layer
-    struct VulkanLayerInfo {
-        VulkanLayer layer;
-        const char* name;
-    };
+// A bitset that is indexed with VulkanLayer.
+using VulkanLayerSet = ityp::bitset<VulkanLayer, static_cast<uint32_t>(VulkanLayer::EnumCount)>;
 
-    // Returns the information about a known VulkanLayer
-    const VulkanLayerInfo& GetVulkanLayerInfo(VulkanLayer layer);
-    // Returns a map that maps a Vulkan layer name to its VulkanLayer.
-    std::unordered_map<std::string, VulkanLayer> CreateVulkanLayerNameMap();
+// Information about a known layer
+struct VulkanLayerInfo {
+    VulkanLayer layer;
+    const char* name;
+};
+
+// Returns the information about a known VulkanLayer
+const VulkanLayerInfo& GetVulkanLayerInfo(VulkanLayer layer);
+// Returns a map that maps a Vulkan layer name to its VulkanLayer.
+std::unordered_map<std::string, VulkanLayer> CreateVulkanLayerNameMap();
 
 }  // namespace dawn::native::vulkan
 
-#endif  // DAWNNATIVE_VULKAN_VULKANEXTENSIONS_H_
+#endif  // SRC_DAWN_NATIVE_VULKAN_VULKANEXTENSIONS_H_

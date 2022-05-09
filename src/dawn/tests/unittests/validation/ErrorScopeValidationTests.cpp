@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <memory>
+
 #include "dawn/tests/MockCallback.h"
 #include "dawn/tests/unittests/validation/ValidationTest.h"
+#include "gmock/gmock.h"
 
-#include <gmock/gmock.h>
-
-using namespace testing;
+using testing::_;
+using testing::MockCallback;
+using testing::Sequence;
 
 class MockDevicePopErrorScopeCallback {
   public:
@@ -138,8 +141,11 @@ TEST_F(ErrorScopeValidationTest, UnhandledErrorsMatchUncapturedErrorCallback) {
 // Check that push/popping error scopes must be balanced.
 TEST_F(ErrorScopeValidationTest, PushPopBalanced) {
     // No error scopes to pop.
-    { EXPECT_FALSE(device.PopErrorScope(ToMockDevicePopErrorScopeCallback, this)); }
-
+    {
+        EXPECT_CALL(*mockDevicePopErrorScopeCallback, Call(WGPUErrorType_Unknown, _, this))
+            .Times(1);
+        device.PopErrorScope(ToMockDevicePopErrorScopeCallback, this);
+    }
     // Too many pops
     {
         device.PushErrorScope(wgpu::ErrorFilter::Validation);
@@ -149,7 +155,9 @@ TEST_F(ErrorScopeValidationTest, PushPopBalanced) {
         device.PopErrorScope(ToMockDevicePopErrorScopeCallback, this + 1);
         FlushWire();
 
-        EXPECT_FALSE(device.PopErrorScope(ToMockDevicePopErrorScopeCallback, this + 2));
+        EXPECT_CALL(*mockDevicePopErrorScopeCallback, Call(WGPUErrorType_Unknown, _, this + 2))
+            .Times(1);
+        device.PopErrorScope(ToMockDevicePopErrorScopeCallback, this + 2);
     }
 }
 
@@ -164,7 +172,7 @@ TEST_F(ErrorScopeValidationTest, EnclosedQueueSubmitNested) {
     queue.Submit(0, nullptr);
     queue.OnSubmittedWorkDone(0u, ToMockQueueWorkDone, this);
 
-    testing::Sequence seq;
+    Sequence seq;
 
     MockCallback<WGPUErrorCallback> errorScopeCallback2;
     EXPECT_CALL(errorScopeCallback2, Call(WGPUErrorType_NoError, _, this + 1)).InSequence(seq);
@@ -206,6 +214,17 @@ TEST_F(ErrorScopeValidationTest, DeviceDestroyedBeforeCallback) {
         ExpectDeviceDestruction();
         device = nullptr;
     }
+}
+
+// If the device is destroyed, pop error scope should callback with device lost.
+TEST_F(ErrorScopeValidationTest, DeviceDestroyedBeforePop) {
+    device.PushErrorScope(wgpu::ErrorFilter::Validation);
+    ExpectDeviceDestruction();
+    device.Destroy();
+    FlushWire();
+
+    EXPECT_CALL(*mockDevicePopErrorScopeCallback, Call(WGPUErrorType_DeviceLost, _, this)).Times(1);
+    device.PopErrorScope(ToMockDevicePopErrorScopeCallback, this);
 }
 
 // Regression test that on device shutdown, we don't get a recursion in O(pushed error scope) that

@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef COMMON_SYSTEMUTILS_H_
-#define COMMON_SYSTEMUTILS_H_
-
-#include "dawn/common/Platform.h"
+#ifndef SRC_DAWN_COMMON_SYSTEMUTILS_H_
+#define SRC_DAWN_COMMON_SYSTEMUTILS_H_
 
 #include <optional>
 #include <string>
+#include <utility>
+
+#include "dawn/common/Platform.h"
 
 const char* GetPathSeparator();
 // Returns a pair of the environment variable's value, and a boolean indicating whether the variable
@@ -54,4 +55,4 @@ class ScopedEnvironmentVar {
     bool mIsSet = false;
 };
 
-#endif  // COMMON_SYSTEMUTILS_H_
+#endif  // SRC_DAWN_COMMON_SYSTEMUTILS_H_

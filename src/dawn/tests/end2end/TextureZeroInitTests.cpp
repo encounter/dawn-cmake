@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
+#include <string>
+#include <vector>
 
 #include "dawn/common/Math.h"
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/TestUtils.h"
 #include "dawn/utils/WGPUHelpers.h"
@@ -102,8 +104,8 @@ class TextureZeroInitTest : public DawnTest {
         return utils::CreateShaderModule(device, R"(
             @group(0) @binding(0) var texture0 : texture_2d<f32>;
             struct FragmentOut {
-                @location(0) color : vec4<f32>;
-            };
+                @location(0) color : vec4<f32>
+            }
             @stage(fragment)
             fn main(@builtin(position) FragCoord : vec4<f32>) -> FragmentOut {
                 var output : FragmentOut;
@@ -202,7 +204,7 @@ TEST_P(TextureZeroInitTest, RenderingMipMapClearsToZero) {
     // Specify loadOp Load. Clear should be used to zero-initialize.
     renderPass.renderPassInfo.cColorAttachments[0].loadOp = wgpu::LoadOp::Load;
     // Specify non-zero clear color. It should still be cleared to zero.
-    renderPass.renderPassInfo.cColorAttachments[0].clearColor = {0.5f, 0.5f, 0.5f, 0.5f};
+    renderPass.renderPassInfo.cColorAttachments[0].clearValue = {0.5f, 0.5f, 0.5f, 0.5f};
     renderPass.renderPassInfo.cColorAttachments[0].view = view;
 
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
@@ -247,7 +249,7 @@ TEST_P(TextureZeroInitTest, RenderingArrayLayerClearsToZero) {
     // Specify loadOp Load. Clear should be used to zero-initialize.
     renderPass.renderPassInfo.cColorAttachments[0].loadOp = wgpu::LoadOp::Load;
     // Specify non-zero clear color. It should still be cleared to zero.
-    renderPass.renderPassInfo.cColorAttachments[0].clearColor = {0.5f, 0.5f, 0.5f, 0.5f};
+    renderPass.renderPassInfo.cColorAttachments[0].clearValue = {0.5f, 0.5f, 0.5f, 0.5f};
     renderPass.renderPassInfo.cColorAttachments[0].view = view;
 
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
@@ -483,9 +485,9 @@ TEST_P(TextureZeroInitTest, RenderingLoadingDepth) {
                                                           depthStencilTexture.CreateView());
     renderPassDescriptor.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Load;
     // Set clearDepth to non-zero. It should still be cleared to 0 by the loadOp.
-    renderPassDescriptor.cDepthStencilAttachmentInfo.clearDepth = 0.5f;
+    renderPassDescriptor.cDepthStencilAttachmentInfo.depthClearValue = 0.5f;
     renderPassDescriptor.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Clear;
-    renderPassDescriptor.cDepthStencilAttachmentInfo.clearStencil = 0;
+    renderPassDescriptor.cDepthStencilAttachmentInfo.stencilClearValue = 0;
     renderPassDescriptor.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Store;
     renderPassDescriptor.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Store;
 
@@ -524,10 +526,10 @@ TEST_P(TextureZeroInitTest, RenderingLoadingStencil) {
     utils::ComboRenderPassDescriptor renderPassDescriptor({srcTexture.CreateView()},
                                                           depthStencilTexture.CreateView());
     renderPassDescriptor.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Clear;
-    renderPassDescriptor.cDepthStencilAttachmentInfo.clearDepth = 0.0f;
+    renderPassDescriptor.cDepthStencilAttachmentInfo.depthClearValue = 0.0f;
     renderPassDescriptor.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Load;
     // Set clearStencil to non-zero. It should still be cleared to 0 by the loadOp.
-    renderPassDescriptor.cDepthStencilAttachmentInfo.clearStencil = 2;
+    renderPassDescriptor.cDepthStencilAttachmentInfo.stencilClearValue = 2;
     renderPassDescriptor.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Store;
     renderPassDescriptor.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Store;
 
@@ -605,7 +607,7 @@ TEST_P(TextureZeroInitTest, IndependentDepthStencilLoadAfterDiscard) {
             utils::ComboRenderPassDescriptor renderPassDescriptor({},
                                                                   depthStencilTexture.CreateView());
             renderPassDescriptor.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Discard;
-            renderPassDescriptor.cDepthStencilAttachmentInfo.clearStencil = 2;
+            renderPassDescriptor.cDepthStencilAttachmentInfo.stencilClearValue = 2;
             renderPassDescriptor.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Store;
 
             wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
@@ -678,7 +680,7 @@ TEST_P(TextureZeroInitTest, IndependentDepthStencilLoadAfterDiscard) {
         {
             utils::ComboRenderPassDescriptor renderPassDescriptor({},
                                                                   depthStencilTexture.CreateView());
-            renderPassDescriptor.cDepthStencilAttachmentInfo.clearDepth = 0.7;
+            renderPassDescriptor.cDepthStencilAttachmentInfo.depthClearValue = 0.7;
             renderPassDescriptor.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Store;
             renderPassDescriptor.cDepthStencilAttachmentInfo.stencilStoreOp =
                 wgpu::StoreOp::Discard;
@@ -764,7 +766,7 @@ TEST_P(TextureZeroInitTest, IndependentDepthStencilCopyAfterDiscard) {
     // Clear the depth to 0.3 and discard the stencil.
     {
         utils::ComboRenderPassDescriptor renderPassDescriptor({}, depthStencilTexture.CreateView());
-        renderPassDescriptor.cDepthStencilAttachmentInfo.clearDepth = 0.3;
+        renderPassDescriptor.cDepthStencilAttachmentInfo.depthClearValue = 0.3;
         renderPassDescriptor.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Store;
         renderPassDescriptor.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Discard;
 
@@ -875,7 +877,7 @@ TEST_P(TextureZeroInitTest, RenderPassSampledTextureClear) {
     // Encode pass and submit
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
     utils::ComboRenderPassDescriptor renderPassDesc({renderTexture.CreateView()});
-    renderPassDesc.cColorAttachments[0].clearColor = {1.0, 1.0, 1.0, 1.0};
+    renderPassDesc.cColorAttachments[0].clearValue = {1.0, 1.0, 1.0, 1.0};
     renderPassDesc.cColorAttachments[0].loadOp = wgpu::LoadOp::Clear;
     wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPassDesc);
     pass.SetPipeline(renderPipeline);
@@ -899,9 +901,6 @@ TEST_P(TextureZeroInitTest, RenderPassSampledTextureClear) {
 // sampled and attachment (with LoadOp::Clear so the lazy clear can be skipped) then the sampled
 // subresource is correctly cleared.
 TEST_P(TextureZeroInitTest, TextureBothSampledAndAttachmentClear) {
-    // TODO(crbug.com/dawn/593): This test uses glTextureView() which is not supported on OpenGL ES.
-    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
-
     // Create a 2D array texture, layer 0 will be used as attachment, layer 1 as sampled.
     wgpu::TextureDescriptor texDesc;
     texDesc.usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment |
@@ -933,7 +932,7 @@ TEST_P(TextureZeroInitTest, TextureBothSampledAndAttachmentClear) {
     // Encode pass and submit
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
     utils::ComboRenderPassDescriptor renderPassDesc({attachmentView});
-    renderPassDesc.cColorAttachments[0].clearColor = {1.0, 1.0, 1.0, 1.0};
+    renderPassDesc.cColorAttachments[0].clearValue = {1.0, 1.0, 1.0, 1.0};
     renderPassDesc.cColorAttachments[0].loadOp = wgpu::LoadOp::Clear;
     wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPassDesc);
     pass.SetPipeline(renderPipeline);
@@ -981,8 +980,8 @@ TEST_P(TextureZeroInitTest, ComputePassSampledTextureClear) {
     const char* cs = R"(
         @group(0) @binding(0) var tex : texture_2d<f32>;
         struct Result {
-            value : vec4<f32>;
-        };
+            value : vec4<f32>
+        }
         @group(0) @binding(1) var<storage, read_write> result : Result;
         @stage(compute) @workgroup_size(1) fn main() {
            result.value = textureLoad(tex, vec2<i32>(0,0), 0);
@@ -1003,7 +1002,7 @@ TEST_P(TextureZeroInitTest, ComputePassSampledTextureClear) {
     wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
     pass.SetPipeline(computePipeline);
     pass.SetBindGroup(0, bindGroup);
-    pass.Dispatch(1);
+    pass.DispatchWorkgroups(1);
     pass.End();
     wgpu::CommandBuffer commands = encoder.Finish();
     EXPECT_LAZY_CLEAR(1u, queue.Submit(1, &commands));
@@ -1160,7 +1159,7 @@ TEST_P(TextureZeroInitTest, RenderPassStoreOpClear) {
     // Encode pass and submit
     encoder = device.CreateCommandEncoder();
     utils::ComboRenderPassDescriptor renderPassDesc({renderTexture.CreateView()});
-    renderPassDesc.cColorAttachments[0].clearColor = {0.0, 0.0, 0.0, 0.0};
+    renderPassDesc.cColorAttachments[0].clearValue = {0.0, 0.0, 0.0, 0.0};
     renderPassDesc.cColorAttachments[0].loadOp = wgpu::LoadOp::Clear;
     renderPassDesc.cColorAttachments[0].storeOp = wgpu::StoreOp::Discard;
     wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPassDesc);
@@ -1212,8 +1211,8 @@ TEST_P(TextureZeroInitTest, RenderingLoadingDepthStencilStoreOpClear) {
                                                           depthStencilTexture.CreateView());
     renderPassDescriptor.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Clear;
     renderPassDescriptor.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Clear;
-    renderPassDescriptor.cDepthStencilAttachmentInfo.clearDepth = 1.0f;
-    renderPassDescriptor.cDepthStencilAttachmentInfo.clearStencil = 1u;
+    renderPassDescriptor.cDepthStencilAttachmentInfo.depthClearValue = 1.0f;
+    renderPassDescriptor.cDepthStencilAttachmentInfo.stencilClearValue = 1u;
     renderPassDescriptor.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Discard;
     renderPassDescriptor.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Discard;
     {
@@ -1307,7 +1306,7 @@ TEST_P(TextureZeroInitTest, PreservesInitializedMip) {
     // Encode pass and submit
     encoder = device.CreateCommandEncoder();
     utils::ComboRenderPassDescriptor renderPassDesc({renderTexture.CreateView()});
-    renderPassDesc.cColorAttachments[0].clearColor = {0.0, 0.0, 0.0, 0.0};
+    renderPassDesc.cColorAttachments[0].clearValue = {0.0, 0.0, 0.0, 0.0};
     renderPassDesc.cColorAttachments[0].loadOp = wgpu::LoadOp::Clear;
     renderPassDesc.cColorAttachments[0].storeOp = wgpu::StoreOp::Discard;
     wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPassDesc);
@@ -1342,9 +1341,6 @@ TEST_P(TextureZeroInitTest, PreservesInitializedMip) {
 // Test that if one layer of a texture is initialized and another is uninitialized, lazy clearing
 // the uninitialized layer does not clear the initialized layer.
 TEST_P(TextureZeroInitTest, PreservesInitializedArrayLayer) {
-    // TODO(crbug.com/dawn/593): This test uses glTextureView() which is not supported on OpenGL ES.
-    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
-
     wgpu::TextureDescriptor sampleTextureDescriptor =
         CreateTextureDescriptor(1, 2,
                                 wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst |
@@ -1391,7 +1387,7 @@ TEST_P(TextureZeroInitTest, PreservesInitializedArrayLayer) {
     // Encode pass and submit
     encoder = device.CreateCommandEncoder();
     utils::ComboRenderPassDescriptor renderPassDesc({renderTexture.CreateView()});
-    renderPassDesc.cColorAttachments[0].clearColor = {0.0, 0.0, 0.0, 0.0};
+    renderPassDesc.cColorAttachments[0].clearValue = {0.0, 0.0, 0.0, 0.0};
     renderPassDesc.cColorAttachments[0].loadOp = wgpu::LoadOp::Clear;
     renderPassDesc.cColorAttachments[0].storeOp = wgpu::StoreOp::Discard;
     wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPassDesc);
@@ -1725,9 +1721,7 @@ class CompressedTextureZeroInitTest : public TextureZeroInitTest {
         return {wgpu::FeatureName::TextureCompressionBC};
     }
 
-    bool IsBCFormatSupported() const {
-        return mIsBCFormatSupported;
-    }
+    bool IsBCFormatSupported() const { return mIsBCFormatSupported; }
 
     // Copy the compressed texture data into the destination texture.
     void InitializeDataInCompressedTextureAndExpectLazyClear(
@@ -1875,7 +1869,7 @@ TEST_P(CompressedTextureZeroInitTest, HalfCopyBufferToTexture) {
 // Test that 0 lazy clear count happens when we copy buffer to texture to a nonzero mip level
 // (with physical size different from the virtual mip size)
 TEST_P(CompressedTextureZeroInitTest, FullCopyToNonZeroMipLevel) {
-    // TODO(crbug.com/dawn/593): This test uses glTextureView() which is not supported on OpenGL ES.
+    // TODO(crbug.com/dawn/1328): ES3.1 does not support subsetting of compressed textures.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
 
     wgpu::TextureDescriptor textureDescriptor;
@@ -1924,7 +1918,7 @@ TEST_P(CompressedTextureZeroInitTest, HalfCopyToNonZeroMipLevel) {
 
 // Test that 0 lazy clear count happens when we copy buffer to nonzero array layer
 TEST_P(CompressedTextureZeroInitTest, FullCopyToNonZeroArrayLayer) {
-    // TODO(crbug.com/dawn/593): This test uses glTextureView() which is not supported on OpenGL ES.
+    // TODO(crbug.com/dawn/1328): ES3.1 does not support subsetting of compressed textures.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
 
     wgpu::TextureDescriptor textureDescriptor;
@@ -1964,7 +1958,7 @@ TEST_P(CompressedTextureZeroInitTest, HalfCopyToNonZeroArrayLayer) {
 
 // full copy texture to texture, 0 lazy clears are needed
 TEST_P(CompressedTextureZeroInitTest, FullCopyTextureToTextureMipLevel) {
-    // TODO(crbug.com/dawn/593): This test uses glTextureView() which is not supported on OpenGL ES.
+    // TODO(crbug.com/dawn/1328): ES3.1 does not support subsetting of compressed textures.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
 
     // create srcTexture and fill it with data

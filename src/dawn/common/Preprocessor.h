@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef COMMON_PREPROCESSOR_H_
-#define COMMON_PREPROCESSOR_H_
+#ifndef SRC_DAWN_COMMON_PREPROCESSOR_H_
+#define SRC_DAWN_COMMON_PREPROCESSOR_H_
 
 // DAWN_PP_GET_HEAD: get the first element of a __VA_ARGS__ without triggering empty
 // __VA_ARGS__ warnings.
 #define DAWN_INTERNAL_PP_GET_HEAD(firstParam, ...) firstParam
-#define DAWN_PP_GET_HEAD(...) DAWN_INTERNAL_PP_GET_HEAD(__VA_ARGS__, dummyArg)
+#define DAWN_PP_GET_HEAD(...) DAWN_INTERNAL_PP_GET_HEAD(__VA_ARGS__, placeholderArg)
 
 // DAWN_PP_CONCATENATE: Concatenate tokens, first expanding the arguments passed in.
 #define DAWN_PP_CONCATENATE(arg1, arg2) DAWN_PP_CONCATENATE_1(arg1, arg2)
@@ -67,4 +67,4 @@
 #define DAWN_PP_FOR_EACH(func, ...) \
     DAWN_PP_FOR_EACH_(DAWN_PP_FOR_EACH_NARG(__VA_ARGS__), func, __VA_ARGS__)
 
-#endif  // COMMON_PREPROCESSOR_H_
+#endif  // SRC_DAWN_COMMON_PREPROCESSOR_H_

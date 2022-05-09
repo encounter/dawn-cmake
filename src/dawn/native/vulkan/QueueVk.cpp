@@ -22,38 +22,49 @@
 #include "dawn/native/vulkan/CommandBufferVk.h"
 #include "dawn/native/vulkan/CommandRecordingContext.h"
 #include "dawn/native/vulkan/DeviceVk.h"
+#include "dawn/native/vulkan/UtilsVulkan.h"
 #include "dawn/platform/DawnPlatform.h"
 #include "dawn/platform/tracing/TraceEvent.h"
 
 namespace dawn::native::vulkan {
 
-    // static
-    Queue* Queue::Create(Device* device) {
-        return new Queue(device);
+// static
+Ref<Queue> Queue::Create(Device* device, const QueueDescriptor* descriptor) {
+    Ref<Queue> queue = AcquireRef(new Queue(device, descriptor));
+    queue->Initialize();
+    return queue;
+}
+
+Queue::Queue(Device* device, const QueueDescriptor* descriptor) : QueueBase(device, descriptor) {}
+
+Queue::~Queue() {}
+
+void Queue::Initialize() {
+    SetLabelImpl();
+}
+
+MaybeError Queue::SubmitImpl(uint32_t commandCount, CommandBufferBase* const* commands) {
+    Device* device = ToBackend(GetDevice());
+
+    DAWN_TRY(device->Tick());
+
+    TRACE_EVENT_BEGIN0(GetDevice()->GetPlatform(), Recording, "CommandBufferVk::RecordCommands");
+    CommandRecordingContext* recordingContext = device->GetPendingRecordingContext();
+    for (uint32_t i = 0; i < commandCount; ++i) {
+        DAWN_TRY(ToBackend(commands[i])->RecordCommands(recordingContext));
     }
+    TRACE_EVENT_END0(GetDevice()->GetPlatform(), Recording, "CommandBufferVk::RecordCommands");
 
-    Queue::Queue(Device* device) : QueueBase(device) {
-    }
+    DAWN_TRY(device->SubmitPendingCommands());
 
-    Queue::~Queue() {
-    }
+    return {};
+}
 
-    MaybeError Queue::SubmitImpl(uint32_t commandCount, CommandBufferBase* const* commands) {
-        Device* device = ToBackend(GetDevice());
-
-        DAWN_TRY(device->Tick());
-
-        TRACE_EVENT_BEGIN0(GetDevice()->GetPlatform(), Recording,
-                           "CommandBufferVk::RecordCommands");
-        CommandRecordingContext* recordingContext = device->GetPendingRecordingContext();
-        for (uint32_t i = 0; i < commandCount; ++i) {
-            DAWN_TRY(ToBackend(commands[i])->RecordCommands(recordingContext));
-        }
-        TRACE_EVENT_END0(GetDevice()->GetPlatform(), Recording, "CommandBufferVk::RecordCommands");
-
-        DAWN_TRY(device->SubmitPendingCommands());
-
-        return {};
-    }
+void Queue::SetLabelImpl() {
+    Device* device = ToBackend(GetDevice());
+    // TODO(crbug.com/dawn/1344): When we start using multiple queues this needs to be adjusted
+    // so it doesn't always change the default queue's label.
+    SetDebugName(device, VK_OBJECT_TYPE_QUEUE, device->GetQueue(), "Dawn_Queue", GetLabel());
+}
 
 }  // namespace dawn::native::vulkan

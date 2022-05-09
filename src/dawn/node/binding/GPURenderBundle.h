@@ -12,35 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWN_NODE_BINDING_GPURENDERBUNDLE_H_
-#define DAWN_NODE_BINDING_GPURENDERBUNDLE_H_
+#ifndef SRC_DAWN_NODE_BINDING_GPURENDERBUNDLE_H_
+#define SRC_DAWN_NODE_BINDING_GPURENDERBUNDLE_H_
+
+#include <string>
 
 #include "dawn/native/DawnNative.h"
 #include "dawn/webgpu_cpp.h"
-#include "napi.h"
+#include "src/dawn/node/interop/Napi.h"
 #include "src/dawn/node/interop/WebGPU.h"
 
 namespace wgpu::binding {
 
-    // GPURenderBundle is an implementation of interop::GPURenderBundle that wraps a
-    // wgpu::RenderBundle.
-    class GPURenderBundle final : public interop::GPURenderBundle {
-      public:
-        GPURenderBundle(wgpu::RenderBundle bundle);
+// GPURenderBundle is an implementation of interop::GPURenderBundle that wraps a
+// wgpu::RenderBundle.
+class GPURenderBundle final : public interop::GPURenderBundle {
+  public:
+    explicit GPURenderBundle(wgpu::RenderBundle bundle);
 
-        // Implicit cast operator to Dawn GPU object
-        inline operator const wgpu::RenderBundle&() const {
-            return bundle_;
-        }
+    // Implicit cast operator to Dawn GPU object
+    inline operator const wgpu::RenderBundle&() const { return bundle_; }
 
-        // interop::GPURenderBundle interface compliance
-        std::optional<std::string> getLabel(Napi::Env) override;
-        void setLabel(Napi::Env, std::optional<std::string> value) override;
+    // interop::GPURenderBundle interface compliance
+    std::string getLabel(Napi::Env) override;
+    void setLabel(Napi::Env, std::string value) override;
 
-      private:
-        wgpu::RenderBundle bundle_;
-    };
+  private:
+    wgpu::RenderBundle bundle_;
+};
 
 }  // namespace wgpu::binding
 
-#endif  // DAWN_NODE_BINDING_GPURENDERBUNDLE_H_
+#endif  // SRC_DAWN_NODE_BINDING_GPURENDERBUNDLE_H_

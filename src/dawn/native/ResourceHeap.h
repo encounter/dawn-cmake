@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_RESOURCEHEAP_H_
-#define DAWNNATIVE_RESOURCEHEAP_H_
+#ifndef SRC_DAWN_NATIVE_RESOURCEHEAP_H_
+#define SRC_DAWN_NATIVE_RESOURCEHEAP_H_
 
 #include "dawn/native/Error.h"
 
 namespace dawn::native {
 
-    // Wrapper for a resource backed by a heap.
-    class ResourceHeapBase {
-      public:
-        ResourceHeapBase() = default;
-        virtual ~ResourceHeapBase() = default;
-    };
+// Wrapper for a resource backed by a heap.
+class ResourceHeapBase {
+  public:
+    ResourceHeapBase() = default;
+    virtual ~ResourceHeapBase() = default;
+};
 
 }  // namespace dawn::native
 
-#endif  // DAWNNATIVE_RESOURCEHEAP_H_
+#endif  // SRC_DAWN_NATIVE_RESOURCEHEAP_H_

@@ -70,7 +70,7 @@ class SwapChainTests : public DawnTest {
     void ClearTexture(wgpu::TextureView view, wgpu::Color color) {
         utils::ComboRenderPassDescriptor desc({view});
         desc.cColorAttachments[0].loadOp = wgpu::LoadOp::Clear;
-        desc.cColorAttachments[0].clearColor = color;
+        desc.cColorAttachments[0].clearValue = color;
 
         wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
         wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&desc);
@@ -222,7 +222,7 @@ TEST_P(SwapChainTests, SwitchingDevice) {
     // See https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/2256
     DAWN_SUPPRESS_TEST_IF(IsVulkan() && IsBackendValidationEnabled());
 
-    wgpu::Device device2 = wgpu::Device::Acquire(GetAdapter().CreateDevice());
+    wgpu::Device device2 = CreateDevice();
 
     for (int i = 0; i < 3; i++) {
         wgpu::Device deviceToUse;

@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
+#include <vector>
 
 #include "dawn/common/Assert.h"
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
@@ -46,7 +47,7 @@ class SubresourceRenderAttachmentTest : public DawnTest {
             switch (type) {
                 case Type::Color: {
                     utils::ComboRenderPassDescriptor renderPass({renderTargetView});
-                    renderPass.cColorAttachments[0].clearColor = {
+                    renderPass.cColorAttachments[0].clearValue = {
                         static_cast<float>(expectedColor.r) / 255.f,
                         static_cast<float>(expectedColor.g) / 255.f,
                         static_cast<float>(expectedColor.b) / 255.f,
@@ -56,12 +57,14 @@ class SubresourceRenderAttachmentTest : public DawnTest {
                 }
                 case Type::Depth: {
                     utils::ComboRenderPassDescriptor renderPass({}, renderTargetView);
-                    renderPass.cDepthStencilAttachmentInfo.clearDepth = expectedDepth;
+                    renderPass.UnsetDepthStencilLoadStoreOpsForFormat(format);
+                    renderPass.cDepthStencilAttachmentInfo.depthClearValue = expectedDepth;
                     return renderPass;
                 }
                 case Type::Stencil: {
                     utils::ComboRenderPassDescriptor renderPass({}, renderTargetView);
-                    renderPass.cDepthStencilAttachmentInfo.clearStencil = expectedStencil;
+                    renderPass.UnsetDepthStencilLoadStoreOpsForFormat(format);
+                    renderPass.cDepthStencilAttachmentInfo.stencilClearValue = expectedStencil;
                     return renderPass;
                 }
                 default:
@@ -148,6 +151,10 @@ TEST_P(SubresourceRenderAttachmentTest, ColorTexture) {
 
 // Test rendering into a subresource of a depth texture
 TEST_P(SubresourceRenderAttachmentTest, DepthTexture) {
+    // TODO(crbug.com/dawn/667): Work around the fact that some platforms do not support reading
+    // depth.
+    DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("disable_depth_read"));
+
     DoTest(Type::Depth);
 }
 

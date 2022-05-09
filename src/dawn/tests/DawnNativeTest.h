@@ -12,22 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TESTS_DAWNNATIVETEST_H_
-#define TESTS_DAWNNATIVETEST_H_
+#ifndef SRC_DAWN_TESTS_DAWNNATIVETEST_H_
+#define SRC_DAWN_TESTS_DAWNNATIVETEST_H_
 
-#include <gtest/gtest.h>
+#include <memory>
 
 #include "dawn/native/DawnNative.h"
 #include "dawn/native/ErrorData.h"
 #include "dawn/webgpu_cpp.h"
+#include "gtest/gtest.h"
 
 namespace dawn::native {
 
-    // This is similar to DAWN_TRY_ASSIGN but produces a fatal GTest error if EXPR is an error.
+// This is similar to DAWN_TRY_ASSIGN but produces a fatal GTest error if EXPR is an error.
 #define DAWN_ASSERT_AND_ASSIGN(VAR, EXPR) \
     DAWN_TRY_ASSIGN_WITH_CLEANUP(VAR, EXPR, {}, AddFatalDawnFailure(#EXPR, error.get()))
 
-    void AddFatalDawnFailure(const char* expression, const ErrorData* error);
+void AddFatalDawnFailure(const char* expression, const ErrorData* error);
 
 }  // namespace dawn::native
 
@@ -50,4 +51,4 @@ class DawnNativeTest : public ::testing::Test {
     static void OnDeviceError(WGPUErrorType type, const char* message, void* userdata);
 };
 
-#endif  // TESTS_DAWNNATIVETEST_H_
+#endif  // SRC_DAWN_TESTS_DAWNNATIVETEST_H_

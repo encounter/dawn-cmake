@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
+#include <vector>
 
 #include "dawn/common/Assert.h"
 #include "dawn/common/Constants.h"
 #include "dawn/common/Math.h"
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/TestUtils.h"
 #include "dawn/utils/TextureUtils.h"
@@ -34,8 +35,8 @@ struct CopyConfig {
 };
 
 namespace {
-    using TextureFormat = wgpu::TextureFormat;
-    DAWN_TEST_PARAM_STRUCT(CompressedTextureFormatTestParams, TextureFormat);
+using TextureFormat = wgpu::TextureFormat;
+DAWN_TEST_PARAM_STRUCT(CompressedTextureFormatTestParams, TextureFormat);
 }  // namespace
 
 class CompressedTextureFormatTest : public DawnTestWithParams<CompressedTextureFormatTestParams> {
@@ -60,9 +61,7 @@ class CompressedTextureFormatTest : public DawnTestWithParams<CompressedTextureF
         return {};
     }
 
-    bool IsFormatSupported() const {
-        return mIsFormatSupported;
-    }
+    bool IsFormatSupported() const { return mIsFormatSupported; }
 
     uint32_t BlockWidthInTexels() const {
         ASSERT(IsFormatSupported());
@@ -165,9 +164,9 @@ class CompressedTextureFormatTest : public DawnTestWithParams<CompressedTextureF
         utils::ComboRenderPipelineDescriptor renderPipelineDescriptor;
         wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
             struct VertexOut {
-                @location(0) texCoord : vec2 <f32>;
-                @builtin(position) position : vec4<f32>;
-            };
+                @location(0) texCoord : vec2 <f32>,
+                @builtin(position) position : vec4<f32>,
+            }
 
             @stage(vertex)
             fn main(@builtin(vertex_index) VertexIndex : u32) -> VertexOut {
@@ -694,7 +693,7 @@ TEST_P(CompressedTextureFormatTest, CopyIntoNonZeroArrayLayer) {
 
     DAWN_TEST_UNSUPPORTED_IF(!IsFormatSupported());
 
-    // This test uses glTextureView() which is not supported in OpenGL ES.
+    // TODO(crbug.com/dawn/1328): ES3.1 does not support subsetting of compressed textures.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
 
     constexpr uint32_t kArrayLayerCount = 3;
@@ -714,7 +713,7 @@ TEST_P(CompressedTextureFormatTest, CopyBufferIntoNonZeroMipmapLevel) {
 
     DAWN_TEST_UNSUPPORTED_IF(!IsFormatSupported());
 
-    // This test uses glTextureView() which is not supported in OpenGL ES.
+    // TODO(crbug.com/dawn/1328): ES3.1 does not support subsetting of compressed textures.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
 
     CopyConfig config = GetDefaultFullConfig();
@@ -732,7 +731,7 @@ TEST_P(CompressedTextureFormatTest, CopyWholeTextureSubResourceIntoNonZeroMipmap
 
     DAWN_TEST_UNSUPPORTED_IF(!IsFormatSupported());
 
-    // This test uses glTextureView() which is not supported in OpenGL ES.
+    // TODO(crbug.com/dawn/1328): ES3.1 does not support subsetting of compressed textures.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
 
     // TODO(crbug.com/dawn/816): This consistently fails on with the 12th pixel being opaque
@@ -1083,7 +1082,7 @@ TEST_P(CompressedTextureFormatTest, LargeImageHeightAndClampedCopyExtent) {
 
     DAWN_TEST_UNSUPPORTED_IF(!IsFormatSupported());
 
-    // This test uses glTextureView() which is not supported in OpenGL ES.
+    // TODO(crbug.com/dawn/1328): ES3.1 does not support subsetting of compressed textures.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
 
     CopyConfig config = GetDefaultFullConfig();
@@ -1105,7 +1104,7 @@ TEST_P(CompressedTextureFormatTest, CopyWhole2DArrayTexture) {
 
     DAWN_TEST_UNSUPPORTED_IF(!IsFormatSupported());
 
-    // This test uses glTextureView() which is not supported in OpenGL ES.
+    // TODO(crbug.com/dawn/1328): ES3.1 does not support subsetting of compressed textures.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
 
     constexpr uint32_t kArrayLayerCount = 3;
@@ -1125,7 +1124,7 @@ TEST_P(CompressedTextureFormatTest, CopyMultiple2DArrayLayers) {
 
     DAWN_TEST_UNSUPPORTED_IF(!IsFormatSupported());
 
-    // This test uses glTextureView() which is not supported in OpenGL ES.
+    // TODO(crbug.com/dawn/1328): ES3.1 does not support subsetting of compressed textures.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
 
     constexpr uint32_t kArrayLayerCount = 3;
@@ -1162,9 +1161,7 @@ class CompressedTextureFormatSpecificTest : public DawnTest {
         return features;
     }
 
-    bool IsBCFormatSupported() const {
-        return mIsBCFormatSupported;
-    }
+    bool IsBCFormatSupported() const { return mIsBCFormatSupported; }
 
     bool mIsBCFormatSupported = false;
 };
@@ -1276,7 +1273,7 @@ TEST_P(CompressedTextureWriteTextureTest, WriteMultiple2DArrayLayers) {
     // TODO(crbug.com/dawn/976): Failing on Linux Intel OpenGL drivers.
     DAWN_SUPPRESS_TEST_IF(IsIntel() && IsOpenGL() && IsLinux());
 
-    // TODO(crbug.com/dawn/593): This test uses glTextureView() which is not supported on OpenGLES.
+    // TODO(crbug.com/dawn/1328): ES3.1 does not support subsetting of compressed textures.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
 
     // TODO(b/198674734): Width multiplier set to 7 because 5 results in square size for ASTC6x5.
@@ -1309,7 +1306,7 @@ TEST_P(CompressedTextureWriteTextureTest,
     // TODO(crbug.com/dawn/976): Failing on Linux Intel OpenGL drivers.
     DAWN_SUPPRESS_TEST_IF(IsIntel() && IsOpenGL() && IsLinux());
 
-    // TODO(crbug.com/dawn/593): This test uses glTextureView() which is not supported on OpenGLES.
+    // TODO(crbug.com/dawn/1328): ES3.1 does not support subsetting of compressed textures.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
 
     CopyConfig config = GetDefaultFullConfig();

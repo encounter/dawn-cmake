@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_D3D12_GPUDESCRIPTORHEAPALLOCATION_H_
-#define DAWNNATIVE_D3D12_GPUDESCRIPTORHEAPALLOCATION_H_
+#ifndef SRC_DAWN_NATIVE_D3D12_GPUDESCRIPTORHEAPALLOCATIOND3D12_H_
+#define SRC_DAWN_NATIVE_D3D12_GPUDESCRIPTORHEAPALLOCATIOND3D12_H_
 
 #include "dawn/native/IntegerTypes.h"
 #include "dawn/native/d3d12/IntegerTypes.h"
@@ -21,24 +21,24 @@
 
 namespace dawn::native::d3d12 {
 
-    // Wrapper for a handle into a GPU-only descriptor heap.
-    class GPUDescriptorHeapAllocation {
-      public:
-        GPUDescriptorHeapAllocation() = default;
-        GPUDescriptorHeapAllocation(D3D12_GPU_DESCRIPTOR_HANDLE baseDescriptor,
-                                    ExecutionSerial lastUsageSerial,
-                                    HeapVersionID heapSerial);
+// Wrapper for a handle into a GPU-only descriptor heap.
+class GPUDescriptorHeapAllocation {
+  public:
+    GPUDescriptorHeapAllocation() = default;
+    GPUDescriptorHeapAllocation(D3D12_GPU_DESCRIPTOR_HANDLE baseDescriptor,
+                                ExecutionSerial lastUsageSerial,
+                                HeapVersionID heapSerial);
 
-        D3D12_GPU_DESCRIPTOR_HANDLE GetBaseDescriptor() const;
-        ExecutionSerial GetLastUsageSerial() const;
-        HeapVersionID GetHeapSerial() const;
+    D3D12_GPU_DESCRIPTOR_HANDLE GetBaseDescriptor() const;
+    ExecutionSerial GetLastUsageSerial() const;
+    HeapVersionID GetHeapSerial() const;
 
-      private:
-        D3D12_GPU_DESCRIPTOR_HANDLE mBaseDescriptor = {0};
-        ExecutionSerial mLastUsageSerial = ExecutionSerial(0);
-        HeapVersionID mHeapSerial = HeapVersionID(0);
-    };
+  private:
+    D3D12_GPU_DESCRIPTOR_HANDLE mBaseDescriptor = {0};
+    ExecutionSerial mLastUsageSerial = ExecutionSerial(0);
+    HeapVersionID mHeapSerial = HeapVersionID(0);
+};
 
 }  // namespace dawn::native::d3d12
 
-#endif  // DAWNNATIVE_D3D12_CPUDESCRIPTORHEAPALLOCATION_H_
+#endif  // SRC_DAWN_NATIVE_D3D12_GPUDESCRIPTORHEAPALLOCATIOND3D12_H_

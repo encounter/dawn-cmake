@@ -12,29 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_INDIRECTDRAWVALIDATIONENCODER_H_
-#define DAWNNATIVE_INDIRECTDRAWVALIDATIONENCODER_H_
+#ifndef SRC_DAWN_NATIVE_INDIRECTDRAWVALIDATIONENCODER_H_
+#define SRC_DAWN_NATIVE_INDIRECTDRAWVALIDATIONENCODER_H_
 
 #include "dawn/native/Error.h"
 #include "dawn/native/IndirectDrawMetadata.h"
 
 namespace dawn::native {
 
-    class CommandEncoder;
-    struct CombinedLimits;
-    class DeviceBase;
-    class RenderPassResourceUsageTracker;
+class CommandEncoder;
+struct CombinedLimits;
+class DeviceBase;
+class RenderPassResourceUsageTracker;
 
-    // The maximum number of draws call we can fit into a single validation batch. This is
-    // essentially limited by the number of indirect parameter blocks that can fit into the maximum
-    // allowed storage binding size (with the base limits, it is about 6.7M).
-    uint32_t ComputeMaxDrawCallsPerIndirectValidationBatch(const CombinedLimits& limits);
+// The maximum number of draws call we can fit into a single validation batch. This is
+// essentially limited by the number of indirect parameter blocks that can fit into the maximum
+// allowed storage binding size (with the base limits, it is about 6.7M).
+uint32_t ComputeMaxDrawCallsPerIndirectValidationBatch(const CombinedLimits& limits);
 
-    MaybeError EncodeIndirectDrawValidationCommands(DeviceBase* device,
-                                                    CommandEncoder* commandEncoder,
-                                                    RenderPassResourceUsageTracker* usageTracker,
-                                                    IndirectDrawMetadata* indirectDrawMetadata);
+MaybeError EncodeIndirectDrawValidationCommands(DeviceBase* device,
+                                                CommandEncoder* commandEncoder,
+                                                RenderPassResourceUsageTracker* usageTracker,
+                                                IndirectDrawMetadata* indirectDrawMetadata);
 
 }  // namespace dawn::native
 
-#endif  // DAWNNATIVE_INDIRECTDRAWVALIDATIONENCODER_H_
+#endif  // SRC_DAWN_NATIVE_INDIRECTDRAWVALIDATIONENCODER_H_

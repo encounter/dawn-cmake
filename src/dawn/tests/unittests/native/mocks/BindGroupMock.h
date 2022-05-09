@@ -12,28 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TESTS_UNITTESTS_NATIVE_MOCKS_BINDGROUP_MOCK_H_
-#define TESTS_UNITTESTS_NATIVE_MOCKS_BINDGROUP_MOCK_H_
+#ifndef SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_BINDGROUPMOCK_H_
+#define SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_BINDGROUPMOCK_H_
+
+#include "gmock/gmock.h"
 
 #include "dawn/native/BindGroup.h"
 #include "dawn/native/Device.h"
 
-#include <gmock/gmock.h>
-
 namespace dawn::native {
 
-    class BindGroupMock : public BindGroupBase {
-      public:
-        BindGroupMock(DeviceBase* device) : BindGroupBase(device) {
-            ON_CALL(*this, DestroyImpl).WillByDefault([this]() {
-                this->BindGroupBase::DestroyImpl();
-            });
-        }
-        ~BindGroupMock() override = default;
+class BindGroupMock : public BindGroupBase {
+  public:
+    explicit BindGroupMock(DeviceBase* device) : BindGroupBase(device) {
+        ON_CALL(*this, DestroyImpl).WillByDefault([this]() { this->BindGroupBase::DestroyImpl(); });
+    }
+    ~BindGroupMock() override = default;
 
-        MOCK_METHOD(void, DestroyImpl, (), (override));
-    };
+    MOCK_METHOD(void, DestroyImpl, (), (override));
+};
 
 }  // namespace dawn::native
 
-#endif  // TESTS_UNITTESTS_NATIVE_MOCKS_BINDGROUP_MOCK_H_
+#endif  // SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_BINDGROUPMOCK_H_

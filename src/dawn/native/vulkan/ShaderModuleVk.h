@@ -12,56 +12,70 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_VULKAN_SHADERMODULEVK_H_
-#define DAWNNATIVE_VULKAN_SHADERMODULEVK_H_
+#ifndef SRC_DAWN_NATIVE_VULKAN_SHADERMODULEVK_H_
+#define SRC_DAWN_NATIVE_VULKAN_SHADERMODULEVK_H_
+
+#include <memory>
+#include <mutex>
+// TODO(https://crbug.com/dawn/1379) Update cpplint and remove NOLINT
+#include <optional>  // NOLINT(build/include_order))
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "dawn/native/ShaderModule.h"
 
 #include "dawn/common/vulkan_platform.h"
 #include "dawn/native/Error.h"
 
-#include <mutex>
-
 namespace dawn::native::vulkan {
 
-    class Device;
-    class PipelineLayout;
+class Device;
+class PipelineLayout;
 
-    class ShaderModule final : public ShaderModuleBase {
+class ShaderModule final : public ShaderModuleBase {
+  public:
+    using Spirv = std::vector<uint32_t>;
+    using ModuleAndSpirv = std::pair<VkShaderModule, const Spirv*>;
+
+    static ResultOrError<Ref<ShaderModule>> Create(Device* device,
+                                                   const ShaderModuleDescriptor* descriptor,
+                                                   ShaderModuleParseResult* parseResult,
+                                                   OwnedCompilationMessages* compilationMessages);
+
+    ResultOrError<ModuleAndSpirv> GetHandleAndSpirv(const char* entryPointName,
+                                                    const PipelineLayout* layout);
+
+  private:
+    ShaderModule(Device* device, const ShaderModuleDescriptor* descriptor);
+    ~ShaderModule() override;
+    MaybeError Initialize(ShaderModuleParseResult* parseResult,
+                          OwnedCompilationMessages* compilationMessages);
+    void DestroyImpl() override;
+
+    // New handles created by GetHandleAndSpirv at pipeline creation time.
+    class ConcurrentTransformedShaderModuleCache {
       public:
-        static ResultOrError<Ref<ShaderModule>> Create(Device* device,
-                                                       const ShaderModuleDescriptor* descriptor,
-                                                       ShaderModuleParseResult* parseResult);
+        explicit ConcurrentTransformedShaderModuleCache(Device* device);
+        ~ConcurrentTransformedShaderModuleCache();
 
-        ResultOrError<VkShaderModule> GetTransformedModuleHandle(const char* entryPointName,
-                                                                 PipelineLayout* layout);
+        std::optional<ModuleAndSpirv> Find(const PipelineLayoutEntryPointPair& key);
+        ModuleAndSpirv AddOrGet(const PipelineLayoutEntryPointPair& key,
+                                VkShaderModule module,
+                                std::vector<uint32_t>&& spirv);
 
       private:
-        ShaderModule(Device* device, const ShaderModuleDescriptor* descriptor);
-        ~ShaderModule() override;
-        MaybeError Initialize(ShaderModuleParseResult* parseResult);
-        void DestroyImpl() override;
+        using Entry = std::pair<VkShaderModule, std::unique_ptr<Spirv>>;
 
-        // New handles created by GetTransformedModuleHandle at pipeline creation time
-        class ConcurrentTransformedShaderModuleCache {
-          public:
-            explicit ConcurrentTransformedShaderModuleCache(Device* device);
-            ~ConcurrentTransformedShaderModuleCache();
-            VkShaderModule FindShaderModule(const PipelineLayoutEntryPointPair& key);
-            VkShaderModule AddOrGetCachedShaderModule(const PipelineLayoutEntryPointPair& key,
-                                                      VkShaderModule value);
-
-          private:
-            Device* mDevice;
-            std::mutex mMutex;
-            std::unordered_map<PipelineLayoutEntryPointPair,
-                               VkShaderModule,
-                               PipelineLayoutEntryPointPairHashFunc>
+        Device* mDevice;
+        std::mutex mMutex;
+        std::
+            unordered_map<PipelineLayoutEntryPointPair, Entry, PipelineLayoutEntryPointPairHashFunc>
                 mTransformedShaderModuleCache;
-        };
-        std::unique_ptr<ConcurrentTransformedShaderModuleCache> mTransformedShaderModuleCache;
     };
+    std::unique_ptr<ConcurrentTransformedShaderModuleCache> mTransformedShaderModuleCache;
+};
 
 }  // namespace dawn::native::vulkan
 
-#endif  // DAWNNATIVE_VULKAN_SHADERMODULEVK_H_
+#endif  // SRC_DAWN_NATIVE_VULKAN_SHADERMODULEVK_H_

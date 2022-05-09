@@ -12,53 +12,54 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWN_NODE_BINDING_GPUSUPPORTEDLIMITS_H_
-#define DAWN_NODE_BINDING_GPUSUPPORTEDLIMITS_H_
+#ifndef SRC_DAWN_NODE_BINDING_GPUSUPPORTEDLIMITS_H_
+#define SRC_DAWN_NODE_BINDING_GPUSUPPORTEDLIMITS_H_
 
 #include "dawn/native/DawnNative.h"
 #include "dawn/webgpu_cpp.h"
-#include "napi.h"
+
+#include "src/dawn/node/interop/Napi.h"
 #include "src/dawn/node/interop/WebGPU.h"
 
 namespace wgpu::binding {
 
-    // GPUSupportedLimits is an implementation of interop::GPUSupportedLimits.
-    class GPUSupportedLimits final : public interop::GPUSupportedLimits {
-      public:
-        GPUSupportedLimits(wgpu::SupportedLimits);
+// GPUSupportedLimits is an implementation of interop::GPUSupportedLimits.
+class GPUSupportedLimits final : public interop::GPUSupportedLimits {
+  public:
+    explicit GPUSupportedLimits(wgpu::SupportedLimits);
 
-        // interop::GPUSupportedLimits interface compliance
-        uint32_t getMaxTextureDimension1D(Napi::Env) override;
-        uint32_t getMaxTextureDimension2D(Napi::Env) override;
-        uint32_t getMaxTextureDimension3D(Napi::Env) override;
-        uint32_t getMaxTextureArrayLayers(Napi::Env) override;
-        uint32_t getMaxBindGroups(Napi::Env) override;
-        uint32_t getMaxDynamicUniformBuffersPerPipelineLayout(Napi::Env) override;
-        uint32_t getMaxDynamicStorageBuffersPerPipelineLayout(Napi::Env) override;
-        uint32_t getMaxSampledTexturesPerShaderStage(Napi::Env) override;
-        uint32_t getMaxSamplersPerShaderStage(Napi::Env) override;
-        uint32_t getMaxStorageBuffersPerShaderStage(Napi::Env) override;
-        uint32_t getMaxStorageTexturesPerShaderStage(Napi::Env) override;
-        uint32_t getMaxUniformBuffersPerShaderStage(Napi::Env) override;
-        uint64_t getMaxUniformBufferBindingSize(Napi::Env) override;
-        uint64_t getMaxStorageBufferBindingSize(Napi::Env) override;
-        uint32_t getMinUniformBufferOffsetAlignment(Napi::Env) override;
-        uint32_t getMinStorageBufferOffsetAlignment(Napi::Env) override;
-        uint32_t getMaxVertexBuffers(Napi::Env) override;
-        uint32_t getMaxVertexAttributes(Napi::Env) override;
-        uint32_t getMaxVertexBufferArrayStride(Napi::Env) override;
-        uint32_t getMaxInterStageShaderComponents(Napi::Env) override;
-        uint32_t getMaxComputeWorkgroupStorageSize(Napi::Env) override;
-        uint32_t getMaxComputeInvocationsPerWorkgroup(Napi::Env) override;
-        uint32_t getMaxComputeWorkgroupSizeX(Napi::Env) override;
-        uint32_t getMaxComputeWorkgroupSizeY(Napi::Env) override;
-        uint32_t getMaxComputeWorkgroupSizeZ(Napi::Env) override;
-        uint32_t getMaxComputeWorkgroupsPerDimension(Napi::Env) override;
+    // interop::GPUSupportedLimits interface compliance
+    uint32_t getMaxTextureDimension1D(Napi::Env) override;
+    uint32_t getMaxTextureDimension2D(Napi::Env) override;
+    uint32_t getMaxTextureDimension3D(Napi::Env) override;
+    uint32_t getMaxTextureArrayLayers(Napi::Env) override;
+    uint32_t getMaxBindGroups(Napi::Env) override;
+    uint32_t getMaxDynamicUniformBuffersPerPipelineLayout(Napi::Env) override;
+    uint32_t getMaxDynamicStorageBuffersPerPipelineLayout(Napi::Env) override;
+    uint32_t getMaxSampledTexturesPerShaderStage(Napi::Env) override;
+    uint32_t getMaxSamplersPerShaderStage(Napi::Env) override;
+    uint32_t getMaxStorageBuffersPerShaderStage(Napi::Env) override;
+    uint32_t getMaxStorageTexturesPerShaderStage(Napi::Env) override;
+    uint32_t getMaxUniformBuffersPerShaderStage(Napi::Env) override;
+    uint64_t getMaxUniformBufferBindingSize(Napi::Env) override;
+    uint64_t getMaxStorageBufferBindingSize(Napi::Env) override;
+    uint32_t getMinUniformBufferOffsetAlignment(Napi::Env) override;
+    uint32_t getMinStorageBufferOffsetAlignment(Napi::Env) override;
+    uint32_t getMaxVertexBuffers(Napi::Env) override;
+    uint32_t getMaxVertexAttributes(Napi::Env) override;
+    uint32_t getMaxVertexBufferArrayStride(Napi::Env) override;
+    uint32_t getMaxInterStageShaderComponents(Napi::Env) override;
+    uint32_t getMaxComputeWorkgroupStorageSize(Napi::Env) override;
+    uint32_t getMaxComputeInvocationsPerWorkgroup(Napi::Env) override;
+    uint32_t getMaxComputeWorkgroupSizeX(Napi::Env) override;
+    uint32_t getMaxComputeWorkgroupSizeY(Napi::Env) override;
+    uint32_t getMaxComputeWorkgroupSizeZ(Napi::Env) override;
+    uint32_t getMaxComputeWorkgroupsPerDimension(Napi::Env) override;
 
-      private:
-        wgpu::SupportedLimits limits_;
-    };
+  private:
+    wgpu::SupportedLimits limits_;
+};
 
 }  // namespace wgpu::binding
 
-#endif  // DAWN_NODE_BINDING_GPUSUPPORTEDLIMITS_H_
+#endif  // SRC_DAWN_NODE_BINDING_GPUSUPPORTEDLIMITS_H_

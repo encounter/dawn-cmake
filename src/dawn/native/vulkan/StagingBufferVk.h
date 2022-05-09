@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_STAGINGBUFFERVK_H_
-#define DAWNNATIVE_STAGINGBUFFERVK_H_
+#ifndef SRC_DAWN_NATIVE_VULKAN_STAGINGBUFFERVK_H_
+#define SRC_DAWN_NATIVE_VULKAN_STAGINGBUFFERVK_H_
 
 #include "dawn/common/vulkan_platform.h"
 #include "dawn/native/ResourceMemoryAllocation.h"
@@ -21,22 +21,22 @@
 
 namespace dawn::native::vulkan {
 
-    class Device;
+class Device;
 
-    class StagingBuffer : public StagingBufferBase {
-      public:
-        StagingBuffer(size_t size, Device* device);
-        ~StagingBuffer() override;
+class StagingBuffer : public StagingBufferBase {
+  public:
+    StagingBuffer(size_t size, Device* device);
+    ~StagingBuffer() override;
 
-        VkBuffer GetBufferHandle() const;
+    VkBuffer GetBufferHandle() const;
 
-        MaybeError Initialize() override;
+    MaybeError Initialize() override;
 
-      private:
-        Device* mDevice;
-        VkBuffer mBuffer;
-        ResourceMemoryAllocation mAllocation;
-    };
+  private:
+    Device* mDevice;
+    VkBuffer mBuffer;
+    ResourceMemoryAllocation mAllocation;
+};
 }  // namespace dawn::native::vulkan
 
-#endif  // DAWNNATIVE_STAGINGBUFFERVK_H_
+#endif  // SRC_DAWN_NATIVE_VULKAN_STAGINGBUFFERVK_H_

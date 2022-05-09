@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef UTILS_OBJCUTILS_H_
-#define UTILS_OBJCUTILS_H_
+#ifndef SRC_DAWN_UTILS_OBJCUTILS_H_
+#define SRC_DAWN_UTILS_OBJCUTILS_H_
 
 // Contains helper function to manipulate ObjC objects. This helps having C++ files do a little bit
 // of ObjectiveC calls, when they cannot be converted to ObjectiveC++ because they are used on
@@ -21,9 +21,9 @@
 
 namespace utils {
 
-    // The returned CALayer is autoreleased.
-    void* CreateDummyCALayer();
+// The returned CALayer is autoreleased.
+void* CreatePlaceholderCALayer();
 
 }  // namespace utils
 
-#endif  // UTILS_OBJCUTILS_H_
+#endif  // SRC_DAWN_UTILS_OBJCUTILS_H_

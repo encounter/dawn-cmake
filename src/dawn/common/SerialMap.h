@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef COMMON_SERIALMAP_H_
-#define COMMON_SERIALMAP_H_
-
-#include "dawn/common/SerialStorage.h"
+#ifndef SRC_DAWN_COMMON_SERIALMAP_H_
+#define SRC_DAWN_COMMON_SERIALMAP_H_
 
 #include <map>
 #include <vector>
+
+#include "dawn/common/SerialStorage.h"
 
 template <typename Serial, typename Value>
 class SerialMap;
@@ -73,4 +73,4 @@ void SerialMap<Serial, Value>::Enqueue(std::vector<Value>&& values, Serial seria
     }
 }
 
-#endif  // COMMON_SERIALMAP_H_
+#endif  // SRC_DAWN_COMMON_SERIALMAP_H_

@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TESTS_UNITTESTS_VALIDATIONTEST_H_
-#define TESTS_UNITTESTS_VALIDATIONTEST_H_
+#ifndef SRC_DAWN_TESTS_UNITTESTS_VALIDATION_VALIDATIONTEST_H_
+#define SRC_DAWN_TESTS_UNITTESTS_VALIDATION_VALIDATIONTEST_H_
+
+#include <memory>
+#include <string>
 
 #include "dawn/common/Log.h"
 #include "dawn/native/DawnNative.h"
 #include "dawn/webgpu_cpp.h"
-
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 // Argument helpers to allow macro overriding.
 #define UNIMPLEMENTED_MACRO(...) UNREACHABLE()
@@ -86,7 +88,7 @@
 #define EXPECT_DEPRECATION_WARNING(statement) EXPECT_DEPRECATION_WARNINGS(statement, 1)
 
 namespace utils {
-    class WireHelper;
+class WireHelper;
 }  // namespace utils
 
 void InitDawnValidationTestEnvironment(int argc, char** argv);
@@ -115,9 +117,9 @@ class ValidationTest : public testing::Test {
 
     // Helper functions to create objects to test validation.
 
-    struct DummyRenderPass : public wgpu::RenderPassDescriptor {
+    struct PlaceholderRenderPass : public wgpu::RenderPassDescriptor {
       public:
-        DummyRenderPass(const wgpu::Device& device);
+        explicit PlaceholderRenderPass(const wgpu::Device& device);
         wgpu::Texture attachment;
         wgpu::TextureFormat attachmentFormat;
         uint32_t width;
@@ -156,4 +158,4 @@ class ValidationTest : public testing::Test {
     bool mExpectDestruction = false;
 };
 
-#endif  // TESTS_UNITTESTS_VALIDATIONTEST_H_
+#endif  // SRC_DAWN_TESTS_UNITTESTS_VALIDATION_VALIDATIONTEST_H_

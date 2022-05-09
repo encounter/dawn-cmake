@@ -12,18 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
+#include <string>
 
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
 namespace {
-    struct CreatePipelineAsyncTask {
-        wgpu::ComputePipeline computePipeline = nullptr;
-        wgpu::RenderPipeline renderPipeline = nullptr;
-        bool isCompleted = false;
-        std::string message;
-    };
+struct CreatePipelineAsyncTask {
+    wgpu::ComputePipeline computePipeline = nullptr;
+    wgpu::RenderPipeline renderPipeline = nullptr;
+    bool isCompleted = false;
+    std::string message;
+};
 }  // anonymous namespace
 
 class CreatePipelineAsyncTest : public DawnTest {
@@ -52,7 +53,7 @@ class CreatePipelineAsyncTest : public DawnTest {
             pass.SetBindGroup(0, bindGroup);
             pass.SetPipeline(currentTask->computePipeline);
 
-            pass.Dispatch(1);
+            pass.DispatchWorkgroups(1);
             pass.End();
 
             commands = encoder.Finish();
@@ -64,9 +65,7 @@ class CreatePipelineAsyncTest : public DawnTest {
         EXPECT_BUFFER_U32_EQ(kExpected, ssbo, 0);
     }
 
-    void ValidateCreateComputePipelineAsync() {
-        ValidateCreateComputePipelineAsync(&task);
-    }
+    void ValidateCreateComputePipelineAsync() { ValidateCreateComputePipelineAsync(&task); }
 
     void ValidateCreateRenderPipelineAsync(CreatePipelineAsyncTask* currentTask) {
         constexpr wgpu::TextureFormat kRenderAttachmentFormat = wgpu::TextureFormat::RGBA8Unorm;
@@ -80,7 +79,7 @@ class CreatePipelineAsyncTest : public DawnTest {
 
         utils::ComboRenderPassDescriptor renderPassDescriptor({outputTexture.CreateView()});
         renderPassDescriptor.cColorAttachments[0].loadOp = wgpu::LoadOp::Clear;
-        renderPassDescriptor.cColorAttachments[0].clearColor = {1.f, 0.f, 0.f, 1.f};
+        renderPassDescriptor.cColorAttachments[0].clearValue = {1.f, 0.f, 0.f, 1.f};
 
         wgpu::CommandBuffer commands;
         {
@@ -105,9 +104,7 @@ class CreatePipelineAsyncTest : public DawnTest {
         EXPECT_PIXEL_RGBA8_EQ(RGBA8(0, 255, 0, 255), outputTexture, 0, 0);
     }
 
-    void ValidateCreateRenderPipelineAsync() {
-        ValidateCreateRenderPipelineAsync(&task);
-    }
+    void ValidateCreateRenderPipelineAsync() { ValidateCreateRenderPipelineAsync(&task); }
 
     void DoCreateRenderPipelineAsync(
         const utils::ComboRenderPipelineDescriptor& renderPipelineDescriptor) {
@@ -134,8 +131,8 @@ TEST_P(CreatePipelineAsyncTest, BasicUseOfCreateComputePipelineAsync) {
     wgpu::ComputePipelineDescriptor csDesc;
     csDesc.compute.module = utils::CreateShaderModule(device, R"(
         struct SSBO {
-            value : u32;
-        };
+            value : u32
+        }
         @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
 
         @stage(compute) @workgroup_size(1) fn main() {
@@ -164,8 +161,8 @@ TEST_P(CreatePipelineAsyncTest, ReleaseEntryPointAfterCreatComputePipelineAsync)
     wgpu::ComputePipelineDescriptor csDesc;
     csDesc.compute.module = utils::CreateShaderModule(device, R"(
         struct SSBO {
-            value : u32;
-        };
+            value : u32
+        }
         @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
 
         @stage(compute) @workgroup_size(1) fn main() {
@@ -203,8 +200,8 @@ TEST_P(CreatePipelineAsyncTest, CreateComputePipelineFailed) {
     wgpu::ComputePipelineDescriptor csDesc;
     csDesc.compute.module = utils::CreateShaderModule(device, R"(
         struct SSBO {
-            value : u32;
-        };
+            value : u32
+        }
         @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
 
         @stage(compute) @workgroup_size(1) fn main() {
@@ -293,7 +290,7 @@ TEST_P(CreatePipelineAsyncTest, ReleaseEntryPointsAfterCreateRenderPipelineAsync
 
     utils::ComboRenderPassDescriptor renderPassDescriptor({outputTexture.CreateView()});
     renderPassDescriptor.cColorAttachments[0].loadOp = wgpu::LoadOp::Clear;
-    renderPassDescriptor.cColorAttachments[0].clearColor = {1.f, 0.f, 0.f, 1.f};
+    renderPassDescriptor.cColorAttachments[0].clearValue = {1.f, 0.f, 0.f, 1.f};
 
     wgpu::CommandBuffer commands;
     {
@@ -439,8 +436,7 @@ TEST_P(CreatePipelineAsyncTest, DestroyDeviceBeforeCallbackOfCreateComputePipeli
             task->message = message;
         },
         &task);
-    ExpectDeviceDestruction();
-    device.Destroy();
+    DestroyDevice();
 }
 
 // Verify there is no error when the device is destroyed before the callback of
@@ -473,8 +469,7 @@ TEST_P(CreatePipelineAsyncTest, DestroyDeviceBeforeCallbackOfCreateRenderPipelin
             task->message = message;
         },
         &task);
-    ExpectDeviceDestruction();
-    device.Destroy();
+    DestroyDevice();
 }
 
 // Verify the code path of CreateComputePipelineAsync() to directly return the compute pipeline
@@ -483,8 +478,8 @@ TEST_P(CreatePipelineAsyncTest, CreateSameComputePipelineTwice) {
     wgpu::ComputePipelineDescriptor csDesc;
     csDesc.compute.module = utils::CreateShaderModule(device, R"(
         struct SSBO {
-            value : u32;
-        };
+            value : u32
+        }
         @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
 
         @stage(compute) @workgroup_size(1) fn main() {
@@ -542,8 +537,8 @@ TEST_P(CreatePipelineAsyncTest, CreateSameComputePipelineTwiceAtSameTime) {
     csDesc.layout = pipelineLayout;
     csDesc.compute.module = utils::CreateShaderModule(device, R"(
         struct SSBO {
-            value : u32;
-        };
+            value : u32
+        }
         @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
 
         @stage(compute) @workgroup_size(1) fn main() {
@@ -635,14 +630,14 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithVertexBufferLayouts
         utils::ComboRenderPipelineDescriptor renderPipelineDescriptor;
         renderPipelineDescriptor.vertex.module = utils::CreateShaderModule(device, R"(
         struct VertexInput {
-            @location(0) input0: u32;
-            @location(1) input1: u32;
-        };
+            @location(0) input0: u32,
+            @location(1) input1: u32,
+        }
 
         struct VertexOutput {
-            @location(0) vertexColorOut: vec4<f32>;
-            @builtin(position) position: vec4<f32>;
-        };
+            @location(0) vertexColorOut: vec4<f32>,
+            @builtin(position) position: vec4<f32>,
+        }
 
         @stage(vertex)
         fn main(vertexInput : VertexInput) -> VertexOutput {
@@ -728,9 +723,9 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithDepthStencilState) 
     // to 0.
     utils::ComboRenderPassDescriptor renderPass({renderTargetView}, depthStencilView);
     renderPass.cColorAttachments[0].loadOp = wgpu::LoadOp::Clear;
-    renderPass.cColorAttachments[0].clearColor = {0.0, 1.0, 0.0, 1.0};
+    renderPass.cColorAttachments[0].clearValue = {0.0, 1.0, 0.0, 1.0};
     renderPass.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Clear;
-    renderPass.cDepthStencilAttachmentInfo.clearStencil = 0u;
+    renderPass.cDepthStencilAttachmentInfo.stencilClearValue = 0u;
 
     wgpu::RenderPipeline pipeline;
     {
@@ -801,7 +796,7 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineWithMultisampleState) {
     // (1, 0, 0, 1).
     utils::ComboRenderPassDescriptor renderPass({renderTargetView});
     renderPass.cColorAttachments[0].loadOp = wgpu::LoadOp::Clear;
-    renderPass.cColorAttachments[0].clearColor = {1.0, 0.0, 0.0, 1.0};
+    renderPass.cColorAttachments[0].clearValue = {1.0, 0.0, 0.0, 1.0};
     renderPass.cColorAttachments[0].resolveTarget = resolveTargetView;
 
     wgpu::RenderPipeline pipeline;
@@ -873,9 +868,9 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithBlendState) {
     // Prepare two color attachments
     utils::ComboRenderPassDescriptor renderPass({renderTargetViews[0], renderTargetViews[1]});
     renderPass.cColorAttachments[0].loadOp = wgpu::LoadOp::Clear;
-    renderPass.cColorAttachments[0].clearColor = {0.2, 0.0, 0.0, 0.2};
+    renderPass.cColorAttachments[0].clearValue = {0.2, 0.0, 0.0, 0.2};
     renderPass.cColorAttachments[1].loadOp = wgpu::LoadOp::Clear;
-    renderPass.cColorAttachments[1].clearColor = {0.0, 0.2, 0.0, 0.2};
+    renderPass.cColorAttachments[1].clearValue = {0.0, 0.2, 0.0, 0.2};
 
     {
         utils::ComboRenderPipelineDescriptor renderPipelineDescriptor;
@@ -886,9 +881,9 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithBlendState) {
         })");
         renderPipelineDescriptor.cFragment.module = utils::CreateShaderModule(device, R"(
          struct FragmentOut {
-            @location(0) fragColor0 : vec4<f32>;
-            @location(1) fragColor1 : vec4<f32>;
-        };
+            @location(0) fragColor0 : vec4<f32>,
+            @location(1) fragColor1 : vec4<f32>,
+        }
 
         @stage(fragment) fn main() -> FragmentOut {
             var output : FragmentOut;
@@ -949,8 +944,8 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithBlendState) {
     queue.Submit(1, &commands);
 
     // When the blend states are all set correctly, the color of renderTargets[0] should be
-    // (0.6, 0, 0, 0.6) = colorAttachment0.clearColor + (0.4, 0.0, 0.0, 0.4), and the color of
-    // renderTargets[1] should be (0.8, 0, 0, 0.8) = (1, 0, 0, 1) - colorAttachment1.clearColor.
+    // (0.6, 0, 0, 0.6) = colorAttachment0.clearValue + (0.4, 0.0, 0.0, 0.4), and the color of
+    // renderTargets[1] should be (0.8, 0, 0, 0.8) = (1, 0, 0, 1) - colorAttachment1.clearValue.
     RGBA8 expected0 = {153, 0, 0, 153};
     RGBA8 expected1 = {0, 204, 0, 204};
     EXPECT_PIXEL_RGBA8_EQ(expected0, renderTargets[0], 0, 0);

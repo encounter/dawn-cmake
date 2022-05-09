@@ -12,27 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_VULKAN_QUEUEVK_H_
-#define DAWNNATIVE_VULKAN_QUEUEVK_H_
+#ifndef SRC_DAWN_NATIVE_VULKAN_QUEUEVK_H_
+#define SRC_DAWN_NATIVE_VULKAN_QUEUEVK_H_
 
 #include "dawn/native/Queue.h"
 
 namespace dawn::native::vulkan {
 
-    class Device;
+class Device;
 
-    class Queue final : public QueueBase {
-      public:
-        static Queue* Create(Device* device);
+class Queue final : public QueueBase {
+  public:
+    static Ref<Queue> Create(Device* device, const QueueDescriptor* descriptor);
 
-      private:
-        Queue(Device* device);
-        ~Queue() override;
-        using QueueBase::QueueBase;
+  private:
+    Queue(Device* device, const QueueDescriptor* descriptor);
+    ~Queue() override;
+    using QueueBase::QueueBase;
 
-        MaybeError SubmitImpl(uint32_t commandCount, CommandBufferBase* const* commands) override;
-    };
+    void Initialize();
+
+    MaybeError SubmitImpl(uint32_t commandCount, CommandBufferBase* const* commands) override;
+
+    // Dawn API
+    void SetLabelImpl() override;
+};
 
 }  // namespace dawn::native::vulkan
 
-#endif  // DAWNNATIVE_VULKAN_QUEUEVK_H_
+#endif  // SRC_DAWN_NATIVE_VULKAN_QUEUEVK_H_

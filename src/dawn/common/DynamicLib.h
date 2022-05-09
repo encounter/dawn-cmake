@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef COMMON_DYNAMICLIB_H_
-#define COMMON_DYNAMICLIB_H_
-
-#include "dawn/common/Assert.h"
+#ifndef SRC_DAWN_COMMON_DYNAMICLIB_H_
+#define SRC_DAWN_COMMON_DYNAMICLIB_H_
 
 #include <string>
 #include <type_traits>
+
+#include "dawn/common/Assert.h"
 
 class DynamicLib {
   public:
@@ -51,4 +51,4 @@ class DynamicLib {
     void* mHandle = nullptr;
 };
 
-#endif  // COMMON_DYNAMICLIB_H_
+#endif  // SRC_DAWN_COMMON_DYNAMICLIB_H_

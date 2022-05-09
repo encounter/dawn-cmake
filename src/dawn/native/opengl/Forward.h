@@ -12,55 +12,55 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGL_FORWARD_H_
-#define DAWNNATIVE_OPENGL_FORWARD_H_
+#ifndef SRC_DAWN_NATIVE_OPENGL_FORWARD_H_
+#define SRC_DAWN_NATIVE_OPENGL_FORWARD_H_
 
 #include "dawn/native/ToBackend.h"
 
 namespace dawn::native::opengl {
 
-    class Adapter;
-    class BindGroup;
-    class BindGroupLayout;
-    class Buffer;
-    class CommandBuffer;
-    class ComputePipeline;
-    class Device;
-    class PersistentPipelineState;
-    class PipelineLayout;
-    class QuerySet;
-    class Queue;
-    class RenderPipeline;
-    class Sampler;
-    class ShaderModule;
-    class SwapChain;
-    class Texture;
-    class TextureView;
+class Adapter;
+class BindGroup;
+class BindGroupLayout;
+class Buffer;
+class CommandBuffer;
+class ComputePipeline;
+class Device;
+class PersistentPipelineState;
+class PipelineLayout;
+class QuerySet;
+class Queue;
+class RenderPipeline;
+class Sampler;
+class ShaderModule;
+class SwapChain;
+class Texture;
+class TextureView;
 
-    struct OpenGLBackendTraits {
-        using AdapterType = Adapter;
-        using BindGroupType = BindGroup;
-        using BindGroupLayoutType = BindGroupLayout;
-        using BufferType = Buffer;
-        using CommandBufferType = CommandBuffer;
-        using ComputePipelineType = ComputePipeline;
-        using DeviceType = Device;
-        using PipelineLayoutType = PipelineLayout;
-        using QuerySetType = QuerySet;
-        using QueueType = Queue;
-        using RenderPipelineType = RenderPipeline;
-        using SamplerType = Sampler;
-        using ShaderModuleType = ShaderModule;
-        using SwapChainType = SwapChain;
-        using TextureType = Texture;
-        using TextureViewType = TextureView;
-    };
+struct OpenGLBackendTraits {
+    using AdapterType = Adapter;
+    using BindGroupType = BindGroup;
+    using BindGroupLayoutType = BindGroupLayout;
+    using BufferType = Buffer;
+    using CommandBufferType = CommandBuffer;
+    using ComputePipelineType = ComputePipeline;
+    using DeviceType = Device;
+    using PipelineLayoutType = PipelineLayout;
+    using QuerySetType = QuerySet;
+    using QueueType = Queue;
+    using RenderPipelineType = RenderPipeline;
+    using SamplerType = Sampler;
+    using ShaderModuleType = ShaderModule;
+    using SwapChainType = SwapChain;
+    using TextureType = Texture;
+    using TextureViewType = TextureView;
+};
 
-    template <typename T>
-    auto ToBackend(T&& common) -> decltype(ToBackendBase<OpenGLBackendTraits>(common)) {
-        return ToBackendBase<OpenGLBackendTraits>(common);
-    }
+template <typename T>
+auto ToBackend(T&& common) -> decltype(ToBackendBase<OpenGLBackendTraits>(common)) {
+    return ToBackendBase<OpenGLBackendTraits>(common);
+}
 
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGL_FORWARD_H_
+#endif  // SRC_DAWN_NATIVE_OPENGL_FORWARD_H_

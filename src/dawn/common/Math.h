@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef COMMON_MATH_H_
-#define COMMON_MATH_H_
-
-#include "dawn/common/Assert.h"
+#ifndef SRC_DAWN_COMMON_MATH_H_
+#define SRC_DAWN_COMMON_MATH_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -23,6 +21,8 @@
 
 #include <limits>
 #include <type_traits>
+
+#include "dawn/common/Assert.h"
 
 // The following are not valid for 0
 uint32_t ScanForward(uint32_t bits);
@@ -104,4 +104,4 @@ constexpr bool IsSubset(T1 subset, T2 set) {
     return bitsAlsoInSet == subset;
 }
 
-#endif  // COMMON_MATH_H_
+#endif  // SRC_DAWN_COMMON_MATH_H_

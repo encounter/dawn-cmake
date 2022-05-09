@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_STAGINGBUFFERMETAL_H_
-#define DAWNNATIVE_STAGINGBUFFERMETAL_H_
+#ifndef SRC_DAWN_NATIVE_METAL_STAGINGBUFFERMTL_H_
+#define SRC_DAWN_NATIVE_METAL_STAGINGBUFFERMTL_H_
 
 #include "dawn/native/StagingBuffer.h"
 
@@ -23,20 +23,20 @@
 
 namespace dawn::native::metal {
 
-    class Device;
+class Device;
 
-    class StagingBuffer : public StagingBufferBase {
-      public:
-        StagingBuffer(size_t size, Device* device);
+class StagingBuffer : public StagingBufferBase {
+  public:
+    StagingBuffer(size_t size, Device* device);
 
-        id<MTLBuffer> GetBufferHandle() const;
+    id<MTLBuffer> GetBufferHandle() const;
 
-        MaybeError Initialize() override;
+    MaybeError Initialize() override;
 
-      private:
-        Device* mDevice;
-        NSPRef<id<MTLBuffer>> mBuffer;
-    };
+  private:
+    Device* mDevice;
+    NSPRef<id<MTLBuffer>> mBuffer;
+};
 }  // namespace dawn::native::metal
 
-#endif  // DAWNNATIVE_STAGINGBUFFERMETAL_H_
+#endif  // SRC_DAWN_NATIVE_METAL_STAGINGBUFFERMTL_H_

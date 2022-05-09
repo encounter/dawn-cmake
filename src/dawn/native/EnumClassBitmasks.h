@@ -12,28 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_ENUMCLASSBITMASK_H_
-#define DAWNNATIVE_ENUMCLASSBITMASK_H_
+#ifndef SRC_DAWN_NATIVE_ENUMCLASSBITMASKS_H_
+#define SRC_DAWN_NATIVE_ENUMCLASSBITMASKS_H_
 
 #include "dawn/EnumClassBitmasks.h"
 
 namespace dawn::native {
 
-    // EnumClassBitmmasks is a helper in the dawn:: namespace.
-    // Re-export it in the dawn_native namespace.
-    DAWN_IMPORT_BITMASK_OPERATORS
+// EnumClassBitmmasks is a helper in the dawn:: namespace.
+// Re-export it in the dawn_native namespace.
+DAWN_IMPORT_BITMASK_OPERATORS
 
-    // Specify this for usage with EnumMaskIterator
-    template <typename T>
-    struct EnumBitmaskSize {
-        static constexpr unsigned value = 0;
-    };
+// Specify this for usage with EnumMaskIterator
+template <typename T>
+struct EnumBitmaskSize {
+    static constexpr unsigned value = 0;
+};
 
-    template <typename T>
-    constexpr bool HasOneBit(T value) {
-        return HasZeroOrOneBits(value) && value != T(0);
-    }
+template <typename T>
+constexpr bool HasOneBit(T value) {
+    return HasZeroOrOneBits(value) && value != T(0);
+}
 
 }  // namespace dawn::native
 
-#endif  // DAWNNATIVE_ENUMCLASSBITMASK_H_
+#endif  // SRC_DAWN_NATIVE_ENUMCLASSBITMASKS_H_

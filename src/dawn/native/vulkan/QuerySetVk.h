@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_VULKAN_QUERYSETVK_H_
-#define DAWNNATIVE_VULKAN_QUERYSETVK_H_
+#ifndef SRC_DAWN_NATIVE_VULKAN_QUERYSETVK_H_
+#define SRC_DAWN_NATIVE_VULKAN_QUERYSETVK_H_
 
 #include "dawn/native/QuerySet.h"
 
@@ -21,27 +21,27 @@
 
 namespace dawn::native::vulkan {
 
-    class Device;
+class Device;
 
-    class QuerySet final : public QuerySetBase {
-      public:
-        static ResultOrError<Ref<QuerySet>> Create(Device* device,
-                                                   const QuerySetDescriptor* descriptor);
+class QuerySet final : public QuerySetBase {
+  public:
+    static ResultOrError<Ref<QuerySet>> Create(Device* device,
+                                               const QuerySetDescriptor* descriptor);
 
-        VkQueryPool GetHandle() const;
+    VkQueryPool GetHandle() const;
 
-      private:
-        ~QuerySet() override;
-        using QuerySetBase::QuerySetBase;
-        MaybeError Initialize();
+  private:
+    ~QuerySet() override;
+    using QuerySetBase::QuerySetBase;
+    MaybeError Initialize();
 
-        // Dawn API
-        void DestroyImpl() override;
-        void SetLabelImpl() override;
+    // Dawn API
+    void DestroyImpl() override;
+    void SetLabelImpl() override;
 
-        VkQueryPool mHandle = VK_NULL_HANDLE;
-    };
+    VkQueryPool mHandle = VK_NULL_HANDLE;
+};
 
 }  // namespace dawn::native::vulkan
 
-#endif  // DAWNNATIVE_VULKAN_QUERYSETVK_H_
+#endif  // SRC_DAWN_NATIVE_VULKAN_QUERYSETVK_H_

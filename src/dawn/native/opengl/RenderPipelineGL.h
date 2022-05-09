@@ -12,51 +12,51 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGL_RENDERPIPELINEGL_H_
-#define DAWNNATIVE_OPENGL_RENDERPIPELINEGL_H_
+#ifndef SRC_DAWN_NATIVE_OPENGL_RENDERPIPELINEGL_H_
+#define SRC_DAWN_NATIVE_OPENGL_RENDERPIPELINEGL_H_
+
+#include <vector>
 
 #include "dawn/native/RenderPipeline.h"
 
 #include "dawn/native/opengl/PipelineGL.h"
 #include "dawn/native/opengl/opengl_platform.h"
 
-#include <vector>
-
 namespace dawn::native::opengl {
 
-    class Device;
-    class PersistentPipelineState;
+class Device;
+class PersistentPipelineState;
 
-    class RenderPipeline final : public RenderPipelineBase, public PipelineGL {
-      public:
-        static Ref<RenderPipeline> CreateUninitialized(Device* device,
-                                                       const RenderPipelineDescriptor* descriptor);
+class RenderPipeline final : public RenderPipelineBase, public PipelineGL {
+  public:
+    static Ref<RenderPipeline> CreateUninitialized(Device* device,
+                                                   const RenderPipelineDescriptor* descriptor);
 
-        GLenum GetGLPrimitiveTopology() const;
-        ityp::bitset<VertexAttributeLocation, kMaxVertexAttributes> GetAttributesUsingVertexBuffer(
-            VertexBufferSlot slot) const;
+    GLenum GetGLPrimitiveTopology() const;
+    ityp::bitset<VertexAttributeLocation, kMaxVertexAttributes> GetAttributesUsingVertexBuffer(
+        VertexBufferSlot slot) const;
 
-        void ApplyNow(PersistentPipelineState& persistentPipelineState);
+    void ApplyNow(PersistentPipelineState& persistentPipelineState);
 
-        MaybeError Initialize() override;
+    MaybeError Initialize() override;
 
-      private:
-        RenderPipeline(Device* device, const RenderPipelineDescriptor* descriptor);
-        ~RenderPipeline() override;
-        void DestroyImpl() override;
+  private:
+    RenderPipeline(Device* device, const RenderPipelineDescriptor* descriptor);
+    ~RenderPipeline() override;
+    void DestroyImpl() override;
 
-        void CreateVAOForVertexState();
+    void CreateVAOForVertexState();
 
-        // TODO(yunchao.he@intel.com): vao need to be deduplicated between pipelines.
-        GLuint mVertexArrayObject;
-        GLenum mGlPrimitiveTopology;
+    // TODO(yunchao.he@intel.com): vao need to be deduplicated between pipelines.
+    GLuint mVertexArrayObject;
+    GLenum mGlPrimitiveTopology;
 
-        ityp::array<VertexBufferSlot,
-                    ityp::bitset<VertexAttributeLocation, kMaxVertexAttributes>,
-                    kMaxVertexBuffers>
-            mAttributesUsingVertexBuffer;
-    };
+    ityp::array<VertexBufferSlot,
+                ityp::bitset<VertexAttributeLocation, kMaxVertexAttributes>,
+                kMaxVertexBuffers>
+        mAttributesUsingVertexBuffer;
+};
 
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGL_RENDERPIPELINEGL_H_
+#endif  // SRC_DAWN_NATIVE_OPENGL_RENDERPIPELINEGL_H_

@@ -13,22 +13,22 @@
 // limitations under the License.
 
 #include <cmath>
-
-#include "dawn/tests/DawnTest.h"
+#include <vector>
 
 #include "dawn/common/Assert.h"
 #include "dawn/common/Constants.h"
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
 constexpr static unsigned int kRTSize = 16;
 
 namespace {
-    // MipLevel colors, ordering from base level to high level
-    // each mipmap of the texture is having a different color
-    // so we can check if the sampler anisotropic filtering is fetching
-    // from the correct miplevel
-    const std::array<RGBA8, 3> colors = {RGBA8::kRed, RGBA8::kGreen, RGBA8::kBlue};
+// MipLevel colors, ordering from base level to high level
+// each mipmap of the texture is having a different color
+// so we can check if the sampler anisotropic filtering is fetching
+// from the correct miplevel
+const std::array<RGBA8, 3> colors = {RGBA8::kRed, RGBA8::kGreen, RGBA8::kBlue};
 }  // namespace
 
 class SamplerFilterAnisotropicTest : public DawnTest {
@@ -39,20 +39,20 @@ class SamplerFilterAnisotropicTest : public DawnTest {
 
         wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
             struct Uniforms {
-                matrix : mat4x4<f32>;
-            };
+                matrix : mat4x4<f32>
+            }
 
             struct VertexIn {
-                @location(0) position : vec4<f32>;
-                @location(1) uv : vec2<f32>;
-            };
+                @location(0) position : vec4<f32>,
+                @location(1) uv : vec2<f32>,
+            }
 
             @group(0) @binding(2) var<uniform> uniforms : Uniforms;
 
             struct VertexOut {
-                @location(0) uv : vec2<f32>;
-                @builtin(position) position : vec4<f32>;
-            };
+                @location(0) uv : vec2<f32>,
+                @builtin(position) position : vec4<f32>,
+            }
 
             @stage(vertex)
             fn main(input : VertexIn) -> VertexOut {
@@ -67,9 +67,9 @@ class SamplerFilterAnisotropicTest : public DawnTest {
             @group(0) @binding(1) var texture0 : texture_2d<f32>;
 
             struct FragmentIn {
-                @location(0) uv: vec2<f32>;
-                @builtin(position) fragCoord : vec4<f32>;
-            };
+                @location(0) uv: vec2<f32>,
+                @builtin(position) fragCoord : vec4<f32>,
+            }
 
             @stage(fragment)
             fn main(input : FragmentIn) -> @location(0) vec4<f32> {

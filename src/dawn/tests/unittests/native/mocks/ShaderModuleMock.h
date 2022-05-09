@@ -12,30 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TESTS_UNITTESTS_NATIVE_MOCKS_SHADERMODULE_MOCK_H_
-#define TESTS_UNITTESTS_NATIVE_MOCKS_SHADERMODULE_MOCK_H_
+#ifndef SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_SHADERMODULEMOCK_H_
+#define SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_SHADERMODULEMOCK_H_
+
+#include <memory>
+
+#include "gmock/gmock.h"
 
 #include "dawn/native/Device.h"
 #include "dawn/native/Error.h"
 #include "dawn/native/ShaderModule.h"
 
-#include <memory>
-
-#include <gmock/gmock.h>
-
 namespace dawn::native {
 
-    class ShaderModuleMock : public ShaderModuleBase {
-      public:
-        ShaderModuleMock(DeviceBase* device);
-        ~ShaderModuleMock() override = default;
+class ShaderModuleMock : public ShaderModuleBase {
+  public:
+    explicit ShaderModuleMock(DeviceBase* device);
+    ~ShaderModuleMock() override = default;
 
-        MOCK_METHOD(void, DestroyImpl, (), (override));
+    MOCK_METHOD(void, DestroyImpl, (), (override));
 
-        // Creates a shader module mock based on the wgsl source.
-        static ResultOrError<Ref<ShaderModuleMock>> Create(DeviceBase* device, const char* source);
-    };
+    // Creates a shader module mock based on the wgsl source.
+    static ResultOrError<Ref<ShaderModuleMock>> Create(DeviceBase* device, const char* source);
+};
 
 }  // namespace dawn::native
 
-#endif  // TESTS_UNITTESTS_NATIVE_MOCKS_SHADERMODULE_MOCK_H_
+#endif  // SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_SHADERMODULEMOCK_H_

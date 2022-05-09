@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
+#include <vector>
 
 #include "dawn/common/Math.h"
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/TestUtils.h"
 #include "dawn/utils/WGPUHelpers.h"
@@ -33,14 +34,14 @@
 
 namespace {
 
-    struct BufferZeroInitInCopyT2BSpec {
-        wgpu::Extent3D textureSize;
-        uint64_t bufferOffset;
-        uint64_t extraBytes;
-        uint32_t bytesPerRow;
-        uint32_t rowsPerImage;
-        uint32_t lazyClearCount;
-    };
+struct BufferZeroInitInCopyT2BSpec {
+    wgpu::Extent3D textureSize;
+    uint64_t bufferOffset;
+    uint64_t extraBytes;
+    uint32_t bytesPerRow;
+    uint32_t rowsPerImage;
+    uint32_t lazyClearCount;
+};
 
 }  // anonymous namespace
 
@@ -107,7 +108,7 @@ class BufferZeroInitTest : public DawnTest {
 
             utils::ComboRenderPassDescriptor renderPassDescriptor(
                 {texture.CreateView(&viewDescriptor)});
-            renderPassDescriptor.cColorAttachments[0].clearColor = color;
+            renderPassDescriptor.cColorAttachments[0].clearValue = color;
             wgpu::RenderPassEncoder renderPass = encoder.BeginRenderPass(&renderPassDescriptor);
             renderPass.End();
         }
@@ -189,7 +190,7 @@ class BufferZeroInitTest : public DawnTest {
         wgpu::ComputePassEncoder computePass = encoder.BeginComputePass();
         computePass.SetBindGroup(0, bindGroup);
         computePass.SetPipeline(pipeline);
-        computePass.Dispatch(1u);
+        computePass.DispatchWorkgroups(1u);
         computePass.End();
         wgpu::CommandBuffer commandBuffer = encoder.Finish();
 
@@ -251,9 +252,9 @@ class BufferZeroInitTest : public DawnTest {
 
         wgpu::RenderPipeline renderPipeline = CreateRenderPipelineForTest(R"(
             struct VertexOut {
-                @location(0) color : vec4<f32>;
-                @builtin(position) position : vec4<f32>;
-            };
+                @location(0) color : vec4<f32>,
+                @builtin(position) position : vec4<f32>,
+            }
 
             @stage(vertex) fn main(@location(0) pos : vec4<f32>) -> VertexOut {
                 var output : VertexOut;
@@ -295,9 +296,9 @@ class BufferZeroInitTest : public DawnTest {
         wgpu::RenderPipeline renderPipeline =
             CreateRenderPipelineForTest(R"(
             struct VertexOut {
-                @location(0) color : vec4<f32>;
-                @builtin(position) position : vec4<f32>;
-            };
+                @location(0) color : vec4<f32>,
+                @builtin(position) position : vec4<f32>,
+            }
 
             @stage(vertex)
             fn main(@builtin(vertex_index) VertexIndex : u32) -> VertexOut {
@@ -345,9 +346,9 @@ class BufferZeroInitTest : public DawnTest {
         wgpu::RenderPipeline renderPipeline =
             CreateRenderPipelineForTest(R"(
             struct VertexOut {
-                @location(0) color : vec4<f32>;
-                @builtin(position) position : vec4<f32>;
-            };
+                @location(0) color : vec4<f32>,
+                @builtin(position) position : vec4<f32>,
+            }
 
             @stage(vertex) fn main() -> VertexOut {
                 var output : VertexOut;
@@ -386,9 +387,9 @@ class BufferZeroInitTest : public DawnTest {
         wgpu::RenderPipeline renderPipeline =
             CreateRenderPipelineForTest(R"(
             struct VertexOut {
-                @location(0) color : vec4<f32>;
-                @builtin(position) position : vec4<f32>;
-            };
+                @location(0) color : vec4<f32>,
+                @builtin(position) position : vec4<f32>,
+            }
 
             @stage(vertex) fn main() -> VertexOut {
                 var output : VertexOut;
@@ -457,7 +458,7 @@ class BufferZeroInitTest : public DawnTest {
         wgpu::ComputePassEncoder computePass = encoder.BeginComputePass();
         computePass.SetBindGroup(0, bindGroup);
         computePass.SetPipeline(pipeline);
-        computePass.DispatchIndirect(indirectBuffer, indirectBufferOffset);
+        computePass.DispatchWorkgroupsIndirect(indirectBuffer, indirectBufferOffset);
         computePass.End();
 
         ExpectLazyClearSubmitAndCheckOutputs(encoder, indirectBuffer, bufferSize, outputTexture);
@@ -960,9 +961,6 @@ TEST_P(BufferZeroInitTest, Copy2DTextureToBuffer) {
 // Test that the code path of CopyTextureToBuffer clears the destination buffer correctly when it is
 // the first use of the buffer and the texture is a 2D array texture.
 TEST_P(BufferZeroInitTest, Copy2DArrayTextureToBuffer) {
-    // TODO(crbug.com/dawn/593): This test uses glTextureView() which is not supported on OpenGL ES.
-    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
-
     constexpr wgpu::Extent3D kTextureSize = {64u, 4u, 3u};
 
     // bytesPerRow == texelBlockSizeInBytes * copySize.width && rowsPerImage == copySize.height &&
@@ -998,8 +996,8 @@ TEST_P(BufferZeroInitTest, BoundAsUniformBuffer) {
     constexpr uint32_t kBoundBufferSize = 16u;
     wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
         struct UBO {
-            value : vec4<u32>;
-        };
+            value : vec4<u32>
+        }
         @group(0) @binding(0) var<uniform> ubo : UBO;
         @group(0) @binding(1) var outImage : texture_storage_2d<rgba8unorm, write>;
 
@@ -1037,8 +1035,8 @@ TEST_P(BufferZeroInitTest, BoundAsReadonlyStorageBuffer) {
     constexpr uint32_t kBoundBufferSize = 16u;
     wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
         struct SSBO {
-            value : vec4<u32>;
-        };
+            value : vec4<u32>
+        }
         @group(0) @binding(0) var<storage, read> ssbo : SSBO;
         @group(0) @binding(1) var outImage : texture_storage_2d<rgba8unorm, write>;
 
@@ -1076,8 +1074,8 @@ TEST_P(BufferZeroInitTest, BoundAsStorageBuffer) {
     constexpr uint32_t kBoundBufferSize = 32u;
     wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
         struct SSBO {
-            value : array<vec4<u32>, 2>;
-        };
+            value : array<vec4<u32>, 2>
+        }
         @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
         @group(0) @binding(1) var outImage : texture_storage_2d<rgba8unorm, write>;
 
@@ -1138,8 +1136,8 @@ TEST_P(BufferZeroInitTest, SetVertexBuffer) {
 // draw call. A backend which implements robust buffer access via clamping should
 // still see zeros at the end of the buffer.
 TEST_P(BufferZeroInitTest, PaddingInitialized) {
-    DAWN_SUPPRESS_TEST_IF(IsANGLE());                              // TODO(crbug.com/dawn/1084).
-    DAWN_SUPPRESS_TEST_IF(IsLinux() && IsVulkan() && IsNvidia());  // TODO(crbug.com/dawn/1214).
+    DAWN_SUPPRESS_TEST_IF(IsANGLE());                              // TODO(crbug.com/dawn/1084)
+    DAWN_SUPPRESS_TEST_IF(IsLinux() && IsVulkan() && IsNvidia());  // TODO(crbug.com/dawn/1214)
 
     constexpr wgpu::TextureFormat kColorAttachmentFormat = wgpu::TextureFormat::RGBA8Unorm;
     // A small sub-4-byte format means a single vertex can fit entirely within the padded buffer,
@@ -1150,9 +1148,9 @@ TEST_P(BufferZeroInitTest, PaddingInitialized) {
         wgpu::RenderPipeline renderPipeline =
             CreateRenderPipelineForTest(R"(
             struct VertexOut {
-                @location(0) color : vec4<f32>;
-                @builtin(position) position : vec4<f32>;
-            };
+                @location(0) color : vec4<f32>,
+                @builtin(position) position : vec4<f32>,
+            }
 
             @stage(vertex) fn main(@location(0) pos : vec2<f32>) -> VertexOut {
                 var output : VertexOut;
@@ -1258,6 +1256,10 @@ TEST_P(BufferZeroInitTest, SetIndexBuffer) {
 // Test the buffer will be lazily initialized correctly when its first use is an indirect buffer for
 // DrawIndirect.
 TEST_P(BufferZeroInitTest, IndirectBufferForDrawIndirect) {
+    // TODO(crbug.com/dawn/1292): Some Intel OpenGL drivers don't seem to like
+    // the offset= that Tint/GLSL produces.
+    DAWN_SUPPRESS_TEST_IF(IsIntel() && IsOpenGL() && IsLinux());
+
     // Bind the whole buffer as an indirect buffer.
     {
         constexpr uint64_t kOffset = 0u;
@@ -1276,7 +1278,7 @@ TEST_P(BufferZeroInitTest, IndirectBufferForDrawIndirect) {
 TEST_P(BufferZeroInitTest, IndirectBufferForDrawIndexedIndirect) {
     // TODO(crbug.com/dawn/1292): Some Intel OpenGL drivers don't seem to like
     // the offset= that Tint/GLSL produces.
-    DAWN_SUPPRESS_TEST_IF(IsIntel() && IsOpenGL());
+    DAWN_SUPPRESS_TEST_IF(IsIntel() && IsOpenGL() && IsLinux());
 
     // Bind the whole buffer as an indirect buffer.
     {

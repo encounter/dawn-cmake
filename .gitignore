@@ -7,10 +7,14 @@
 /build
 /buildtools
 /testing
-/tools
+/tools/bin
+/tools/clang
+/tools/cmake*
+/tools/golang
+/tools/memory
 /out
 
-# Modified from https://www.gitignore.io/api/vim,macos,linux,emacs,windows,sublimetext,visualstudio,visualstudiocode
+# Modified from https://www.gitignore.io/api/vim,macos,linux,emacs,windows,sublimetext,visualstudio,visualstudiocode,intellij
 
 ### Emacs ###
 *~
@@ -78,5 +82,19 @@ ehthumbs_vista.db
 Desktop.ini
 $RECYCLE.BIN/
 
+### Intellij ###
+.idea
+
 ### Dawn node tools binaries
 src/dawn/node/tools/bin/
+
+### Cached node transpiled tools
+/.node_transpile_work_dir
+
+# Misc inherited from Tint
+/test.wgsl
+coverage.summary
+default.profraw
+lcov.info
+/cmake-build-*/
+/testing

@@ -79,8 +79,8 @@ TEST_P(EntryPointTests, TwoComputeInModule) {
 
     wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
         struct Data {
-            data : u32;
-        };
+            data : u32
+        }
         @binding(0) @group(0) var<storage, read_write> data : Data;
 
         @stage(compute) @workgroup_size(1) fn write1() {
@@ -119,7 +119,7 @@ TEST_P(EntryPointTests, TwoComputeInModule) {
         wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
         pass.SetPipeline(write1);
         pass.SetBindGroup(0, group);
-        pass.Dispatch(1);
+        pass.DispatchWorkgroups(1);
         pass.End();
         wgpu::CommandBuffer commands = encoder.Finish();
         queue.Submit(1, &commands);
@@ -133,7 +133,7 @@ TEST_P(EntryPointTests, TwoComputeInModule) {
         wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
         pass.SetPipeline(write42);
         pass.SetBindGroup(0, group);
-        pass.Dispatch(42);
+        pass.DispatchWorkgroups(42);
         pass.End();
         wgpu::CommandBuffer commands = encoder.Finish();
         queue.Submit(1, &commands);

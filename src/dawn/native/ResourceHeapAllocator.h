@@ -12,26 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_RESOURCEHEAPALLOCATOR_H_
-#define DAWNNATIVE_RESOURCEHEAPALLOCATOR_H_
+#ifndef SRC_DAWN_NATIVE_RESOURCEHEAPALLOCATOR_H_
+#define SRC_DAWN_NATIVE_RESOURCEHEAPALLOCATOR_H_
+
+#include <memory>
 
 #include "dawn/native/Error.h"
 #include "dawn/native/ResourceHeap.h"
 
-#include <memory>
-
 namespace dawn::native {
 
-    // Interface for backend allocators that create memory heaps resoruces can be suballocated in.
-    class ResourceHeapAllocator {
-      public:
-        virtual ~ResourceHeapAllocator() = default;
+// Interface for backend allocators that create memory heaps resoruces can be suballocated in.
+class ResourceHeapAllocator {
+  public:
+    virtual ~ResourceHeapAllocator() = default;
 
-        virtual ResultOrError<std::unique_ptr<ResourceHeapBase>> AllocateResourceHeap(
-            uint64_t size) = 0;
-        virtual void DeallocateResourceHeap(std::unique_ptr<ResourceHeapBase> allocation) = 0;
-    };
+    virtual ResultOrError<std::unique_ptr<ResourceHeapBase>> AllocateResourceHeap(
+        uint64_t size) = 0;
+    virtual void DeallocateResourceHeap(std::unique_ptr<ResourceHeapBase> allocation) = 0;
+};
 
 }  // namespace dawn::native
 
-#endif  // DAWNNATIVE_RESOURCEHEAPALLOCATOR_H_
+#endif  // SRC_DAWN_NATIVE_RESOURCEHEAPALLOCATOR_H_

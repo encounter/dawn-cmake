@@ -12,38 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGL_COMMANDBUFFERGL_H_
-#define DAWNNATIVE_OPENGL_COMMANDBUFFERGL_H_
+#ifndef SRC_DAWN_NATIVE_OPENGL_COMMANDBUFFERGL_H_
+#define SRC_DAWN_NATIVE_OPENGL_COMMANDBUFFERGL_H_
 
 #include "dawn/native/CommandBuffer.h"
 
 namespace dawn::native {
-    struct BeginRenderPassCmd;
+struct BeginRenderPassCmd;
 }  // namespace dawn::native
 
 namespace dawn::native::opengl {
 
-    class Device;
-    struct OpenGLFunctions;
+class Device;
+struct OpenGLFunctions;
 
-    class CommandBuffer final : public CommandBufferBase {
-      public:
-        CommandBuffer(CommandEncoder* encoder, const CommandBufferDescriptor* descriptor);
+class CommandBuffer final : public CommandBufferBase {
+  public:
+    CommandBuffer(CommandEncoder* encoder, const CommandBufferDescriptor* descriptor);
 
-        MaybeError Execute();
+    MaybeError Execute();
 
-      private:
-        MaybeError ExecuteComputePass();
-        MaybeError ExecuteRenderPass(BeginRenderPassCmd* renderPass);
-    };
+  private:
+    MaybeError ExecuteComputePass();
+    MaybeError ExecuteRenderPass(BeginRenderPassCmd* renderPass);
+};
 
-    // Like glTexSubImage*, the "data" argument is either a pointer to image data or
-    // an offset if a PBO is bound.
-    void DoTexSubImage(const OpenGLFunctions& gl,
-                       const TextureCopy& destination,
-                       const void* data,
-                       const TextureDataLayout& dataLayout,
-                       const Extent3D& copySize);
+// Like glTexSubImage*, the "data" argument is either a pointer to image data or
+// an offset if a PBO is bound.
+void DoTexSubImage(const OpenGLFunctions& gl,
+                   const TextureCopy& destination,
+                   const void* data,
+                   const TextureDataLayout& dataLayout,
+                   const Extent3D& copySize);
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGL_COMMANDBUFFERGL_H_
+#endif  // SRC_DAWN_NATIVE_OPENGL_COMMANDBUFFERGL_H_

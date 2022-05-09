@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <array>
+
 #include "dawn/tests/DawnTest.h"
 
 #include "dawn/utils/WGPUHelpers.h"
-
-#include <array>
 
 class ComputeSharedMemoryTests : public DawnTest {
   public:
@@ -56,7 +56,7 @@ void ComputeSharedMemoryTests::BasicTest(const char* shader) {
         wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
         pass.SetPipeline(pipeline);
         pass.SetBindGroup(0, bindGroup);
-        pass.Dispatch(1);
+        pass.DispatchWorkgroups(1);
         pass.End();
 
         commands = encoder.Finish();
@@ -75,8 +75,8 @@ TEST_P(ComputeSharedMemoryTests, Basic) {
         let kInstances : u32 = 11u;
 
         struct Dst {
-            x : u32;
-        };
+            x : u32
+        }
 
         @group(0) @binding(0) var<storage, write> dst : Dst;
         var<workgroup> tmp : u32;
@@ -107,15 +107,15 @@ TEST_P(ComputeSharedMemoryTests, AssortedTypes) {
     wgpu::ComputePipelineDescriptor csDesc;
     csDesc.compute.module = utils::CreateShaderModule(device, R"(
         struct StructValues {
-            m: mat2x2<f32>;
-        };
+            m: mat2x2<f32>
+        }
 
         struct Dst {
-            d_struct : StructValues;
-            d_matrix : mat2x2<f32>;
-            d_array : array<u32, 4>;
-            d_vector : vec4<f32>;
-        };
+            d_struct : StructValues,
+            d_matrix : mat2x2<f32>,
+            d_array : array<u32, 4>,
+            d_vector : vec4<f32>,
+        }
 
         @group(0) @binding(0) var<storage, write> dst : Dst;
 
@@ -178,7 +178,7 @@ TEST_P(ComputeSharedMemoryTests, AssortedTypes) {
         wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
         pass.SetPipeline(pipeline);
         pass.SetBindGroup(0, bindGroup);
-        pass.Dispatch(1);
+        pass.DispatchWorkgroups(1);
         pass.End();
 
         commands = encoder.Finish();
@@ -201,4 +201,5 @@ DAWN_INSTANTIATE_TEST(ComputeSharedMemoryTests,
                       MetalBackend(),
                       OpenGLBackend(),
                       OpenGLESBackend(),
-                      VulkanBackend());
+                      VulkanBackend(),
+                      VulkanBackend({}, {"use_vulkan_zero_initialize_workgroup_memory_extension"}));

@@ -12,30 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_STAGINGBUFFER_H_
-#define DAWNNATIVE_STAGINGBUFFER_H_
+#ifndef SRC_DAWN_NATIVE_STAGINGBUFFER_H_
+#define SRC_DAWN_NATIVE_STAGINGBUFFER_H_
 
 #include "dawn/native/Error.h"
 
 namespace dawn::native {
 
-    class StagingBufferBase {
-      public:
-        StagingBufferBase(size_t size);
-        virtual ~StagingBufferBase() = default;
+class StagingBufferBase {
+  public:
+    explicit StagingBufferBase(size_t size);
+    virtual ~StagingBufferBase() = default;
 
-        virtual MaybeError Initialize() = 0;
+    virtual MaybeError Initialize() = 0;
 
-        void* GetMappedPointer() const;
-        size_t GetSize() const;
+    void* GetMappedPointer() const;
+    size_t GetSize() const;
 
-      protected:
-        void* mMappedPointer = nullptr;
+  protected:
+    void* mMappedPointer = nullptr;
 
-      private:
-        const size_t mBufferSize;
-    };
+  private:
+    const size_t mBufferSize;
+};
 
 }  // namespace dawn::native
 
-#endif  // DAWNNATIVE_STAGINGBUFFER_H_
+#endif  // SRC_DAWN_NATIVE_STAGINGBUFFER_H_

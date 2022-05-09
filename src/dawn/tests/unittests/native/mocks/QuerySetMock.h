@@ -12,28 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TESTS_UNITTESTS_NATIVE_MOCKS_QUERYSET_MOCK_H_
-#define TESTS_UNITTESTS_NATIVE_MOCKS_QUERYSET_MOCK_H_
+#ifndef SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_QUERYSETMOCK_H_
+#define SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_QUERYSETMOCK_H_
+
+#include "gmock/gmock.h"
 
 #include "dawn/native/Device.h"
 #include "dawn/native/QuerySet.h"
 
-#include <gmock/gmock.h>
-
 namespace dawn::native {
 
-    class QuerySetMock : public QuerySetBase {
-      public:
-        QuerySetMock(DeviceBase* device) : QuerySetBase(device) {
-            ON_CALL(*this, DestroyImpl).WillByDefault([this]() {
-                this->QuerySetBase::DestroyImpl();
-            });
-        }
-        ~QuerySetMock() override = default;
+class QuerySetMock : public QuerySetBase {
+  public:
+    explicit QuerySetMock(DeviceBase* device) : QuerySetBase(device) {
+        ON_CALL(*this, DestroyImpl).WillByDefault([this]() { this->QuerySetBase::DestroyImpl(); });
+    }
+    ~QuerySetMock() override = default;
 
-        MOCK_METHOD(void, DestroyImpl, (), (override));
-    };
+    MOCK_METHOD(void, DestroyImpl, (), (override));
+};
 
 }  // namespace dawn::native
 
-#endif  // TESTS_UNITTESTS_NATIVE_MOCKS_QUERYSET_MOCK_H_
+#endif  // SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_QUERYSETMOCK_H_

@@ -12,35 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TESTS_UNITTESTS_NATIVE_MOCKS_SWAPCHAIN_MOCK_H_
-#define TESTS_UNITTESTS_NATIVE_MOCKS_SWAPCHAIN_MOCK_H_
+#ifndef SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_SWAPCHAINMOCK_H_
+#define SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_SWAPCHAINMOCK_H_
+
+#include "gmock/gmock.h"
 
 #include "dawn/native/Device.h"
 #include "dawn/native/SwapChain.h"
 
-#include <gmock/gmock.h>
-
 namespace dawn::native {
 
-    class SwapChainMock : public SwapChainBase {
-      public:
-        SwapChainMock(DeviceBase* device) : SwapChainBase(device) {
-            ON_CALL(*this, DestroyImpl).WillByDefault([this]() {
-                this->SwapChainBase::DestroyImpl();
-            });
-        }
-        ~SwapChainMock() override = default;
+class SwapChainMock : public SwapChainBase {
+  public:
+    explicit SwapChainMock(DeviceBase* device) : SwapChainBase(device) {
+        ON_CALL(*this, DestroyImpl).WillByDefault([this]() { this->SwapChainBase::DestroyImpl(); });
+    }
+    ~SwapChainMock() override = default;
 
-        MOCK_METHOD(void, DestroyImpl, (), (override));
+    MOCK_METHOD(void, DestroyImpl, (), (override));
 
-        MOCK_METHOD(void,
-                    APIConfigure,
-                    (wgpu::TextureFormat, wgpu::TextureUsage, uint32_t, uint32_t),
-                    (override));
-        MOCK_METHOD(TextureViewBase*, APIGetCurrentTextureView, (), (override));
-        MOCK_METHOD(void, APIPresent, (), (override));
-    };
+    MOCK_METHOD(void,
+                APIConfigure,
+                (wgpu::TextureFormat, wgpu::TextureUsage, uint32_t, uint32_t),
+                (override));
+    MOCK_METHOD(TextureViewBase*, APIGetCurrentTextureView, (), (override));
+    MOCK_METHOD(void, APIPresent, (), (override));
+};
 
 }  // namespace dawn::native
 
-#endif  // TESTS_UNITTESTS_NATIVE_MOCKS_SWAPCHAIN_MOCK_H_
+#endif  // SRC_DAWN_TESTS_UNITTESTS_NATIVE_MOCKS_SWAPCHAINMOCK_H_

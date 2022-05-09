@@ -12,33 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef UTILS_WIREHELPER_H_
-#define UTILS_WIREHELPER_H_
-
-#include "dawn/webgpu_cpp.h"
+#ifndef SRC_DAWN_UTILS_WIREHELPER_H_
+#define SRC_DAWN_UTILS_WIREHELPER_H_
 
 #include <cstdint>
 #include <memory>
+#include <utility>
+
+#include "dawn/webgpu_cpp.h"
 
 namespace utils {
 
-    class WireHelper {
-      public:
-        virtual ~WireHelper();
+class WireHelper {
+  public:
+    virtual ~WireHelper();
 
-        // Registers the device on the wire, if present.
-        // Returns a pair of the client device and backend device.
-        // The function should take ownership of |backendDevice|.
-        virtual std::pair<wgpu::Device, WGPUDevice> RegisterDevice(WGPUDevice backendDevice) = 0;
+    // Registers the device on the wire, if present.
+    // Returns a pair of the client device and backend device.
+    // The function should take ownership of |backendDevice|.
+    virtual std::pair<wgpu::Device, WGPUDevice> RegisterDevice(WGPUDevice backendDevice) = 0;
 
-        virtual void BeginWireTrace(const char* name) = 0;
+    virtual void BeginWireTrace(const char* name) = 0;
 
-        virtual bool FlushClient() = 0;
-        virtual bool FlushServer() = 0;
-    };
+    virtual bool FlushClient() = 0;
+    virtual bool FlushServer() = 0;
+};
 
-    std::unique_ptr<WireHelper> CreateWireHelper(bool useWire, const char* wireTraceDir = nullptr);
+std::unique_ptr<WireHelper> CreateWireHelper(bool useWire, const char* wireTraceDir = nullptr);
 
 }  // namespace utils
 
-#endif  // UTILS_WIREHELPER_H_
+#endif  // SRC_DAWN_UTILS_WIREHELPER_H_

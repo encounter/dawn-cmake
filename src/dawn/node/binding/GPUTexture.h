@@ -12,38 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWN_NODE_BINDING_GPUTEXTURE_H_
-#define DAWN_NODE_BINDING_GPUTEXTURE_H_
+#ifndef SRC_DAWN_NODE_BINDING_GPUTEXTURE_H_
+#define SRC_DAWN_NODE_BINDING_GPUTEXTURE_H_
+
+#include <string>
 
 #include "dawn/native/DawnNative.h"
 #include "dawn/webgpu_cpp.h"
-#include "napi.h"
+#include "src/dawn/node/interop/Napi.h"
 #include "src/dawn/node/interop/WebGPU.h"
 
 namespace wgpu::binding {
 
-    // GPUTexture is an implementation of interop::GPUTexture that wraps a wgpu::Texture.
-    class GPUTexture final : public interop::GPUTexture {
-      public:
-        GPUTexture(wgpu::Texture texture);
+// GPUTexture is an implementation of interop::GPUTexture that wraps a wgpu::Texture.
+class GPUTexture final : public interop::GPUTexture {
+  public:
+    explicit GPUTexture(wgpu::Texture texture);
 
-        // Implicit cast operator to Dawn GPU object
-        inline operator const wgpu::Texture&() const {
-            return texture_;
-        }
+    // Implicit cast operator to Dawn GPU object
+    inline operator const wgpu::Texture&() const { return texture_; }
 
-        // interop::GPUTexture interface compliance
-        interop::Interface<interop::GPUTextureView> createView(
-            Napi::Env,
-            interop::GPUTextureViewDescriptor descriptor) override;
-        void destroy(Napi::Env) override;
-        std::optional<std::string> getLabel(Napi::Env) override;
-        void setLabel(Napi::Env, std::optional<std::string> value) override;
+    // interop::GPUTexture interface compliance
+    interop::Interface<interop::GPUTextureView> createView(
+        Napi::Env,
+        interop::GPUTextureViewDescriptor descriptor) override;
+    void destroy(Napi::Env) override;
+    std::string getLabel(Napi::Env) override;
+    void setLabel(Napi::Env, std::string value) override;
 
-      private:
-        wgpu::Texture texture_;
-    };
+  private:
+    wgpu::Texture texture_;
+};
 
 }  // namespace wgpu::binding
 
-#endif  // DAWN_NODE_BINDING_GPUTEXTURE_H_
+#endif  // SRC_DAWN_NODE_BINDING_GPUTEXTURE_H_

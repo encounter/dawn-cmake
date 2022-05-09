@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
+#include <vector>
 
 #include "dawn/common/Assert.h"
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
@@ -57,9 +58,9 @@ class DepthStencilStateTest : public DawnTest {
 
         vsModule = utils::CreateShaderModule(device, R"(
             struct UBO {
-                color : vec3<f32>;
-                depth : f32;
-            };
+                color : vec3<f32>,
+                depth : f32,
+            }
             @group(0) @binding(0) var<uniform> ubo : UBO;
 
             @stage(vertex)
@@ -76,9 +77,9 @@ class DepthStencilStateTest : public DawnTest {
 
         fsModule = utils::CreateShaderModule(device, R"(
             struct UBO {
-                color : vec3<f32>;
-                depth : f32;
-            };
+                color : vec3<f32>,
+                depth : f32,
+            }
             @group(0) @binding(0) var<uniform> ubo : UBO;
 
             @stage(fragment) fn main() -> @location(0) vec4<f32> {

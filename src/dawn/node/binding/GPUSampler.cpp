@@ -14,23 +14,24 @@
 
 #include "src/dawn/node/binding/GPUSampler.h"
 
+#include <utility>
+
 #include "src/dawn/node/binding/Converter.h"
 #include "src/dawn/node/utils/Debug.h"
 
 namespace wgpu::binding {
 
-    ////////////////////////////////////////////////////////////////////////////////
-    // wgpu::bindings::GPUSampler
-    ////////////////////////////////////////////////////////////////////////////////
-    GPUSampler::GPUSampler(wgpu::Sampler sampler) : sampler_(std::move(sampler)) {
-    }
+////////////////////////////////////////////////////////////////////////////////
+// wgpu::bindings::GPUSampler
+////////////////////////////////////////////////////////////////////////////////
+GPUSampler::GPUSampler(wgpu::Sampler sampler) : sampler_(std::move(sampler)) {}
 
-    std::optional<std::string> GPUSampler::getLabel(Napi::Env) {
-        UNIMPLEMENTED();
-    }
+std::string GPUSampler::getLabel(Napi::Env) {
+    UNIMPLEMENTED();
+}
 
-    void GPUSampler::setLabel(Napi::Env, std::optional<std::string> value) {
-        UNIMPLEMENTED();
-    }
+void GPUSampler::setLabel(Napi::Env, std::string value) {
+    UNIMPLEMENTED();
+}
 
 }  // namespace wgpu::binding

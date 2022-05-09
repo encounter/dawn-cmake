@@ -12,29 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNWIRE_CLIENT_LIMITSANDFEATURES_H_
-#define DAWNWIRE_CLIENT_LIMITSANDFEATURES_H_
-
-#include <dawn/webgpu.h>
+#ifndef SRC_DAWN_WIRE_CLIENT_LIMITSANDFEATURES_H_
+#define SRC_DAWN_WIRE_CLIENT_LIMITSANDFEATURES_H_
 
 #include <unordered_set>
 
+#include "dawn/webgpu.h"
+
 namespace dawn::wire::client {
 
-    class LimitsAndFeatures {
-      public:
-        bool GetLimits(WGPUSupportedLimits* limits) const;
-        bool HasFeature(WGPUFeatureName feature) const;
-        size_t EnumerateFeatures(WGPUFeatureName* features) const;
+class LimitsAndFeatures {
+  public:
+    bool GetLimits(WGPUSupportedLimits* limits) const;
+    bool HasFeature(WGPUFeatureName feature) const;
+    size_t EnumerateFeatures(WGPUFeatureName* features) const;
 
-        void SetLimits(const WGPUSupportedLimits* limits);
-        void SetFeatures(const WGPUFeatureName* features, uint32_t featuresCount);
+    void SetLimits(const WGPUSupportedLimits* limits);
+    void SetFeatures(const WGPUFeatureName* features, uint32_t featuresCount);
 
-      private:
-        WGPUSupportedLimits mLimits;
-        std::unordered_set<WGPUFeatureName> mFeatures;
-    };
+  private:
+    WGPUSupportedLimits mLimits;
+    std::unordered_set<WGPUFeatureName> mFeatures;
+};
 
 }  // namespace dawn::wire::client
 
-#endif  // DAWNWIRE_CLIENT_LIMITSANDFEATURES_H_
+#endif  // SRC_DAWN_WIRE_CLIENT_LIMITSANDFEATURES_H_

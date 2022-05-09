@@ -12,23 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/unittests/validation/ValidationTest.h"
+#include <algorithm>
+#include <vector>
 
 #include "dawn/common/Assert.h"
 #include "dawn/common/SystemUtils.h"
 #include "dawn/dawn_proc.h"
 #include "dawn/native/NullBackend.h"
 #include "dawn/tests/ToggleParser.h"
+#include "dawn/tests/unittests/validation/ValidationTest.h"
 #include "dawn/utils/WireHelper.h"
 #include "dawn/webgpu.h"
 
-#include <algorithm>
-
 namespace {
 
-    bool gUseWire = false;
-    std::string gWireTraceDir = "";
-    std::unique_ptr<ToggleParser> gToggleParser = nullptr;
+bool gUseWire = false;
+// NOLINTNEXTLINE(runtime/string)
+std::string gWireTraceDir = "";
+std::unique_ptr<ToggleParser> gToggleParser = nullptr;
 
 }  // namespace
 
@@ -79,8 +80,7 @@ void InitDawnValidationTestEnvironment(int argc, char** argv) {
 }
 
 ValidationTest::ValidationTest()
-    : mWireHelper(utils::CreateWireHelper(gUseWire, gWireTraceDir.c_str())) {
-}
+    : mWireHelper(utils::CreateWireHelper(gUseWire, gWireTraceDir.c_str())) {}
 
 void ValidationTest::SetUp() {
     instance = std::make_unique<dawn::native::Instance>();
@@ -252,7 +252,7 @@ void ValidationTest::OnDeviceLost(WGPUDeviceLostReason reason,
     ASSERT(false);
 }
 
-ValidationTest::DummyRenderPass::DummyRenderPass(const wgpu::Device& device)
+ValidationTest::PlaceholderRenderPass::PlaceholderRenderPass(const wgpu::Device& device)
     : attachmentFormat(wgpu::TextureFormat::RGBA8Unorm), width(400), height(400) {
     wgpu::TextureDescriptor descriptor;
     descriptor.dimension = wgpu::TextureDimension::e2D;
@@ -268,7 +268,7 @@ ValidationTest::DummyRenderPass::DummyRenderPass(const wgpu::Device& device)
     wgpu::TextureView view = attachment.CreateView();
     mColorAttachment.view = view;
     mColorAttachment.resolveTarget = nullptr;
-    mColorAttachment.clearColor = {0.0f, 0.0f, 0.0f, 0.0f};
+    mColorAttachment.clearValue = {0.0f, 0.0f, 0.0f, 0.0f};
     mColorAttachment.loadOp = wgpu::LoadOp::Clear;
     mColorAttachment.storeOp = wgpu::StoreOp::Store;
 

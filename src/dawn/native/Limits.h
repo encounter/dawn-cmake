@@ -12,32 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_LIMITS_H_
-#define DAWNNATIVE_LIMITS_H_
+#ifndef SRC_DAWN_NATIVE_LIMITS_H_
+#define SRC_DAWN_NATIVE_LIMITS_H_
 
 #include "dawn/native/Error.h"
 #include "dawn/native/dawn_platform.h"
 
 namespace dawn::native {
 
-    struct CombinedLimits {
-        Limits v1;
-    };
+struct CombinedLimits {
+    Limits v1;
+};
 
-    // Populate |limits| with the default limits.
-    void GetDefaultLimits(Limits* limits);
+// Populate |limits| with the default limits.
+void GetDefaultLimits(Limits* limits);
 
-    // Returns a copy of |limits| where all undefined values are replaced
-    // with their defaults. Also clamps to the defaults if the provided limits
-    // are worse.
-    Limits ReifyDefaultLimits(const Limits& limits);
+// Returns a copy of |limits| where all undefined values are replaced
+// with their defaults. Also clamps to the defaults if the provided limits
+// are worse.
+Limits ReifyDefaultLimits(const Limits& limits);
 
-    // Validate that |requiredLimits| are no better than |supportedLimits|.
-    MaybeError ValidateLimits(const Limits& supportedLimits, const Limits& requiredLimits);
+// Validate that |requiredLimits| are no better than |supportedLimits|.
+MaybeError ValidateLimits(const Limits& supportedLimits, const Limits& requiredLimits);
 
-    // Returns a copy of |limits| where limit tiers are applied.
-    Limits ApplyLimitTiers(Limits limits);
+// Returns a copy of |limits| where limit tiers are applied.
+Limits ApplyLimitTiers(Limits limits);
 
 }  // namespace dawn::native
 
-#endif  // DAWNNATIVE_LIMITS_H_
+#endif  // SRC_DAWN_NATIVE_LIMITS_H_

@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_D3D12_NATIVESWAPCHAINIMPLD3D12_H_
-#define DAWNNATIVE_D3D12_NATIVESWAPCHAINIMPLD3D12_H_
+#ifndef SRC_DAWN_NATIVE_D3D12_NATIVESWAPCHAINIMPLD3D12_H_
+#define SRC_DAWN_NATIVE_D3D12_NATIVESWAPCHAINIMPLD3D12_H_
+
+#include <vector>
 
 #include "dawn/native/d3d12/d3d12_platform.h"
 
@@ -21,40 +23,38 @@
 #include "dawn/native/IntegerTypes.h"
 #include "dawn/native/dawn_platform.h"
 
-#include <vector>
-
 namespace dawn::native::d3d12 {
 
-    class Device;
+class Device;
 
-    class NativeSwapChainImpl {
-      public:
-        using WSIContext = DawnWSIContextD3D12;
+class NativeSwapChainImpl {
+  public:
+    using WSIContext = DawnWSIContextD3D12;
 
-        NativeSwapChainImpl(Device* device, HWND window);
-        ~NativeSwapChainImpl();
+    NativeSwapChainImpl(Device* device, HWND window);
+    ~NativeSwapChainImpl();
 
-        void Init(DawnWSIContextD3D12* context);
-        DawnSwapChainError Configure(WGPUTextureFormat format,
-                                     WGPUTextureUsage,
-                                     uint32_t width,
-                                     uint32_t height);
-        DawnSwapChainError GetNextTexture(DawnSwapChainNextTexture* nextTexture);
-        DawnSwapChainError Present();
+    void Init(DawnWSIContextD3D12* context);
+    DawnSwapChainError Configure(WGPUTextureFormat format,
+                                 WGPUTextureUsage,
+                                 uint32_t width,
+                                 uint32_t height);
+    DawnSwapChainError GetNextTexture(DawnSwapChainNextTexture* nextTexture);
+    DawnSwapChainError Present();
 
-        wgpu::TextureFormat GetPreferredFormat() const;
+    wgpu::TextureFormat GetPreferredFormat() const;
 
-      private:
-        HWND mWindow = nullptr;
-        Device* mDevice = nullptr;
-        UINT mInterval;
+  private:
+    HWND mWindow = nullptr;
+    Device* mDevice = nullptr;
+    UINT mInterval;
 
-        ComPtr<IDXGISwapChain3> mSwapChain = nullptr;
-        std::vector<ComPtr<ID3D12Resource>> mBuffers;
-        std::vector<ExecutionSerial> mBufferSerials;
-        uint32_t mCurrentBuffer;
-    };
+    ComPtr<IDXGISwapChain3> mSwapChain = nullptr;
+    std::vector<ComPtr<ID3D12Resource>> mBuffers;
+    std::vector<ExecutionSerial> mBufferSerials;
+    uint32_t mCurrentBuffer;
+};
 
 }  // namespace dawn::native::d3d12
 
-#endif  // DAWNNATIVE_D3D12_NATIVESWAPCHAINIMPLD3D12_H_
+#endif  // SRC_DAWN_NATIVE_D3D12_NATIVESWAPCHAINIMPLD3D12_H_

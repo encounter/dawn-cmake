@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_RENDERBUNDLEENCODER_H_
-#define DAWNNATIVE_RENDERBUNDLEENCODER_H_
+#ifndef SRC_DAWN_NATIVE_RENDERBUNDLEENCODER_H_
+#define SRC_DAWN_NATIVE_RENDERBUNDLEENCODER_H_
 
 #include "dawn/native/EncodingContext.h"
 #include "dawn/native/Error.h"
@@ -23,34 +23,33 @@
 
 namespace dawn::native {
 
-    MaybeError ValidateRenderBundleEncoderDescriptor(
-        const DeviceBase* device,
-        const RenderBundleEncoderDescriptor* descriptor);
+MaybeError ValidateRenderBundleEncoderDescriptor(const DeviceBase* device,
+                                                 const RenderBundleEncoderDescriptor* descriptor);
 
-    class RenderBundleEncoder final : public RenderEncoderBase {
-      public:
-        static Ref<RenderBundleEncoder> Create(DeviceBase* device,
-                                               const RenderBundleEncoderDescriptor* descriptor);
-        static RenderBundleEncoder* MakeError(DeviceBase* device);
+class RenderBundleEncoder final : public RenderEncoderBase {
+  public:
+    static Ref<RenderBundleEncoder> Create(DeviceBase* device,
+                                           const RenderBundleEncoderDescriptor* descriptor);
+    static RenderBundleEncoder* MakeError(DeviceBase* device);
 
-        ObjectType GetType() const override;
+    ObjectType GetType() const override;
 
-        RenderBundleBase* APIFinish(const RenderBundleDescriptor* descriptor);
+    RenderBundleBase* APIFinish(const RenderBundleDescriptor* descriptor);
 
-        CommandIterator AcquireCommands();
+    CommandIterator AcquireCommands();
 
-      private:
-        RenderBundleEncoder(DeviceBase* device, const RenderBundleEncoderDescriptor* descriptor);
-        RenderBundleEncoder(DeviceBase* device, ErrorTag errorTag);
+  private:
+    RenderBundleEncoder(DeviceBase* device, const RenderBundleEncoderDescriptor* descriptor);
+    RenderBundleEncoder(DeviceBase* device, ErrorTag errorTag);
 
-        void DestroyImpl() override;
+    void DestroyImpl() override;
 
-        ResultOrError<RenderBundleBase*> FinishImpl(const RenderBundleDescriptor* descriptor);
-        MaybeError ValidateFinish(const RenderPassResourceUsage& usages) const;
+    ResultOrError<RenderBundleBase*> FinishImpl(const RenderBundleDescriptor* descriptor);
+    MaybeError ValidateFinish(const RenderPassResourceUsage& usages) const;
 
-        EncodingContext mBundleEncodingContext;
-    };
+    EncodingContext mBundleEncodingContext;
+};
 
 }  // namespace dawn::native
 
-#endif  // DAWNNATIVE_RENDERBUNDLEENCODER_H_
+#endif  // SRC_DAWN_NATIVE_RENDERBUNDLEENCODER_H_

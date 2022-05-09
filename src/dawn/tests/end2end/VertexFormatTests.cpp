@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
+#include <limits>
+#include <string>
+#include <vector>
 
 #include "dawn/common/Assert.h"
 #include "dawn/common/Math.h"
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
@@ -48,10 +51,6 @@ class VertexFormatTest : public DawnTest {
   protected:
     void SetUp() override {
         DawnTest::SetUp();
-
-        // TODO(crbug.com/dawn/259): Failing because of a SPIRV-Cross issue.
-        DAWN_SUPPRESS_TEST_IF(IsMetal() && IsIntel());
-
         renderPass = utils::CreateBasicRenderPass(device, kRTSize, kRTSize);
     }
 
@@ -236,9 +235,9 @@ class VertexFormatTest : public DawnTest {
 
         std::ostringstream vs;
         vs << "struct VertexIn {\n";
-        vs << "    @location(0) test : " << variableType << ";\n";
-        vs << "    @builtin(vertex_index) VertexIndex : u32;\n";
-        vs << "};\n";
+        vs << "    @location(0) test : " << variableType << ",\n";
+        vs << "    @builtin(vertex_index) VertexIndex : u32,\n";
+        vs << "}\n";
 
         // Because x86 CPU using "extended
         // precision"(https://en.wikipedia.org/wiki/Extended_precision) during float
@@ -270,9 +269,9 @@ class VertexFormatTest : public DawnTest {
             }
 
             struct VertexOut {
-                @location(0) color : vec4<f32>;
-                @builtin(position) position : vec4<f32>;
-            };
+                @location(0) color : vec4<f32>,
+                @builtin(position) position : vec4<f32>,
+            }
 
             @stage(vertex)
             fn main(input : VertexIn) -> VertexOut {

@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_D3D12_COMMANDALLOCATORMANAGER_H_
-#define DAWNNATIVE_D3D12_COMMANDALLOCATORMANAGER_H_
+#ifndef SRC_DAWN_NATIVE_D3D12_COMMANDALLOCATORMANAGER_H_
+#define SRC_DAWN_NATIVE_D3D12_COMMANDALLOCATORMANAGER_H_
+
+#include <bitset>
 
 #include "dawn/native/d3d12/d3d12_platform.h"
 
@@ -21,38 +23,36 @@
 #include "dawn/native/Error.h"
 #include "dawn/native/IntegerTypes.h"
 
-#include <bitset>
-
 namespace dawn::native::d3d12 {
 
-    class Device;
+class Device;
 
-    class CommandAllocatorManager {
-      public:
-        CommandAllocatorManager(Device* device);
+class CommandAllocatorManager {
+  public:
+    explicit CommandAllocatorManager(Device* device);
 
-        // A CommandAllocator that is reserved must be used on the next ExecuteCommandLists
-        // otherwise its commands may be reset before execution has completed on the GPU
-        ResultOrError<ID3D12CommandAllocator*> ReserveCommandAllocator();
-        MaybeError Tick(ExecutionSerial lastCompletedSerial);
+    // A CommandAllocator that is reserved must be used on the next ExecuteCommandLists
+    // otherwise its commands may be reset before execution has completed on the GPU
+    ResultOrError<ID3D12CommandAllocator*> ReserveCommandAllocator();
+    MaybeError Tick(ExecutionSerial lastCompletedSerial);
 
-      private:
-        Device* device;
+  private:
+    Device* device;
 
-        // This must be at least 2 because the Device and Queue use separate command allocators
-        static constexpr unsigned int kMaxCommandAllocators = 32;
-        unsigned int mAllocatorCount;
+    // This must be at least 2 because the Device and Queue use separate command allocators
+    static constexpr unsigned int kMaxCommandAllocators = 32;
+    unsigned int mAllocatorCount;
 
-        struct IndexedCommandAllocator {
-            ComPtr<ID3D12CommandAllocator> commandAllocator;
-            unsigned int index;
-        };
-
-        ComPtr<ID3D12CommandAllocator> mCommandAllocators[kMaxCommandAllocators];
-        std::bitset<kMaxCommandAllocators> mFreeAllocators;
-        SerialQueue<ExecutionSerial, IndexedCommandAllocator> mInFlightCommandAllocators;
+    struct IndexedCommandAllocator {
+        ComPtr<ID3D12CommandAllocator> commandAllocator;
+        unsigned int index;
     };
+
+    ComPtr<ID3D12CommandAllocator> mCommandAllocators[kMaxCommandAllocators];
+    std::bitset<kMaxCommandAllocators> mFreeAllocators;
+    SerialQueue<ExecutionSerial, IndexedCommandAllocator> mInFlightCommandAllocators;
+};
 
 }  // namespace dawn::native::d3d12
 
-#endif  // DAWNNATIVE_D3D12_COMMANDALLOCATORMANAGER_H_
+#endif  // SRC_DAWN_NATIVE_D3D12_COMMANDALLOCATORMANAGER_H_

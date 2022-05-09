@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_VULKAN_PIPELINELAYOUTVK_H_
-#define DAWNNATIVE_VULKAN_PIPELINELAYOUTVK_H_
+#ifndef SRC_DAWN_NATIVE_VULKAN_PIPELINELAYOUTVK_H_
+#define SRC_DAWN_NATIVE_VULKAN_PIPELINELAYOUTVK_H_
 
 #include "dawn/native/PipelineLayout.h"
 
@@ -22,29 +22,28 @@
 
 namespace dawn::native::vulkan {
 
-    class Device;
+class Device;
 
-    class PipelineLayout final : public PipelineLayoutBase {
-      public:
-        static ResultOrError<Ref<PipelineLayout>> Create(
-            Device* device,
-            const PipelineLayoutDescriptor* descriptor);
+class PipelineLayout final : public PipelineLayoutBase {
+  public:
+    static ResultOrError<Ref<PipelineLayout>> Create(Device* device,
+                                                     const PipelineLayoutDescriptor* descriptor);
 
-        VkPipelineLayout GetHandle() const;
+    VkPipelineLayout GetHandle() const;
 
-      private:
-        ~PipelineLayout() override;
-        void DestroyImpl() override;
+  private:
+    ~PipelineLayout() override;
+    void DestroyImpl() override;
 
-        using PipelineLayoutBase::PipelineLayoutBase;
-        MaybeError Initialize();
+    using PipelineLayoutBase::PipelineLayoutBase;
+    MaybeError Initialize();
 
-        // Dawn API
-        void SetLabelImpl() override;
+    // Dawn API
+    void SetLabelImpl() override;
 
-        VkPipelineLayout mHandle = VK_NULL_HANDLE;
-    };
+    VkPipelineLayout mHandle = VK_NULL_HANDLE;
+};
 
 }  // namespace dawn::native::vulkan
 
-#endif  // DAWNNATIVE_VULKAN_PIPELINELAYOUTVK_H_
+#endif  // SRC_DAWN_NATIVE_VULKAN_PIPELINELAYOUTVK_H_

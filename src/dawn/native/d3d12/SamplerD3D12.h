@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_D3D12_SAMPLERD3D12_H_
-#define DAWNNATIVE_D3D12_SAMPLERD3D12_H_
+#ifndef SRC_DAWN_NATIVE_D3D12_SAMPLERD3D12_H_
+#define SRC_DAWN_NATIVE_D3D12_SAMPLERD3D12_H_
 
 #include "dawn/native/Sampler.h"
 
@@ -21,20 +21,20 @@
 
 namespace dawn::native::d3d12 {
 
-    class Device;
+class Device;
 
-    class Sampler final : public SamplerBase {
-      public:
-        static Ref<Sampler> Create(Device* device, const SamplerDescriptor* descriptor);
+class Sampler final : public SamplerBase {
+  public:
+    static Ref<Sampler> Create(Device* device, const SamplerDescriptor* descriptor);
 
-        const D3D12_SAMPLER_DESC& GetSamplerDescriptor() const;
+    const D3D12_SAMPLER_DESC& GetSamplerDescriptor() const;
 
-      private:
-        Sampler(Device* device, const SamplerDescriptor* descriptor);
-        ~Sampler() override = default;
-        D3D12_SAMPLER_DESC mSamplerDesc = {};
-    };
+  private:
+    Sampler(Device* device, const SamplerDescriptor* descriptor);
+    ~Sampler() override = default;
+    D3D12_SAMPLER_DESC mSamplerDesc = {};
+};
 
 }  // namespace dawn::native::d3d12
 
-#endif  // DAWNNATIVE_D3D12_SAMPLERD3D12_H_
+#endif  // SRC_DAWN_NATIVE_D3D12_SAMPLERD3D12_H_

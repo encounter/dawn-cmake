@@ -12,26 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_TINTUTILS_H_
-#define DAWNNATIVE_TINTUTILS_H_
+#ifndef SRC_DAWN_NATIVE_TINTUTILS_H_
+#define SRC_DAWN_NATIVE_TINTUTILS_H_
 
 #include "dawn/common/NonCopyable.h"
 
 namespace dawn::native {
 
-    class DeviceBase;
+class DeviceBase;
 
-    // Indicates that for the lifetime of this object tint internal compiler errors should be
-    // reported to the given device.
-    class ScopedTintICEHandler : public NonCopyable {
-      public:
-        ScopedTintICEHandler(DeviceBase* device);
-        ~ScopedTintICEHandler();
+// Indicates that for the lifetime of this object tint internal compiler errors should be
+// reported to the given device.
+class ScopedTintICEHandler : public NonCopyable {
+  public:
+    explicit ScopedTintICEHandler(DeviceBase* device);
+    ~ScopedTintICEHandler();
 
-      private:
-        ScopedTintICEHandler(ScopedTintICEHandler&&) = delete;
-    };
+  private:
+    ScopedTintICEHandler(ScopedTintICEHandler&&) = delete;
+};
 
 }  // namespace dawn::native
 
-#endif  // DAWNNATIVE_TEXTURE_H_
+#endif  // SRC_DAWN_NATIVE_TINTUTILS_H_

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_VULKAN_ADAPTERVK_H_
-#define DAWNNATIVE_VULKAN_ADAPTERVK_H_
+#ifndef SRC_DAWN_NATIVE_VULKAN_ADAPTERVK_H_
+#define SRC_DAWN_NATIVE_VULKAN_ADAPTERVK_H_
 
 #include "dawn/native/Adapter.h"
 
@@ -23,37 +23,36 @@
 
 namespace dawn::native::vulkan {
 
-    class VulkanInstance;
+class VulkanInstance;
 
-    class Adapter : public AdapterBase {
-      public:
-        Adapter(InstanceBase* instance,
-                VulkanInstance* vulkanInstance,
-                VkPhysicalDevice physicalDevice);
-        ~Adapter() override = default;
+class Adapter : public AdapterBase {
+  public:
+    Adapter(InstanceBase* instance,
+            VulkanInstance* vulkanInstance,
+            VkPhysicalDevice physicalDevice);
+    ~Adapter() override = default;
 
-        // AdapterBase Implementation
-        bool SupportsExternalImages() const override;
+    // AdapterBase Implementation
+    bool SupportsExternalImages() const override;
 
-        const VulkanDeviceInfo& GetDeviceInfo() const;
-        VkPhysicalDevice GetPhysicalDevice() const;
-        VulkanInstance* GetVulkanInstance() const;
+    const VulkanDeviceInfo& GetDeviceInfo() const;
+    VkPhysicalDevice GetPhysicalDevice() const;
+    VulkanInstance* GetVulkanInstance() const;
 
-        bool IsDepthStencilFormatSupported(VkFormat format);
+    bool IsDepthStencilFormatSupported(VkFormat format);
 
-      private:
-        MaybeError InitializeImpl() override;
-        MaybeError InitializeSupportedFeaturesImpl() override;
-        MaybeError InitializeSupportedLimitsImpl(CombinedLimits* limits) override;
+  private:
+    MaybeError InitializeImpl() override;
+    MaybeError InitializeSupportedFeaturesImpl() override;
+    MaybeError InitializeSupportedLimitsImpl(CombinedLimits* limits) override;
 
-        ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(
-            const DeviceDescriptor* descriptor) override;
+    ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(const DeviceDescriptor* descriptor) override;
 
-        VkPhysicalDevice mPhysicalDevice;
-        Ref<VulkanInstance> mVulkanInstance;
-        VulkanDeviceInfo mDeviceInfo = {};
-    };
+    VkPhysicalDevice mPhysicalDevice;
+    Ref<VulkanInstance> mVulkanInstance;
+    VulkanDeviceInfo mDeviceInfo = {};
+};
 
 }  // namespace dawn::native::vulkan
 
-#endif  // DAWNNATIVE_VULKAN_ADAPTERVK_H_
+#endif  // SRC_DAWN_NATIVE_VULKAN_ADAPTERVK_H_

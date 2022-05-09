@@ -76,7 +76,7 @@ class TextureSubresourceTest : public DawnTest {
         wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
 
         utils::ComboRenderPassDescriptor renderPassDesc({view});
-        renderPassDesc.cColorAttachments[0].clearColor = {0.0f, 0.0f, 0.0f, 1.0f};
+        renderPassDesc.cColorAttachments[0].clearValue = {0.0f, 0.0f, 0.0f, 1.0f};
         wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPassDesc);
         pass.SetPipeline(rp);
         pass.Draw(3);
@@ -125,7 +125,7 @@ class TextureSubresourceTest : public DawnTest {
         wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
 
         utils::ComboRenderPassDescriptor renderPassDesc({renderView});
-        renderPassDesc.cColorAttachments[0].clearColor = {0.0f, 0.0f, 0.0f, 1.0f};
+        renderPassDesc.cColorAttachments[0].clearValue = {0.0f, 0.0f, 0.0f, 1.0f};
         wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPassDesc);
         pass.SetPipeline(rp);
         pass.SetBindGroup(0, bindGroup);
@@ -138,9 +138,6 @@ class TextureSubresourceTest : public DawnTest {
 
 // Test different mipmap levels
 TEST_P(TextureSubresourceTest, MipmapLevelsTest) {
-    // TODO(crbug.com/dawn/593): This test requires glTextureView, which is unsupported on GLES.
-    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
-
     // Create a texture with 2 mipmap levels and 1 layer
     wgpu::Texture texture =
         CreateTexture(2, 1,
@@ -167,8 +164,6 @@ TEST_P(TextureSubresourceTest, MipmapLevelsTest) {
 
 // Test different array layers
 TEST_P(TextureSubresourceTest, ArrayLayersTest) {
-    // TODO(crbug.com/dawn/593): This test requires glTextureView, which is unsupported on GLES.
-    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
     // Create a texture with 1 mipmap level and 2 layers
     wgpu::Texture texture =
         CreateTexture(1, 2,
@@ -192,14 +187,6 @@ TEST_P(TextureSubresourceTest, ArrayLayersTest) {
     EXPECT_TEXTURE_EQ(&topRight, texture, {kSize - 1, 0, 1}, {1, 1});
     EXPECT_TEXTURE_EQ(&bottomLeft, texture, {0, kSize - 1, 1}, {1, 1});
 }
-
-// TODO (yunchao.he@intel.com):
-// * add tests for storage texture and sampler across miplevel or
-// arraylayer dimensions in the same texture
-//
-// * add tests for copy operation upon texture subresource if needed
-//
-// * add tests for clear operation upon texture subresource if needed
 
 DAWN_INSTANTIATE_TEST(TextureSubresourceTest,
                       D3D12Backend(),

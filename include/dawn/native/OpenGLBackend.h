@@ -12,44 +12,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGLBACKEND_H_
-#define DAWNNATIVE_OPENGLBACKEND_H_
+#ifndef INCLUDE_DAWN_NATIVE_OPENGLBACKEND_H_
+#define INCLUDE_DAWN_NATIVE_OPENGLBACKEND_H_
 
 typedef void* EGLImage;
 
-#include <dawn/dawn_wsi.h>
-#include <dawn/native/DawnNative.h>
+#include "dawn/dawn_wsi.h"
+#include "dawn/native/DawnNative.h"
 
 namespace dawn::native::opengl {
 
-    struct DAWN_NATIVE_EXPORT AdapterDiscoveryOptions : public AdapterDiscoveryOptionsBase {
-        AdapterDiscoveryOptions();
+struct DAWN_NATIVE_EXPORT AdapterDiscoveryOptions : public AdapterDiscoveryOptionsBase {
+    AdapterDiscoveryOptions();
 
-        void* (*getProc)(const char*);
-    };
+    void* (*getProc)(const char*);
+};
 
-    struct DAWN_NATIVE_EXPORT AdapterDiscoveryOptionsES : public AdapterDiscoveryOptionsBase {
-        AdapterDiscoveryOptionsES();
+struct DAWN_NATIVE_EXPORT AdapterDiscoveryOptionsES : public AdapterDiscoveryOptionsBase {
+    AdapterDiscoveryOptionsES();
 
-        void* (*getProc)(const char*);
-    };
+    void* (*getProc)(const char*);
+};
 
-    using PresentCallback = void (*)(void*);
-    DAWN_NATIVE_EXPORT DawnSwapChainImplementation
-    CreateNativeSwapChainImpl(WGPUDevice device, PresentCallback present, void* presentUserdata);
-    DAWN_NATIVE_EXPORT WGPUTextureFormat
-    GetNativeSwapChainPreferredFormat(const DawnSwapChainImplementation* swapChain);
+using PresentCallback = void (*)(void*);
+DAWN_NATIVE_EXPORT DawnSwapChainImplementation CreateNativeSwapChainImpl(WGPUDevice device,
+                                                                         PresentCallback present,
+                                                                         void* presentUserdata);
+DAWN_NATIVE_EXPORT WGPUTextureFormat
+GetNativeSwapChainPreferredFormat(const DawnSwapChainImplementation* swapChain);
 
-    struct DAWN_NATIVE_EXPORT ExternalImageDescriptorEGLImage : ExternalImageDescriptor {
-      public:
-        ExternalImageDescriptorEGLImage();
+struct DAWN_NATIVE_EXPORT ExternalImageDescriptorEGLImage : ExternalImageDescriptor {
+  public:
+    ExternalImageDescriptorEGLImage();
 
-        ::EGLImage image;
-    };
+    ::EGLImage image;
+};
 
-    DAWN_NATIVE_EXPORT WGPUTexture
-    WrapExternalEGLImage(WGPUDevice device, const ExternalImageDescriptorEGLImage* descriptor);
+DAWN_NATIVE_EXPORT WGPUTexture
+WrapExternalEGLImage(WGPUDevice device, const ExternalImageDescriptorEGLImage* descriptor);
 
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGLBACKEND_H_
+#endif  // INCLUDE_DAWN_NATIVE_OPENGLBACKEND_H_

@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
-
+#include <limits>
 #include <sstream>
+#include <string>
 #include <vector>
 
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
@@ -34,11 +35,15 @@ enum class CheckIndex : uint32_t {
     Instance = 0x0000002,
 };
 
+bool IsIndirectDraw(DrawMode mode) {
+    return mode == DrawMode::NonIndexedIndirect || mode == DrawMode::IndexedIndirect;
+}
+
 namespace dawn {
-    template <>
-    struct IsDawnBitmask<CheckIndex> {
-        static constexpr bool enable = true;
-    };
+template <>
+struct IsDawnBitmask<CheckIndex> {
+    static constexpr bool enable = true;
+};
 }  // namespace dawn
 
 class FirstIndexOffsetTests : public DawnTest {
@@ -50,6 +55,10 @@ class FirstIndexOffsetTests : public DawnTest {
   protected:
     void SetUp() override {
         DawnTest::SetUp();
+        // TODO(crbug.com/dawn/1292): Some Intel OpenGL drivers don't seem to like
+        // the offsets that Tint/GLSL produces.
+        DAWN_SUPPRESS_TEST_IF(IsIntel() && IsOpenGL() && IsLinux());
+
         // TODO(tint:451): Remove once "flat" is supported under OpenGL(ES).
         DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
     }
@@ -92,33 +101,33 @@ void FirstIndexOffsetTests::TestImpl(DrawMode mode,
     std::stringstream fragmentInputs;
     std::stringstream fragmentBody;
 
-    vertexInputs << "  @location(0) position : vec4<f32>;\n";
-    vertexOutputs << "  @builtin(position) position : vec4<f32>;\n";
+    vertexInputs << "  @location(0) position : vec4<f32>,\n";
+    vertexOutputs << "  @builtin(position) position : vec4<f32>,\n";
 
     if ((checkIndex & CheckIndex::Vertex) != 0) {
-        vertexInputs << "  @builtin(vertex_index) vertex_index : u32;\n";
-        vertexOutputs << "  @location(1) @interpolate(flat) vertex_index : u32;\n";
+        vertexInputs << "  @builtin(vertex_index) vertex_index : u32,\n";
+        vertexOutputs << "  @location(1) @interpolate(flat) vertex_index : u32,\n";
         vertexBody << "  output.vertex_index = input.vertex_index;\n";
 
-        fragmentInputs << "  @location(1) @interpolate(flat) vertex_index : u32;\n";
+        fragmentInputs << "  @location(1) @interpolate(flat) vertex_index : u32,\n";
         fragmentBody << "  _ = atomicMin(&idx_vals.vertex_index, input.vertex_index);\n";
     }
     if ((checkIndex & CheckIndex::Instance) != 0) {
-        vertexInputs << "  @builtin(instance_index) instance_index : u32;\n";
-        vertexOutputs << "  @location(2) @interpolate(flat) instance_index : u32;\n";
+        vertexInputs << "  @builtin(instance_index) instance_index : u32,\n";
+        vertexOutputs << "  @location(2) @interpolate(flat) instance_index : u32,\n";
         vertexBody << "  output.instance_index = input.instance_index;\n";
 
-        fragmentInputs << "  @location(2) @interpolate(flat) instance_index : u32;\n";
+        fragmentInputs << "  @location(2) @interpolate(flat) instance_index : u32,\n";
         fragmentBody << "  _ = atomicMin(&idx_vals.instance_index, input.instance_index);\n";
     }
 
     std::string vertexShader = R"(
 struct VertexInputs {
 )" + vertexInputs.str() + R"(
-};
+}
 struct VertexOutputs {
 )" + vertexOutputs.str() + R"(
-};
+}
 @stage(vertex) fn main(input : VertexInputs) -> VertexOutputs {
   var output : VertexOutputs;
 )" + vertexBody.str() + R"(
@@ -128,14 +137,14 @@ struct VertexOutputs {
 
     std::string fragmentShader = R"(
 struct IndexVals {
-  vertex_index : atomic<u32>;
-  instance_index : atomic<u32>;
-};
+  vertex_index : atomic<u32>,
+  instance_index : atomic<u32>,
+}
 @group(0) @binding(0) var<storage, read_write> idx_vals : IndexVals;
 
 struct FragInputs {
 )" + fragmentInputs.str() + R"(
-};
+}
 @stage(fragment) fn main(input : FragInputs) {
 )" + fragmentBody.str() + R"(
 })";
@@ -179,14 +188,10 @@ struct FragInputs {
         case DrawMode::Indexed:
             break;
         case DrawMode::NonIndexedIndirect:
-            // With DrawIndirect firstInstance is reserved and must be 0 according to spec.
-            ASSERT_EQ(firstInstance, 0u);
             indirectBuffer = utils::CreateBufferFromData<uint32_t>(
                 device, wgpu::BufferUsage::Indirect, {1, 1, firstVertex, firstInstance});
             break;
         case DrawMode::IndexedIndirect:
-            // With DrawIndexedIndirect firstInstance is reserved and must be 0 according to spec.
-            ASSERT_EQ(firstInstance, 0u);
             indirectBuffer = utils::CreateBufferFromData<uint32_t>(
                 device, wgpu::BufferUsage::Indirect, {1, 1, 0, firstVertex, firstInstance});
             break;
@@ -204,7 +209,8 @@ struct FragInputs {
     pass.SetBindGroup(0, bindGroup);
     // Do a first draw to make sure the offset values are correctly updated on the next draw.
     // We should only see the values from the second draw.
-    pass.Draw(1, 1, firstVertex + 1, firstInstance + 1);
+    std::array<uint32_t, 2> firstDrawValues = {firstVertex + 1, firstInstance + 1};
+    pass.Draw(1, 1, firstDrawValues[0], firstDrawValues[1]);
     switch (mode) {
         case DrawMode::NonIndexed:
             pass.Draw(1, 1, firstVertex, firstInstance);
@@ -228,11 +234,16 @@ struct FragInputs {
     queue.Submit(1, &commands);
 
     std::array<uint32_t, 2> expected = {firstVertex, firstInstance};
-    // TODO(dawn:548): remove this once builtins are emulated for indirect draws.
-    // Until then the expected values should always be {0, 0}.
-    if (IsD3D12() && (mode == DrawMode::NonIndexedIndirect || mode == DrawMode::IndexedIndirect)) {
-        expected = {0, 0};
+
+    // Per the specification, if validation is enabled and indirect-first-instance is not enabled,
+    // Draw[Indexed]Indirect with firstInstance > 0 will be a no-op. The buffer should still have
+    // the values from the first draw.
+    if (firstInstance > 0 && IsIndirectDraw(mode) &&
+        !device.HasFeature(wgpu::FeatureName::IndirectFirstInstance) &&
+        !HasToggleEnabled("skip_validation")) {
+        expected = {checkIndex & CheckIndex::Vertex ? firstDrawValues[0] : 0, firstDrawValues[1]};
     }
+
     EXPECT_BUFFER_U32_RANGE_EQ(expected.data(), buffer, 0, expected.size());
 }
 
@@ -267,16 +278,36 @@ TEST_P(FirstIndexOffsetTests, IndexedBothOffset) {
     TestBothIndices(DrawMode::Indexed, 7, 11);
 }
 
-// There are no instance_index tests because the spec forces it to be 0.
-
 // Test that vertex_index starts at 7 when drawn using DrawIndirect()
 TEST_P(FirstIndexOffsetTests, NonIndexedIndirectVertexOffset) {
     TestVertexIndex(DrawMode::NonIndexedIndirect, 7);
 }
 
+// Test that instance_index starts at 11 when drawn using DrawIndirect()
+TEST_P(FirstIndexOffsetTests, NonIndexedIndirectInstanceOffset) {
+    TestInstanceIndex(DrawMode::NonIndexedIndirect, 11);
+}
+
+// Test that vertex_index and instance_index start at 7 and 11 respectively when drawn using
+// DrawIndirect()
+TEST_P(FirstIndexOffsetTests, NonIndexedIndirectBothOffset) {
+    TestBothIndices(DrawMode::NonIndexedIndirect, 7, 11);
+}
+
 // Test that vertex_index starts at 7 when drawn using DrawIndexedIndirect()
 TEST_P(FirstIndexOffsetTests, IndexedIndirectVertex) {
     TestVertexIndex(DrawMode::IndexedIndirect, 7);
+}
+
+// Test that instance_index starts at 11 when drawn using DrawIndexed()
+TEST_P(FirstIndexOffsetTests, IndexedIndirectInstance) {
+    TestInstanceIndex(DrawMode::IndexedIndirect, 11);
+}
+
+// Test that vertex_index and instance_index start at 7 and 11 respectively when drawn using
+// DrawIndexed()
+TEST_P(FirstIndexOffsetTests, IndexedIndirectBothOffset) {
+    TestBothIndices(DrawMode::IndexedIndirect, 7, 11);
 }
 
 DAWN_INSTANTIATE_TEST(FirstIndexOffsetTests,

@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
-
-#include "dawn/utils/WGPUHelpers.h"
-
 #include <initializer_list>
+#include <vector>
+
+#include "dawn/tests/DawnTest.h"
+#include "dawn/utils/WGPUHelpers.h"
 
 constexpr static std::initializer_list<uint32_t> kSentinelData{0, 0, 0};
 
@@ -29,8 +29,8 @@ class ComputeDispatchTests : public DawnTest {
         // To make sure the dispatch was not called, write maximum u32 value for 0 dispatches
         wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
             struct OutputBuf {
-                workGroups : vec3<u32>;
-            };
+                workGroups : vec3<u32>
+            }
 
             @group(0) @binding(0) var<storage, read_write> output : OutputBuf;
 
@@ -55,11 +55,11 @@ class ComputeDispatchTests : public DawnTest {
         // Test the use of the compute pipelines without using @num_workgroups
         wgpu::ShaderModule moduleWithoutNumWorkgroups = utils::CreateShaderModule(device, R"(
             struct InputBuf {
-                expectedDispatch : vec3<u32>;
-            };
+                expectedDispatch : vec3<u32>
+            }
             struct OutputBuf {
-                workGroups : vec3<u32>;
-            };
+                workGroups : vec3<u32>
+            }
 
             @group(0) @binding(0) var<uniform> input : InputBuf;
             @group(0) @binding(1) var<storage, read_write> output : OutputBuf;
@@ -100,7 +100,7 @@ class ComputeDispatchTests : public DawnTest {
             wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
             pass.SetPipeline(pipeline);
             pass.SetBindGroup(0, bindGroup);
-            pass.Dispatch(x, y, z);
+            pass.DispatchWorkgroups(x, y, z);
             pass.End();
 
             commands = encoder.Finish();
@@ -159,7 +159,7 @@ class ComputeDispatchTests : public DawnTest {
             wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
             pass.SetPipeline(computePipelineForTest);
             pass.SetBindGroup(0, bindGroup);
-            pass.DispatchIndirect(indirectBuffer, indirectOffset);
+            pass.DispatchWorkgroupsIndirect(indirectBuffer, indirectOffset);
             pass.End();
 
             commands = encoder.Finish();

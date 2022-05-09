@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(dawn_platform ${DAWN_DUMMY_FILE})
+add_library(dawn_platform ${DAWN_PLACEHOLDER_FILE})
+common_compile_options(dawn_platform)
 
 target_compile_definitions(dawn_platform PRIVATE "DAWN_PLATFORM_IMPLEMENTATION")
 if(BUILD_SHARED_LIBS)

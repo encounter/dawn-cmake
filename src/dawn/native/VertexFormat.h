@@ -12,29 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_VERTEXFORMAT_H_
-#define DAWNNATIVE_VERTEXFORMAT_H_
+#ifndef SRC_DAWN_NATIVE_VERTEXFORMAT_H_
+#define SRC_DAWN_NATIVE_VERTEXFORMAT_H_
 
 #include "dawn/native/dawn_platform.h"
 
 namespace dawn::native {
 
-    enum class VertexFormatBaseType {
-        Float,
-        Uint,
-        Sint,
-    };
+enum class VertexFormatBaseType {
+    Float,
+    Uint,
+    Sint,
+};
 
-    struct VertexFormatInfo {
-        wgpu::VertexFormat format;
-        uint32_t byteSize;
-        uint32_t componentCount;
-        uint32_t componentByteSize;
-        VertexFormatBaseType baseType;
-    };
+struct VertexFormatInfo {
+    wgpu::VertexFormat format;
+    uint32_t byteSize;
+    uint32_t componentCount;
+    uint32_t componentByteSize;
+    VertexFormatBaseType baseType;
+};
 
-    const VertexFormatInfo& GetVertexFormatInfo(wgpu::VertexFormat format);
+const VertexFormatInfo& GetVertexFormatInfo(wgpu::VertexFormat format);
 
 }  // namespace dawn::native
 
-#endif  // DAWNNATIVE_VERTEXFORMAT_H_
+#endif  // SRC_DAWN_NATIVE_VERTEXFORMAT_H_

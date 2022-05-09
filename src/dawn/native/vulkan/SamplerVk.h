@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_VULKAN_SAMPLERVK_H_
-#define DAWNNATIVE_VULKAN_SAMPLERVK_H_
+#ifndef SRC_DAWN_NATIVE_VULKAN_SAMPLERVK_H_
+#define SRC_DAWN_NATIVE_VULKAN_SAMPLERVK_H_
 
 #include "dawn/native/Sampler.h"
 
@@ -22,27 +22,26 @@
 
 namespace dawn::native::vulkan {
 
-    class Device;
+class Device;
 
-    class Sampler final : public SamplerBase {
-      public:
-        static ResultOrError<Ref<Sampler>> Create(Device* device,
-                                                  const SamplerDescriptor* descriptor);
+class Sampler final : public SamplerBase {
+  public:
+    static ResultOrError<Ref<Sampler>> Create(Device* device, const SamplerDescriptor* descriptor);
 
-        VkSampler GetHandle() const;
+    VkSampler GetHandle() const;
 
-      private:
-        ~Sampler() override;
-        void DestroyImpl() override;
-        using SamplerBase::SamplerBase;
-        MaybeError Initialize(const SamplerDescriptor* descriptor);
+  private:
+    ~Sampler() override;
+    void DestroyImpl() override;
+    using SamplerBase::SamplerBase;
+    MaybeError Initialize(const SamplerDescriptor* descriptor);
 
-        // Dawn API
-        void SetLabelImpl() override;
+    // Dawn API
+    void SetLabelImpl() override;
 
-        VkSampler mHandle = VK_NULL_HANDLE;
-    };
+    VkSampler mHandle = VK_NULL_HANDLE;
+};
 
 }  // namespace dawn::native::vulkan
 
-#endif  // DAWNNATIVE_VULKAN_SAMPLERVK_H_
+#endif  // SRC_DAWN_NATIVE_VULKAN_SAMPLERVK_H_

@@ -14,22 +14,23 @@
 
 #include "src/dawn/node/binding/GPUTextureView.h"
 
+#include <utility>
+
 #include "src/dawn/node/utils/Debug.h"
 
 namespace wgpu::binding {
 
-    ////////////////////////////////////////////////////////////////////////////////
-    // wgpu::bindings::GPUTextureView
-    ////////////////////////////////////////////////////////////////////////////////
-    GPUTextureView::GPUTextureView(wgpu::TextureView view) : view_(std::move(view)) {
-    }
+////////////////////////////////////////////////////////////////////////////////
+// wgpu::bindings::GPUTextureView
+////////////////////////////////////////////////////////////////////////////////
+GPUTextureView::GPUTextureView(wgpu::TextureView view) : view_(std::move(view)) {}
 
-    std::optional<std::string> GPUTextureView::getLabel(Napi::Env) {
-        UNIMPLEMENTED();
-    }
+std::string GPUTextureView::getLabel(Napi::Env) {
+    UNIMPLEMENTED();
+}
 
-    void GPUTextureView::setLabel(Napi::Env, std::optional<std::string> value) {
-        UNIMPLEMENTED();
-    };
+void GPUTextureView::setLabel(Napi::Env, std::string value) {
+    UNIMPLEMENTED();
+}
 
 }  // namespace wgpu::binding

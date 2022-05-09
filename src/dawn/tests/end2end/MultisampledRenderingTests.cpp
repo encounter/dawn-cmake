@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/DawnTest.h"
+#include <algorithm>
 
 #include "dawn/common/Assert.h"
+#include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
@@ -46,15 +47,15 @@ class MultisampledRenderingTest : public DawnTest {
         bool flipTriangle = false) {
         const char* kFsOneOutputWithDepth = R"(
             struct U {
-                color : vec4<f32>;
-                depth : f32;
-            };
+                color : vec4<f32>,
+                depth : f32,
+            }
             @group(0) @binding(0) var<uniform> uBuffer : U;
 
             struct FragmentOut {
-                @location(0) color : vec4<f32>;
-                @builtin(frag_depth) depth : f32;
-            };
+                @location(0) color : vec4<f32>,
+                @builtin(frag_depth) depth : f32,
+            }
 
             @stage(fragment) fn main() -> FragmentOut {
                 var output : FragmentOut;
@@ -65,8 +66,8 @@ class MultisampledRenderingTest : public DawnTest {
 
         const char* kFsOneOutputWithoutDepth = R"(
             struct U {
-                color : vec4<f32>;
-            };
+                color : vec4<f32>
+            }
             @group(0) @binding(0) var<uniform> uBuffer : U;
 
             @stage(fragment) fn main() -> @location(0) vec4<f32> {
@@ -84,15 +85,15 @@ class MultisampledRenderingTest : public DawnTest {
         bool alphaToCoverageEnabled = false) {
         const char* kFsTwoOutputs = R"(
             struct U {
-                color0 : vec4<f32>;
-                color1 : vec4<f32>;
-            };
+                color0 : vec4<f32>,
+                color1 : vec4<f32>,
+            }
             @group(0) @binding(0) var<uniform> uBuffer : U;
 
             struct FragmentOut {
-                @location(0) color0 : vec4<f32>;
-                @location(1) color1 : vec4<f32>;
-            };
+                @location(0) color0 : vec4<f32>,
+                @location(1) color1 : vec4<f32>,
+            }
 
             @stage(fragment) fn main() -> FragmentOut {
                 var output : FragmentOut;
@@ -163,12 +164,12 @@ class MultisampledRenderingTest : public DawnTest {
         uint32_t i = 0;
         for (const wgpu::TextureView& resolveTargetView : resolveTargetViews) {
             renderPass.cColorAttachments[i].loadOp = colorLoadOp;
-            renderPass.cColorAttachments[i].clearColor = kClearColor;
+            renderPass.cColorAttachments[i].clearValue = kClearColor;
             renderPass.cColorAttachments[i].resolveTarget = resolveTargetView;
             ++i;
         }
 
-        renderPass.cDepthStencilAttachmentInfo.clearDepth = kClearDepth;
+        renderPass.cDepthStencilAttachmentInfo.depthClearValue = kClearDepth;
         renderPass.cDepthStencilAttachmentInfo.depthLoadOp = depthStencilLoadOp;
 
         if (hasDepthStencilAttachment) {
@@ -311,33 +312,6 @@ TEST_P(MultisampledRenderingTest, ResolveInto2DTexture) {
 
         VerifyResolveTarget(kGreen, mResolveTexture);
     }
-}
-
-// Test that a single-layer multisampled texture view can be created and resolved from.
-TEST_P(MultisampledRenderingTest, ResolveFromSingleLayerArrayInto2DTexture) {
-    constexpr bool kTestDepth = false;
-    wgpu::CommandEncoder commandEncoder = device.CreateCommandEncoder();
-    wgpu::RenderPipeline pipeline = CreateRenderPipelineWithOneOutputForTest(kTestDepth);
-
-    constexpr wgpu::Color kGreen = {0.0f, 0.8f, 0.0f, 0.8f};
-
-    // Draw a green triangle.
-    {
-        wgpu::TextureViewDescriptor desc = {};
-        desc.dimension = wgpu::TextureViewDimension::e2DArray;
-        desc.arrayLayerCount = 1;
-
-        utils::ComboRenderPassDescriptor renderPass = CreateComboRenderPassDescriptorForTest(
-            {mMultisampledColorTexture.CreateView(&desc)}, {mResolveView}, wgpu::LoadOp::Clear,
-            wgpu::LoadOp::Clear, kTestDepth);
-
-        EncodeRenderPassForTest(commandEncoder, renderPass, pipeline, kGreen);
-    }
-
-    wgpu::CommandBuffer commandBuffer = commandEncoder.Finish();
-    queue.Submit(1, &commandBuffer);
-
-    VerifyResolveTarget(kGreen, mResolveTexture);
 }
 
 // Test multisampled rendering with depth test works correctly.
@@ -754,17 +728,9 @@ TEST_P(MultisampledRenderingTest, MultisampledRenderingWithDepthTestAndSampleMas
 // Test using one multisampled color attachment with resolve target can render correctly
 // with non-default sample mask and shader-output mask.
 TEST_P(MultisampledRenderingTest, ResolveInto2DTextureWithSampleMaskAndShaderOutputMask) {
-    // TODO(github.com/KhronosGroup/SPIRV-Cross/issues/1626): SPIRV-Cross produces bad GLSL for
-    // unsigned SampleMask builtins
-    DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
-
     // TODO(crbug.com/dawn/673): Work around or enforce via validation that sample variables are not
     // supported on some platforms.
     DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("disable_sample_variables"));
-
-    // TODO(crbug.com/dawn/571): Fails on Metal / D3D12 because SPIRV-Cross produces bad shaders
-    // for the SPIR-V outputted by Tint. Reenable once we use Tint's MSL / HLSL generators.
-    DAWN_SUPPRESS_TEST_IF(IsD3D12() || IsMetal());
 
     constexpr bool kTestDepth = false;
     wgpu::CommandEncoder commandEncoder = device.CreateCommandEncoder();
@@ -778,14 +744,14 @@ TEST_P(MultisampledRenderingTest, ResolveInto2DTextureWithSampleMaskAndShaderOut
     constexpr uint32_t kSampleMask = kFirstSampleMaskBit | kThirdSampleMaskBit;
     const char* fs = R"(
         struct U {
-            color : vec4<f32>;
-        };
+            color : vec4<f32>
+        }
         @group(0) @binding(0) var<uniform> uBuffer : U;
 
         struct FragmentOut {
-            @location(0) color : vec4<f32>;
-            @builtin(sample_mask) sampleMask : u32;
-        };
+            @location(0) color : vec4<f32>,
+            @builtin(sample_mask) sampleMask : u32,
+        }
 
         @stage(fragment) fn main() -> FragmentOut {
             var output : FragmentOut;
@@ -816,17 +782,9 @@ TEST_P(MultisampledRenderingTest, ResolveInto2DTextureWithSampleMaskAndShaderOut
 // Test doing MSAA resolve into multiple resolve targets works correctly with a non-default
 // shader-output mask.
 TEST_P(MultisampledRenderingTest, ResolveIntoMultipleResolveTargetsWithShaderOutputMask) {
-    // TODO(github.com/KhronosGroup/SPIRV-Cross/issues/1626): SPIRV-Cross produces bad GLSL for
-    // unsigned SampleMask builtins
-    DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
-
     // TODO(crbug.com/dawn/673): Work around or enforce via validation that sample variables are not
     // supported on some platforms.
     DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("disable_sample_variables"));
-
-    // TODO(crbug.com/dawn/571): Fails on Metal / D3D12 because SPIRV-Cross produces bad shaders
-    // for the SPIR-V outputted by Tint. Reenable once we use Tint's MSL / HLSL generators.
-    DAWN_SUPPRESS_TEST_IF(IsD3D12() || IsMetal());
 
     wgpu::TextureView multisampledColorView2 =
         CreateTextureForRenderAttachment(kColorFormat, kSampleCount).CreateView();
@@ -839,16 +797,16 @@ TEST_P(MultisampledRenderingTest, ResolveIntoMultipleResolveTargetsWithShaderOut
     constexpr float kMSAACoverage = 0.25f;
     const char* fs = R"(
         struct U {
-            color0 : vec4<f32>;
-            color1 : vec4<f32>;
-        };
+            color0 : vec4<f32>,
+            color1 : vec4<f32>,
+        }
         @group(0) @binding(0) var<uniform> uBuffer : U;
 
         struct FragmentOut {
-            @location(0) color0 : vec4<f32>;
-            @location(1) color1 : vec4<f32>;
-            @builtin(sample_mask) sampleMask : u32;
-        };
+            @location(0) color0 : vec4<f32>,
+            @location(1) color1 : vec4<f32>,
+            @builtin(sample_mask) sampleMask : u32,
+        }
 
         @stage(fragment) fn main() -> FragmentOut {
             var output : FragmentOut;

@@ -16,34 +16,14 @@
 
 namespace dawn::native {
 
-    absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
-        SingleShaderStage value,
-        const absl::FormatConversionSpec& spec,
-        absl::FormatSink* s) {
-        switch (value) {
-            case SingleShaderStage::Compute:
-                s->Append("Compute");
-                break;
-            case SingleShaderStage::Vertex:
-                s->Append("Vertex");
-                break;
-            case SingleShaderStage::Fragment:
-                s->Append("Fragment");
-                break;
-            default:
-                UNREACHABLE();
-        }
-        return {true};
-    }
+BitSetIterator<kNumStages, SingleShaderStage> IterateStages(wgpu::ShaderStage stages) {
+    std::bitset<kNumStages> bits(static_cast<uint32_t>(stages));
+    return BitSetIterator<kNumStages, SingleShaderStage>(bits);
+}
 
-    BitSetIterator<kNumStages, SingleShaderStage> IterateStages(wgpu::ShaderStage stages) {
-        std::bitset<kNumStages> bits(static_cast<uint32_t>(stages));
-        return BitSetIterator<kNumStages, SingleShaderStage>(bits);
-    }
-
-    wgpu::ShaderStage StageBit(SingleShaderStage stage) {
-        ASSERT(static_cast<uint32_t>(stage) < kNumStages);
-        return static_cast<wgpu::ShaderStage>(1 << static_cast<uint32_t>(stage));
-    }
+wgpu::ShaderStage StageBit(SingleShaderStage stage) {
+    ASSERT(static_cast<uint32_t>(stage) < kNumStages);
+    return static_cast<wgpu::ShaderStage>(1 << static_cast<uint32_t>(stage));
+}
 
 }  // namespace dawn::native

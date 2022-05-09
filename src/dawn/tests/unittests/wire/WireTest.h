@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/mock_webgpu.h"
-#include "gtest/gtest.h"
+#ifndef SRC_DAWN_TESTS_UNITTESTS_WIRE_WIRETEST_H_
+#define SRC_DAWN_TESTS_UNITTESTS_WIRE_WIRETEST_H_
 
 #include <memory>
+
+#include "dawn/mock_webgpu.h"
+#include "gtest/gtest.h"
 
 // Definition of a "Lambda predicate matcher" for GMock to allow checking deep structures
 // are passed correctly by the wire.
@@ -37,12 +40,9 @@ using MatcherLambdaArgument = typename MatcherMethodArgument<decltype(&Lambda::o
 template <typename Lambda, typename Arg>
 class LambdaMatcherImpl : public testing::MatcherInterface<Arg> {
   public:
-    explicit LambdaMatcherImpl(Lambda lambda) : mLambda(lambda) {
-    }
+    explicit LambdaMatcherImpl(Lambda lambda) : mLambda(lambda) {}
 
-    void DescribeTo(std::ostream* os) const override {
-        *os << "with a custom matcher";
-    }
+    void DescribeTo(std::ostream* os) const override { *os << "with a custom matcher"; }
 
     bool MatchAndExplain(Arg value, testing::MatchResultListener* listener) const override {
         if (!mLambda(value)) {
@@ -68,8 +68,7 @@ inline testing::Matcher<MatcherLambdaArgument<Lambda>> MatchesLambda(Lambda lamb
 
 class StringMessageMatcher : public testing::MatcherInterface<const char*> {
   public:
-    explicit StringMessageMatcher() {
-    }
+    StringMessageMatcher() {}
 
     bool MatchAndExplain(const char* message,
                          testing::MatchResultListener* listener) const override {
@@ -84,13 +83,9 @@ class StringMessageMatcher : public testing::MatcherInterface<const char*> {
         return true;
     }
 
-    void DescribeTo(std::ostream* os) const override {
-        *os << "valid error message";
-    }
+    void DescribeTo(std::ostream* os) const override { *os << "valid error message"; }
 
-    void DescribeNegationTo(std::ostream* os) const override {
-        *os << "invalid error message";
-    }
+    void DescribeNegationTo(std::ostream* os) const override { *os << "invalid error message"; }
 };
 
 inline testing::Matcher<const char*> ValidStringMessage() {
@@ -98,18 +93,18 @@ inline testing::Matcher<const char*> ValidStringMessage() {
 }
 
 namespace dawn::wire {
-    class WireClient;
-    class WireServer;
-    namespace client {
-        class MemoryTransferService;
-    }  // namespace client
-    namespace server {
-        class MemoryTransferService;
-    }  // namespace server
+class WireClient;
+class WireServer;
+namespace client {
+class MemoryTransferService;
+}  // namespace client
+namespace server {
+class MemoryTransferService;
+}  // namespace server
 }  // namespace dawn::wire
 
 namespace utils {
-    class TerribleCommandBuffer;
+class TerribleCommandBuffer;
 }
 
 class WireTest : public testing::Test {
@@ -148,3 +143,5 @@ class WireTest : public testing::Test {
     std::unique_ptr<utils::TerribleCommandBuffer> mS2cBuf;
     std::unique_ptr<utils::TerribleCommandBuffer> mC2sBuf;
 };
+
+#endif  // SRC_DAWN_TESTS_UNITTESTS_WIRE_WIRETEST_H_

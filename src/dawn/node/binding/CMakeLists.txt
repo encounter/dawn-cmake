@@ -66,13 +66,14 @@ add_library(dawn_node_binding STATIC
     "GPUTextureView.cpp"
     "GPUTextureView.h"
 )
+common_compile_options(dawn_node_binding)
 
 target_include_directories(dawn_node_binding
     PRIVATE
         "${CMAKE_SOURCE_DIR}"
+        "${DAWN_THIRD_PARTY_DIR}"
         "${NODE_API_HEADERS_DIR}/include"
-        "${NODE_ADDON_API_DIR}"
-        "${GEN_DIR}"
+        "${DAWN_NODE_GEN_DIR}"
 )
 
 target_link_libraries(dawn_node_binding

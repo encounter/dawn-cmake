@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGL_SAMPLERGL_H_
-#define DAWNNATIVE_OPENGL_SAMPLERGL_H_
+#ifndef SRC_DAWN_NATIVE_OPENGL_SAMPLERGL_H_
+#define SRC_DAWN_NATIVE_OPENGL_SAMPLERGL_H_
 
 #include "dawn/native/Sampler.h"
 
@@ -21,28 +21,28 @@
 
 namespace dawn::native::opengl {
 
-    class Device;
+class Device;
 
-    class Sampler final : public SamplerBase {
-      public:
-        Sampler(Device* device, const SamplerDescriptor* descriptor);
+class Sampler final : public SamplerBase {
+  public:
+    Sampler(Device* device, const SamplerDescriptor* descriptor);
 
-        GLuint GetFilteringHandle() const;
-        GLuint GetNonFilteringHandle() const;
+    GLuint GetFilteringHandle() const;
+    GLuint GetNonFilteringHandle() const;
 
-      private:
-        ~Sampler() override;
-        void DestroyImpl() override;
+  private:
+    ~Sampler() override;
+    void DestroyImpl() override;
 
-        void SetupGLSampler(GLuint sampler, const SamplerDescriptor* descriptor, bool forceNearest);
+    void SetupGLSampler(GLuint sampler, const SamplerDescriptor* descriptor, bool forceNearest);
 
-        GLuint mFilteringHandle;
+    GLuint mFilteringHandle;
 
-        // This is a sampler equivalent to mFilteringHandle except that it uses NEAREST filtering
-        // for everything, which is important to preserve texture completeness for u/int textures.
-        GLuint mNonFilteringHandle;
-    };
+    // This is a sampler equivalent to mFilteringHandle except that it uses NEAREST filtering
+    // for everything, which is important to preserve texture completeness for u/int textures.
+    GLuint mNonFilteringHandle;
+};
 
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGL_SAMPLERGL_H_
+#endif  // SRC_DAWN_NATIVE_OPENGL_SAMPLERGL_H_

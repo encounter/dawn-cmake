@@ -12,23 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/webgpu_cpp.h"
+#ifndef SRC_DAWN_FUZZERS_DAWNWIRESERVERFUZZER_H_
+#define SRC_DAWN_FUZZERS_DAWNWIRESERVERFUZZER_H_
 
 #include <cstdint>
 #include <functional>
 
+#include "dawn/webgpu_cpp.h"
+
 namespace dawn::native {
 
-    class Instance;
+class Instance;
 
 }  // namespace dawn::native
 
 namespace DawnWireServerFuzzer {
 
-    using MakeDeviceFn = std::function<wgpu::Device(dawn::native::Instance*)>;
+using MakeDeviceFn = std::function<wgpu::Device(dawn::native::Instance*)>;
 
-    int Initialize(int* argc, char*** argv);
+int Initialize(int* argc, char*** argv);
 
-    int Run(const uint8_t* data, size_t size, MakeDeviceFn MakeDevice, bool supportsErrorInjection);
+int Run(const uint8_t* data, size_t size, MakeDeviceFn MakeDevice, bool supportsErrorInjection);
 
 }  // namespace DawnWireServerFuzzer
+
+#endif  // SRC_DAWN_FUZZERS_DAWNWIRESERVERFUZZER_H_

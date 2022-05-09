@@ -18,7 +18,8 @@ DawnJSONGenerator(
     RESULT_VARIABLE "DAWN_NATIVE_UTILS_GEN_SOURCES"
 )
 
-add_library(dawn_native ${DAWN_DUMMY_FILE})
+add_library(dawn_native ${DAWN_PLACEHOLDER_FILE})
+common_compile_options(dawn_native)
 
 target_compile_definitions(dawn_native PRIVATE "DAWN_NATIVE_IMPLEMENTATION")
 if(BUILD_SHARED_LIBS)
@@ -44,6 +45,8 @@ target_sources(dawn_native PRIVATE
     "BindGroupTracker.h"
     "BindingInfo.cpp"
     "BindingInfo.h"
+    "BlobCache.cpp"
+    "BlobCache.h"
     "BuddyAllocator.cpp"
     "BuddyAllocator.h"
     "BuddyMemoryAllocator.cpp"
@@ -52,6 +55,8 @@ target_sources(dawn_native PRIVATE
     "Buffer.h"
     "CachedObject.cpp"
     "CachedObject.h"
+    "CacheKey.cpp"
+    "CacheKey.h"
     "CallbackTaskManager.cpp"
     "CallbackTaskManager.h"
     "CommandAllocator.cpp"
@@ -117,12 +122,12 @@ target_sources(dawn_native PRIVATE
     "PassResourceUsage.h"
     "PassResourceUsageTracker.cpp"
     "PassResourceUsageTracker.h"
-    "PersistentCache.cpp"
-    "PersistentCache.h"
     "PerStage.cpp"
     "PerStage.h"
     "Pipeline.cpp"
     "Pipeline.h"
+    "PipelineCache.cpp"
+    "PipelineCache.h"
     "PipelineLayout.cpp"
     "PipelineLayout.h"
     "PooledResourceMemoryAllocator.cpp"
@@ -439,6 +444,10 @@ if (DAWN_ENABLE_OPENGL)
     target_link_libraries(dawn_native PRIVATE dawn_khronos_platform)
 endif()
 
+if (DAWN_ENABLE_SWIFTSHADER)
+    target_compile_definitions(dawn_native PRIVATE "DAWN_ENABLE_SWIFTSHADER")
+endif()
+
 if (DAWN_ENABLE_VULKAN)
     target_sources(dawn_native PRIVATE
         "${DAWN_INCLUDE_DIR}/dawn/native/VulkanBackend.h"
@@ -452,6 +461,8 @@ if (DAWN_ENABLE_VULKAN)
         "vulkan/BindGroupVk.h"
         "vulkan/BufferVk.cpp"
         "vulkan/BufferVk.h"
+        "vulkan/CacheKeyVk.cpp"
+        "vulkan/CacheKeyVk.h"
         "vulkan/CommandBufferVk.cpp"
         "vulkan/CommandBufferVk.h"
         "vulkan/CommandRecordingContext.h"
@@ -468,6 +479,8 @@ if (DAWN_ENABLE_VULKAN)
         "vulkan/Forward.h"
         "vulkan/NativeSwapChainImplVk.cpp"
         "vulkan/NativeSwapChainImplVk.h"
+        "vulkan/PipelineCacheVk.cpp"
+        "vulkan/PipelineCacheVk.h"
         "vulkan/PipelineLayoutVk.cpp"
         "vulkan/PipelineLayoutVk.h"
         "vulkan/QuerySetVk.cpp"
@@ -506,7 +519,8 @@ if (DAWN_ENABLE_VULKAN)
         "vulkan/external_semaphore/SemaphoreService.h"
     )
 
-    target_link_libraries(dawn_native PUBLIC dawn_vulkan_headers)
+    target_link_libraries(dawn_native PUBLIC Vulkan-Headers)
+    target_include_directories(dawn_native PRIVATE ${DAWN_VULKAN_TOOLS_DIR})
 
     if (UNIX AND NOT APPLE)
         target_sources(dawn_native PRIVATE
@@ -545,7 +559,8 @@ DawnJSONGenerator(
     RESULT_VARIABLE "WEBGPU_DAWN_NATIVE_PROC_GEN"
 )
 
-add_library(webgpu_dawn ${DAWN_DUMMY_FILE})
+add_library(webgpu_dawn ${DAWN_PLACEHOLDER_FILE})
+common_compile_options(webgpu_dawn)
 target_link_libraries(webgpu_dawn PRIVATE dawn_native)
 target_compile_definitions(webgpu_dawn PRIVATE "WGPU_IMPLEMENTATION")
 if(BUILD_SHARED_LIBS)

@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_METAL_QUEUEMTL_H_
-#define DAWNNATIVE_METAL_QUEUEMTL_H_
+#ifndef SRC_DAWN_NATIVE_METAL_QUEUEMTL_H_
+#define SRC_DAWN_NATIVE_METAL_QUEUEMTL_H_
 
 #include "dawn/native/Queue.h"
 
 namespace dawn::native::metal {
 
-    class Device;
+class Device;
 
-    class Queue final : public QueueBase {
-      public:
-        Queue(Device* device);
+class Queue final : public QueueBase {
+  public:
+    Queue(Device* device, const QueueDescriptor* descriptor);
 
-      private:
-        MaybeError SubmitImpl(uint32_t commandCount, CommandBufferBase* const* commands) override;
-    };
+  private:
+    MaybeError SubmitImpl(uint32_t commandCount, CommandBufferBase* const* commands) override;
+};
 
 }  // namespace dawn::native::metal
 
-#endif  // DAWNNATIVE_METAL_QUEUEMTL_H_
+#endif  // SRC_DAWN_NATIVE_METAL_QUEUEMTL_H_

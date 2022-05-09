@@ -12,34 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_OPENGL_PERSISTENTPIPELINESTATEGL_H_
-#define DAWNNATIVE_OPENGL_PERSISTENTPIPELINESTATEGL_H_
+#ifndef SRC_DAWN_NATIVE_OPENGL_PERSISTENTPIPELINESTATEGL_H_
+#define SRC_DAWN_NATIVE_OPENGL_PERSISTENTPIPELINESTATEGL_H_
 
 #include "dawn/native/dawn_platform.h"
 #include "dawn/native/opengl/opengl_platform.h"
 
 namespace dawn::native::opengl {
 
-    struct OpenGLFunctions;
+struct OpenGLFunctions;
 
-    class PersistentPipelineState {
-      public:
-        void SetDefaultState(const OpenGLFunctions& gl);
-        void SetStencilFuncsAndMask(const OpenGLFunctions& gl,
-                                    GLenum stencilBackCompareFunction,
-                                    GLenum stencilFrontCompareFunction,
-                                    uint32_t stencilReadMask);
-        void SetStencilReference(const OpenGLFunctions& gl, uint32_t stencilReference);
+class PersistentPipelineState {
+  public:
+    void SetDefaultState(const OpenGLFunctions& gl);
+    void SetStencilFuncsAndMask(const OpenGLFunctions& gl,
+                                GLenum stencilBackCompareFunction,
+                                GLenum stencilFrontCompareFunction,
+                                uint32_t stencilReadMask);
+    void SetStencilReference(const OpenGLFunctions& gl, uint32_t stencilReference);
 
-      private:
-        void CallGLStencilFunc(const OpenGLFunctions& gl);
+  private:
+    void CallGLStencilFunc(const OpenGLFunctions& gl);
 
-        GLenum mStencilBackCompareFunction = GL_ALWAYS;
-        GLenum mStencilFrontCompareFunction = GL_ALWAYS;
-        GLuint mStencilReadMask = 0xffffffff;
-        GLuint mStencilReference = 0;
-    };
+    GLenum mStencilBackCompareFunction = GL_ALWAYS;
+    GLenum mStencilFrontCompareFunction = GL_ALWAYS;
+    GLuint mStencilReadMask = 0xffffffff;
+    GLuint mStencilReference = 0;
+};
 
 }  // namespace dawn::native::opengl
 
-#endif  // DAWNNATIVE_OPENGL_PERSISTENTPIPELINESTATEGL_H_
+#endif  // SRC_DAWN_NATIVE_OPENGL_PERSISTENTPIPELINESTATEGL_H_

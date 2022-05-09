@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_D3D12_D3D12INFO_H_
-#define DAWNNATIVE_D3D12_D3D12INFO_H_
+#ifndef SRC_DAWN_NATIVE_D3D12_D3D12INFO_H_
+#define SRC_DAWN_NATIVE_D3D12_D3D12INFO_H_
 
 #include "dawn/native/Error.h"
 #include "dawn/native/PerStage.h"
@@ -21,21 +21,21 @@
 
 namespace dawn::native::d3d12 {
 
-    class Adapter;
+class Adapter;
 
-    struct D3D12DeviceInfo {
-        bool isUMA;
-        uint32_t resourceHeapTier;
-        bool supportsRenderPass;
-        bool supportsShaderFloat16;
-        // shaderModel indicates the maximum supported shader model, for example, the value 62
-        // indicates that current driver supports the maximum shader model is shader model 6.2.
-        uint32_t shaderModel;
-        PerStage<std::wstring> shaderProfiles;
-        bool supportsSharedResourceCapabilityTier1;
-    };
+struct D3D12DeviceInfo {
+    bool isUMA;
+    uint32_t resourceHeapTier;
+    bool supportsRenderPass;
+    bool supportsShaderFloat16;
+    // shaderModel indicates the maximum supported shader model, for example, the value 62
+    // indicates that current driver supports the maximum shader model is shader model 6.2.
+    uint32_t shaderModel;
+    PerStage<std::wstring> shaderProfiles;
+    bool supportsSharedResourceCapabilityTier1;
+};
 
-    ResultOrError<D3D12DeviceInfo> GatherDeviceInfo(const Adapter& adapter);
+ResultOrError<D3D12DeviceInfo> GatherDeviceInfo(const Adapter& adapter);
 }  // namespace dawn::native::d3d12
 
-#endif  // DAWNNATIVE_D3D12_D3D12INFO_H_
+#endif  // SRC_DAWN_NATIVE_D3D12_D3D12INFO_H_

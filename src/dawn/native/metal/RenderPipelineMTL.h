@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_METAL_RENDERPIPELINEMTL_H_
-#define DAWNNATIVE_METAL_RENDERPIPELINEMTL_H_
+#ifndef SRC_DAWN_NATIVE_METAL_RENDERPIPELINEMTL_H_
+#define SRC_DAWN_NATIVE_METAL_RENDERPIPELINEMTL_H_
 
 #include "dawn/native/RenderPipeline.h"
 
@@ -23,48 +23,47 @@
 
 namespace dawn::native::metal {
 
-    class Device;
+class Device;
 
-    class RenderPipeline final : public RenderPipelineBase {
-      public:
-        static Ref<RenderPipelineBase> CreateUninitialized(
-            Device* device,
-            const RenderPipelineDescriptor* descriptor);
-        static void InitializeAsync(Ref<RenderPipelineBase> renderPipeline,
-                                    WGPUCreateRenderPipelineAsyncCallback callback,
-                                    void* userdata);
+class RenderPipeline final : public RenderPipelineBase {
+  public:
+    static Ref<RenderPipelineBase> CreateUninitialized(Device* device,
+                                                       const RenderPipelineDescriptor* descriptor);
+    static void InitializeAsync(Ref<RenderPipelineBase> renderPipeline,
+                                WGPUCreateRenderPipelineAsyncCallback callback,
+                                void* userdata);
 
-        MTLPrimitiveType GetMTLPrimitiveTopology() const;
-        MTLWinding GetMTLFrontFace() const;
-        MTLCullMode GetMTLCullMode() const;
+    MTLPrimitiveType GetMTLPrimitiveTopology() const;
+    MTLWinding GetMTLFrontFace() const;
+    MTLCullMode GetMTLCullMode() const;
 
-        void Encode(id<MTLRenderCommandEncoder> encoder);
+    void Encode(id<MTLRenderCommandEncoder> encoder);
 
-        id<MTLDepthStencilState> GetMTLDepthStencilState();
+    id<MTLDepthStencilState> GetMTLDepthStencilState();
 
-        // For each Dawn vertex buffer, give the index in which it will be positioned in the Metal
-        // vertex buffer table.
-        uint32_t GetMtlVertexBufferIndex(VertexBufferSlot slot) const;
+    // For each Dawn vertex buffer, give the index in which it will be positioned in the Metal
+    // vertex buffer table.
+    uint32_t GetMtlVertexBufferIndex(VertexBufferSlot slot) const;
 
-        wgpu::ShaderStage GetStagesRequiringStorageBufferLength() const;
+    wgpu::ShaderStage GetStagesRequiringStorageBufferLength() const;
 
-        MaybeError Initialize() override;
+    MaybeError Initialize() override;
 
-      private:
-        using RenderPipelineBase::RenderPipelineBase;
+  private:
+    using RenderPipelineBase::RenderPipelineBase;
 
-        NSRef<MTLVertexDescriptor> MakeVertexDesc();
+    NSRef<MTLVertexDescriptor> MakeVertexDesc();
 
-        MTLPrimitiveType mMtlPrimitiveTopology;
-        MTLWinding mMtlFrontFace;
-        MTLCullMode mMtlCullMode;
-        NSPRef<id<MTLRenderPipelineState>> mMtlRenderPipelineState;
-        NSPRef<id<MTLDepthStencilState>> mMtlDepthStencilState;
-        ityp::array<VertexBufferSlot, uint32_t, kMaxVertexBuffers> mMtlVertexBufferIndices;
+    MTLPrimitiveType mMtlPrimitiveTopology;
+    MTLWinding mMtlFrontFace;
+    MTLCullMode mMtlCullMode;
+    NSPRef<id<MTLRenderPipelineState>> mMtlRenderPipelineState;
+    NSPRef<id<MTLDepthStencilState>> mMtlDepthStencilState;
+    ityp::array<VertexBufferSlot, uint32_t, kMaxVertexBuffers> mMtlVertexBufferIndices;
 
-        wgpu::ShaderStage mStagesRequiringStorageBufferLength = wgpu::ShaderStage::None;
-    };
+    wgpu::ShaderStage mStagesRequiringStorageBufferLength = wgpu::ShaderStage::None;
+};
 
 }  // namespace dawn::native::metal
 
-#endif  // DAWNNATIVE_METAL_RENDERPIPELINEMTL_H_
+#endif  // SRC_DAWN_NATIVE_METAL_RENDERPIPELINEMTL_H_

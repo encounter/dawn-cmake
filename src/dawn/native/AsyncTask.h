@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_ASYC_TASK_H_
-#define DAWNNATIVE_ASYC_TASK_H_
+#ifndef SRC_DAWN_NATIVE_ASYNCTASK_H_
+#define SRC_DAWN_NATIVE_ASYNCTASK_H_
 
 #include <functional>
 #include <memory>
@@ -23,43 +23,43 @@
 #include "dawn/common/RefCounted.h"
 
 namespace dawn::platform {
-    class WaitableEvent;
-    class WorkerTaskPool;
+class WaitableEvent;
+class WorkerTaskPool;
 }  // namespace dawn::platform
 
 namespace dawn::native {
 
-    // TODO(crbug.com/dawn/826): we'll add additional things to AsyncTask in the future, like
-    // Cancel() and RunNow(). Cancelling helps avoid running the task's body when we are just
-    // shutting down the device. RunNow() could be used for more advanced scenarios, for example
-    // always doing ShaderModule initial compilation asynchronously, but being able to steal the
-    // task if we need it for synchronous pipeline compilation.
-    using AsyncTask = std::function<void()>;
+// TODO(crbug.com/dawn/826): we'll add additional things to AsyncTask in the future, like
+// Cancel() and RunNow(). Cancelling helps avoid running the task's body when we are just
+// shutting down the device. RunNow() could be used for more advanced scenarios, for example
+// always doing ShaderModule initial compilation asynchronously, but being able to steal the
+// task if we need it for synchronous pipeline compilation.
+using AsyncTask = std::function<void()>;
 
-    class AsyncTaskManager {
+class AsyncTaskManager {
+  public:
+    explicit AsyncTaskManager(dawn::platform::WorkerTaskPool* workerTaskPool);
+
+    void PostTask(AsyncTask asyncTask);
+    void WaitAllPendingTasks();
+    bool HasPendingTasks();
+
+  private:
+    class WaitableTask : public RefCounted {
       public:
-        explicit AsyncTaskManager(dawn::platform::WorkerTaskPool* workerTaskPool);
-
-        void PostTask(AsyncTask asyncTask);
-        void WaitAllPendingTasks();
-        bool HasPendingTasks();
-
-      private:
-        class WaitableTask : public RefCounted {
-          public:
-            AsyncTask asyncTask;
-            AsyncTaskManager* taskManager;
-            std::unique_ptr<dawn::platform::WaitableEvent> waitableEvent;
-        };
-
-        static void DoWaitableTask(void* task);
-        void HandleTaskCompletion(WaitableTask* task);
-
-        std::mutex mPendingTasksMutex;
-        std::unordered_map<WaitableTask*, Ref<WaitableTask>> mPendingTasks;
-        dawn::platform::WorkerTaskPool* mWorkerTaskPool;
+        AsyncTask asyncTask;
+        AsyncTaskManager* taskManager;
+        std::unique_ptr<dawn::platform::WaitableEvent> waitableEvent;
     };
+
+    static void DoWaitableTask(void* task);
+    void HandleTaskCompletion(WaitableTask* task);
+
+    std::mutex mPendingTasksMutex;
+    std::unordered_map<WaitableTask*, Ref<WaitableTask>> mPendingTasks;
+    dawn::platform::WorkerTaskPool* mWorkerTaskPool;
+};
 
 }  // namespace dawn::native
 
-#endif
+#endif  // SRC_DAWN_NATIVE_ASYNCTASK_H_

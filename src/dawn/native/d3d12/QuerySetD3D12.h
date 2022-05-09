@@ -12,35 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_D3D12_QUERYSETD3D12_H_
-#define DAWNNATIVE_D3D12_QUERYSETD3D12_H_
+#ifndef SRC_DAWN_NATIVE_D3D12_QUERYSETD3D12_H_
+#define SRC_DAWN_NATIVE_D3D12_QUERYSETD3D12_H_
 
 #include "dawn/native/QuerySet.h"
 #include "dawn/native/d3d12/d3d12_platform.h"
 
 namespace dawn::native::d3d12 {
 
-    class Device;
+class Device;
 
-    class QuerySet : public QuerySetBase {
-      public:
-        static ResultOrError<Ref<QuerySet>> Create(Device* device,
-                                                   const QuerySetDescriptor* descriptor);
+class QuerySet : public QuerySetBase {
+  public:
+    static ResultOrError<Ref<QuerySet>> Create(Device* device,
+                                               const QuerySetDescriptor* descriptor);
 
-        ID3D12QueryHeap* GetQueryHeap() const;
+    ID3D12QueryHeap* GetQueryHeap() const;
 
-      private:
-        ~QuerySet() override;
-        using QuerySetBase::QuerySetBase;
-        MaybeError Initialize();
+  private:
+    ~QuerySet() override;
+    using QuerySetBase::QuerySetBase;
+    MaybeError Initialize();
 
-        // Dawn API
-        void DestroyImpl() override;
-        void SetLabelImpl() override;
+    // Dawn API
+    void DestroyImpl() override;
+    void SetLabelImpl() override;
 
-        ComPtr<ID3D12QueryHeap> mQueryHeap;
-    };
+    ComPtr<ID3D12QueryHeap> mQueryHeap;
+};
 
 }  // namespace dawn::native::d3d12
 
-#endif  // DAWNNATIVE_D3D12_QUERYSETD3D12_H_
+#endif  // SRC_DAWN_NATIVE_D3D12_QUERYSETD3D12_H_

@@ -12,31 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWN_NODE_BINDING_GPU_H_
-#define DAWN_NODE_BINDING_GPU_H_
+#ifndef SRC_DAWN_NODE_BINDING_GPU_H_
+#define SRC_DAWN_NODE_BINDING_GPU_H_
 
 #include "dawn/native/DawnNative.h"
 #include "dawn/webgpu_cpp.h"
-#include "napi.h"
+
 #include "src/dawn/node/binding/Flags.h"
+#include "src/dawn/node/interop/Napi.h"
 #include "src/dawn/node/interop/WebGPU.h"
 
 namespace wgpu::binding {
-    // GPU is an implementation of interop::GPU that wraps a dawn::native::Instance.
-    class GPU final : public interop::GPU {
-      public:
-        GPU(Flags flags);
+// GPU is an implementation of interop::GPU that wraps a dawn::native::Instance.
+class GPU final : public interop::GPU {
+  public:
+    GPU(Flags flags);
 
-        // interop::GPU interface compliance
-        interop::Promise<std::optional<interop::Interface<interop::GPUAdapter>>> requestAdapter(
-            Napi::Env env,
-            interop::GPURequestAdapterOptions options) override;
+    // interop::GPU interface compliance
+    interop::Promise<std::optional<interop::Interface<interop::GPUAdapter>>> requestAdapter(
+        Napi::Env env,
+        interop::GPURequestAdapterOptions options) override;
 
-      private:
-        const Flags flags_;
-        dawn::native::Instance instance_;
-    };
+  private:
+    const Flags flags_;
+    dawn::native::Instance instance_;
+};
 
 }  // namespace wgpu::binding
 
-#endif  // DAWN_NODE_BINDING_GPU_H_
+#endif  // SRC_DAWN_NODE_BINDING_GPU_H_

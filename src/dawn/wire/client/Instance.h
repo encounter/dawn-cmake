@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNWIRE_CLIENT_INSTANCE_H_
-#define DAWNWIRE_CLIENT_INSTANCE_H_
+#ifndef SRC_DAWN_WIRE_CLIENT_INSTANCE_H_
+#define SRC_DAWN_WIRE_CLIENT_INSTANCE_H_
 
-#include <dawn/webgpu.h>
+#include "dawn/webgpu.h"
 
 #include "dawn/wire/WireClient.h"
 #include "dawn/wire/WireCmd_autogen.h"
@@ -24,33 +24,33 @@
 
 namespace dawn::wire::client {
 
-    class Instance final : public ObjectBase {
-      public:
-        using ObjectBase::ObjectBase;
+class Instance final : public ObjectBase {
+  public:
+    using ObjectBase::ObjectBase;
 
-        ~Instance();
-        void CancelCallbacksForDisconnect() override;
+    ~Instance();
+    void CancelCallbacksForDisconnect() override;
 
-        void RequestAdapter(const WGPURequestAdapterOptions* options,
-                            WGPURequestAdapterCallback callback,
-                            void* userdata);
-        bool OnRequestAdapterCallback(uint64_t requestSerial,
-                                      WGPURequestAdapterStatus status,
-                                      const char* message,
-                                      const WGPUAdapterProperties* properties,
-                                      const WGPUSupportedLimits* limits,
-                                      uint32_t featuresCount,
-                                      const WGPUFeatureName* features);
+    void RequestAdapter(const WGPURequestAdapterOptions* options,
+                        WGPURequestAdapterCallback callback,
+                        void* userdata);
+    bool OnRequestAdapterCallback(uint64_t requestSerial,
+                                  WGPURequestAdapterStatus status,
+                                  const char* message,
+                                  const WGPUAdapterProperties* properties,
+                                  const WGPUSupportedLimits* limits,
+                                  uint32_t featuresCount,
+                                  const WGPUFeatureName* features);
 
-      private:
-        struct RequestAdapterData {
-            WGPURequestAdapterCallback callback = nullptr;
-            ObjectId adapterObjectId;
-            void* userdata = nullptr;
-        };
-        RequestTracker<RequestAdapterData> mRequestAdapterRequests;
+  private:
+    struct RequestAdapterData {
+        WGPURequestAdapterCallback callback = nullptr;
+        ObjectId adapterObjectId;
+        void* userdata = nullptr;
     };
+    RequestTracker<RequestAdapterData> mRequestAdapterRequests;
+};
 
 }  // namespace dawn::wire::client
 
-#endif  // DAWNWIRE_CLIENT_INSTANCE_H_
+#endif  // SRC_DAWN_WIRE_CLIENT_INSTANCE_H_

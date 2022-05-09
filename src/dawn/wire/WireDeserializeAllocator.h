@@ -12,32 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNWIRE_WIREDESERIALIZEALLOCATOR_H_
-#define DAWNWIRE_WIREDESERIALIZEALLOCATOR_H_
-
-#include "dawn/wire/WireCmd_autogen.h"
+#ifndef SRC_DAWN_WIRE_WIREDESERIALIZEALLOCATOR_H_
+#define SRC_DAWN_WIRE_WIREDESERIALIZEALLOCATOR_H_
 
 #include <vector>
 
+#include "dawn/wire/WireCmd_autogen.h"
+
 namespace dawn::wire {
-    // A really really simple implementation of the DeserializeAllocator. It's main feature
-    // is that it has some inline storage so as to avoid allocations for the majority of
-    // commands.
-    class WireDeserializeAllocator : public DeserializeAllocator {
-      public:
-        WireDeserializeAllocator();
-        virtual ~WireDeserializeAllocator();
+// A really really simple implementation of the DeserializeAllocator. It's main feature
+// is that it has some inline storage so as to avoid allocations for the majority of
+// commands.
+class WireDeserializeAllocator : public DeserializeAllocator {
+  public:
+    WireDeserializeAllocator();
+    virtual ~WireDeserializeAllocator();
 
-        void* GetSpace(size_t size) override;
+    void* GetSpace(size_t size) override;
 
-        void Reset();
+    void Reset();
 
-      private:
-        size_t mRemainingSize = 0;
-        char* mCurrentBuffer = nullptr;
-        char mStaticBuffer[2048];
-        std::vector<char*> mAllocations;
-    };
+  private:
+    size_t mRemainingSize = 0;
+    char* mCurrentBuffer = nullptr;
+    char mStaticBuffer[2048];
+    std::vector<char*> mAllocations;
+};
 }  // namespace dawn::wire
 
-#endif  // DAWNWIRE_WIREDESERIALIZEALLOCATOR_H_
+#endif  // SRC_DAWN_WIRE_WIREDESERIALIZEALLOCATOR_H_

@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNWIRE_SUPPORTEDFEATURES_H_
-#define DAWNWIRE_SUPPORTEDFEATURES_H_
+#ifndef SRC_DAWN_WIRE_SUPPORTEDFEATURES_H_
+#define SRC_DAWN_WIRE_SUPPORTEDFEATURES_H_
 
-#include <dawn/webgpu.h>
+#include "dawn/webgpu.h"
 
 namespace dawn::wire {
 
-    bool IsFeatureSupported(WGPUFeatureName feature);
+bool IsFeatureSupported(WGPUFeatureName feature);
 
 }  // namespace dawn::wire
 
-#endif  // DAWNWIRE_SUPPORTEDFEATURES_H_
+#endif  // SRC_DAWN_WIRE_SUPPORTEDFEATURES_H_

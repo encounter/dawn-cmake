@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/unittests/validation/ValidationTest.h"
-
-#include "dawn/common/Constants.h"
-#include "dawn/utils/ComboRenderPipelineDescriptor.h"
-#include "dawn/utils/WGPUHelpers.h"
-
 #include <cmath>
 #include <sstream>
+#include <string>
+#include <vector>
+
+#include "dawn/common/Constants.h"
+#include "dawn/tests/unittests/validation/ValidationTest.h"
+#include "dawn/utils/ComboRenderPipelineDescriptor.h"
+#include "dawn/utils/WGPUHelpers.h"
 
 class RenderPipelineValidationTest : public ValidationTest {
   protected:
@@ -48,11 +49,11 @@ class RenderPipelineValidationTest : public ValidationTest {
 };
 
 namespace {
-    bool BlendFactorContainsSrcAlpha(const wgpu::BlendFactor& blendFactor) {
-        return blendFactor == wgpu::BlendFactor::SrcAlpha ||
-               blendFactor == wgpu::BlendFactor::OneMinusSrcAlpha ||
-               blendFactor == wgpu::BlendFactor::SrcAlphaSaturated;
-    }
+bool BlendFactorContainsSrcAlpha(const wgpu::BlendFactor& blendFactor) {
+    return blendFactor == wgpu::BlendFactor::SrcAlpha ||
+           blendFactor == wgpu::BlendFactor::OneMinusSrcAlpha ||
+           blendFactor == wgpu::BlendFactor::SrcAlphaSaturated;
+}
 }  // namespace
 
 // Test cases where creation should succeed
@@ -190,6 +191,48 @@ TEST_F(RenderPipelineValidationTest, ColorTargetStateRequired) {
         descriptor.cFragment.targetCount = 0;
 
         ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&descriptor));
+    }
+}
+
+// Tests that target blend and writeMasks must not be set if the format is undefined.
+TEST_F(RenderPipelineValidationTest, UndefinedColorStateFormatWithBlendOrWriteMask) {
+    {
+        // Control case: Valid undefined format target.
+        utils::ComboRenderPipelineDescriptor descriptor;
+        descriptor.vertex.module = vsModule;
+        descriptor.cFragment.module = fsModule;
+        descriptor.cFragment.targetCount = 1;
+        descriptor.cTargets[0].format = wgpu::TextureFormat::Undefined;
+        descriptor.cTargets[0].writeMask = wgpu::ColorWriteMask::None;
+
+        device.CreateRenderPipeline(&descriptor);
+    }
+    {
+        // Error case: undefined format target with blend state set.
+        utils::ComboRenderPipelineDescriptor descriptor;
+        descriptor.vertex.module = vsModule;
+        descriptor.cFragment.module = fsModule;
+        descriptor.cFragment.targetCount = 1;
+        descriptor.cTargets[0].format = wgpu::TextureFormat::Undefined;
+        descriptor.cTargets[0].blend = &descriptor.cBlends[0];
+        descriptor.cTargets[0].writeMask = wgpu::ColorWriteMask::None;
+
+        ASSERT_DEVICE_ERROR(
+            device.CreateRenderPipeline(&descriptor),
+            testing::HasSubstr("Color target[0] blend state is set when the format is undefined."));
+    }
+    {
+        // Error case: undefined format target with write masking not being none.
+        utils::ComboRenderPipelineDescriptor descriptor;
+        descriptor.vertex.module = vsModule;
+        descriptor.cFragment.module = fsModule;
+        descriptor.cFragment.targetCount = 1;
+        descriptor.cTargets[0].format = wgpu::TextureFormat::Undefined;
+        descriptor.cTargets[0].blend = nullptr;
+        descriptor.cTargets[0].writeMask = wgpu::ColorWriteMask::All;
+
+        ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&descriptor),
+                            testing::HasSubstr("Color target[0] write mask is set to"));
     }
 }
 
@@ -814,8 +857,8 @@ TEST_F(RenderPipelineValidationTest, TextureViewDimensionCompatibility) {
 TEST_F(RenderPipelineValidationTest, StorageBufferInVertexShaderNoLayout) {
     wgpu::ShaderModule vsModuleWithStorageBuffer = utils::CreateShaderModule(device, R"(
         struct Dst {
-            data : array<u32, 100>;
-        };
+            data : array<u32, 100>
+        }
         @group(0) @binding(0) var<storage, read_write> dst : Dst;
         @stage(vertex) fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
             dst.data[VertexIndex] = 0x1234u;
@@ -1063,9 +1106,9 @@ TEST_F(RenderPipelineValidationTest, UnwrittenFragmentOutputsMask0) {
 
     wgpu::ShaderModule fsModuleWriteBoth = utils::CreateShaderModule(device, R"(
         struct FragmentOut {
-            @location(0) target0 : vec4<f32>;
-            @location(1) target1 : vec4<f32>;
-        };
+            @location(0) target0 : vec4<f32>,
+            @location(1) target1 : vec4<f32>,
+        }
         @stage(fragment) fn main() -> FragmentOut {
             var out : FragmentOut;
             return out;
@@ -1173,8 +1216,8 @@ TEST_F(RenderPipelineValidationTest, UnwrittenFragmentOutputsMask0) {
 TEST_F(RenderPipelineValidationTest, BindingsFromCorrectEntryPoint) {
     wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
         struct Uniforms {
-            data : vec4<f32>;
-        };
+            data : vec4<f32>
+        }
         @group(0) @binding(0) var<uniform> var0 : Uniforms;
         @group(0) @binding(1) var<uniform> var1 : Uniforms;
 
@@ -1272,9 +1315,9 @@ class InterStageVariableMatchingValidationTest : public RenderPipelineValidation
 TEST_F(InterStageVariableMatchingValidationTest, MissingDeclarationAtSameLocation) {
     wgpu::ShaderModule vertexModuleOutputAtLocation0 = utils::CreateShaderModule(device, R"(
             struct A {
-                @location(0) vout: f32;
-                @builtin(position) pos: vec4<f32>;
-            };
+                @location(0) vout: f32,
+                @builtin(position) pos: vec4<f32>,
+            }
             @stage(vertex) fn main() -> A {
                 var vertexOut: A;
                 vertexOut.pos = vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -1282,23 +1325,23 @@ TEST_F(InterStageVariableMatchingValidationTest, MissingDeclarationAtSameLocatio
             })");
     wgpu::ShaderModule fragmentModuleAtLocation0 = utils::CreateShaderModule(device, R"(
             struct B {
-                @location(0) fin: f32;
-            };
+                @location(0) fin: f32
+            }
             @stage(fragment) fn main(fragmentIn: B) -> @location(0) vec4<f32>  {
                 return vec4<f32>(fragmentIn.fin, 0.0, 0.0, 1.0);
             })");
     wgpu::ShaderModule fragmentModuleInputAtLocation1 = utils::CreateShaderModule(device, R"(
             struct A {
-                @location(1) vout: f32;
-            };
+                @location(1) vout: f32
+            }
             @stage(fragment) fn main(vertexOut: A) -> @location(0) vec4<f32>  {
                 return vec4<f32>(vertexOut.vout, 0.0, 0.0, 1.0);
             })");
     wgpu::ShaderModule vertexModuleOutputAtLocation1 = utils::CreateShaderModule(device, R"(
             struct B {
-                @location(1) fin: f32;
-                @builtin(position) pos: vec4<f32>;
-            };
+                @location(1) fin: f32,
+                @builtin(position) pos: vec4<f32>,
+            }
             @stage(vertex) fn main() -> B {
                 var fragmentIn: B;
                 fragmentIn.pos = vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -1334,15 +1377,15 @@ TEST_F(InterStageVariableMatchingValidationTest, DifferentTypeAtSameLocation) {
         std::string interfaceDeclaration;
         {
             std::ostringstream sstream;
-            sstream << "struct A { @location(0) @interpolate(flat) a: " << kTypes[i] << ";"
+            sstream << "struct A { @location(0) @interpolate(flat) a: " << kTypes[i] << ","
                     << std::endl;
             interfaceDeclaration = sstream.str();
         }
         {
             std::ostringstream vertexStream;
             vertexStream << interfaceDeclaration << R"(
-                    @builtin(position) pos: vec4<f32>;
-                };
+                    @builtin(position) pos: vec4<f32>,
+                }
                 @stage(vertex) fn main() -> A {
                     var vertexOut: A;
                     vertexOut.pos = vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -1353,7 +1396,7 @@ TEST_F(InterStageVariableMatchingValidationTest, DifferentTypeAtSameLocation) {
         {
             std::ostringstream fragmentStream;
             fragmentStream << interfaceDeclaration << R"(
-                };
+                }
                 @stage(fragment) fn main(fragmentIn: A) -> @location(0) vec4<f32> {
                     return vec4<f32>(0.0, 0.0, 0.0, 1.0);
                 })";
@@ -1433,14 +1476,14 @@ TEST_F(InterStageVariableMatchingValidationTest, DifferentInterpolationAttribute
                 }
                 sstream << ")";
             }
-            sstream << " a : vec4<f32>;" << std::endl;
+            sstream << " a : vec4<f32>," << std::endl;
             interfaceDeclaration = sstream.str();
         }
         {
             std::ostringstream vertexStream;
             vertexStream << interfaceDeclaration << R"(
-                    @builtin(position) pos: vec4<f32>;
-                };
+                    @builtin(position) pos: vec4<f32>,
+                }
                 @stage(vertex) fn main() -> A {
                     var vertexOut: A;
                     vertexOut.pos = vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -1451,7 +1494,7 @@ TEST_F(InterStageVariableMatchingValidationTest, DifferentInterpolationAttribute
         {
             std::ostringstream fragmentStream;
             fragmentStream << interfaceDeclaration << R"(
-                };
+                }
                 @stage(fragment) fn main(fragmentIn: A) -> @location(0) vec4<f32> {
                     return fragmentIn.a;
                 })";

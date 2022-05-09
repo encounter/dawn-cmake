@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_D3D12_RESOURCEHEAPALLOCATIOND3D12_H_
-#define DAWNNATIVE_D3D12_RESOURCEHEAPALLOCATIOND3D12_H_
+#ifndef SRC_DAWN_NATIVE_D3D12_RESOURCEHEAPALLOCATIOND3D12_H_
+#define SRC_DAWN_NATIVE_D3D12_RESOURCEHEAPALLOCATIOND3D12_H_
 
 #include "dawn/native/Error.h"
 #include "dawn/native/ResourceMemoryAllocation.h"
@@ -21,28 +21,28 @@
 
 namespace dawn::native::d3d12 {
 
-    class Heap;
+class Heap;
 
-    class ResourceHeapAllocation : public ResourceMemoryAllocation {
-      public:
-        ResourceHeapAllocation() = default;
-        ResourceHeapAllocation(const AllocationInfo& info,
-                               uint64_t offset,
-                               ComPtr<ID3D12Resource> resource,
-                               Heap* heap);
-        ~ResourceHeapAllocation() override = default;
-        ResourceHeapAllocation(const ResourceHeapAllocation&) = default;
-        ResourceHeapAllocation& operator=(const ResourceHeapAllocation&) = default;
+class ResourceHeapAllocation : public ResourceMemoryAllocation {
+  public:
+    ResourceHeapAllocation() = default;
+    ResourceHeapAllocation(const AllocationInfo& info,
+                           uint64_t offset,
+                           ComPtr<ID3D12Resource> resource,
+                           Heap* heap);
+    ~ResourceHeapAllocation() override = default;
+    ResourceHeapAllocation(const ResourceHeapAllocation&) = default;
+    ResourceHeapAllocation& operator=(const ResourceHeapAllocation&) = default;
 
-        void Invalidate() override;
+    void Invalidate() override;
 
-        ID3D12Resource* GetD3D12Resource() const;
-        D3D12_GPU_VIRTUAL_ADDRESS GetGPUPointer() const;
+    ID3D12Resource* GetD3D12Resource() const;
+    D3D12_GPU_VIRTUAL_ADDRESS GetGPUPointer() const;
 
-      private:
-        ComPtr<ID3D12Resource> mResource;
-    };
+  private:
+    ComPtr<ID3D12Resource> mResource;
+};
 
 }  // namespace dawn::native::d3d12
 
-#endif  // DAWNNATIVE_D3D12_RESOURCEHEAPALLOCATIOND3D12_H_
+#endif  // SRC_DAWN_NATIVE_D3D12_RESOURCEHEAPALLOCATIOND3D12_H_

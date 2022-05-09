@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DAWNNATIVE_VULKAN_DESCRIPTORSETALLOCATION_H_
-#define DAWNNATIVE_VULKAN_DESCRIPTORSETALLOCATION_H_
+#ifndef SRC_DAWN_NATIVE_VULKAN_DESCRIPTORSETALLOCATION_H_
+#define SRC_DAWN_NATIVE_VULKAN_DESCRIPTORSETALLOCATION_H_
 
 #include "dawn/common/vulkan_platform.h"
 
 namespace dawn::native::vulkan {
 
-    // Contains a descriptor set along with data necessary to track its allocation.
-    struct DescriptorSetAllocation {
-        VkDescriptorSet set = VK_NULL_HANDLE;
-        uint32_t poolIndex;
-        uint16_t setIndex;
-    };
+// Contains a descriptor set along with data necessary to track its allocation.
+struct DescriptorSetAllocation {
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    uint32_t poolIndex;
+    uint16_t setIndex;
+};
 
 }  // namespace dawn::native::vulkan
 
-#endif  // DAWNNATIVE_VULKAN_DESCRIPTORSETALLOCATION_H_
+#endif  // SRC_DAWN_NATIVE_VULKAN_DESCRIPTORSETALLOCATION_H_

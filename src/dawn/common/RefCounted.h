@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef COMMON_REFCOUNTED_H_
-#define COMMON_REFCOUNTED_H_
-
-#include "dawn/common/RefBase.h"
+#ifndef SRC_DAWN_COMMON_REFCOUNTED_H_
+#define SRC_DAWN_COMMON_REFCOUNTED_H_
 
 #include <atomic>
 #include <cstdint>
 
+#include "dawn/common/RefBase.h"
+
 class RefCounted {
   public:
-    RefCounted(uint64_t payload = 0);
+    explicit RefCounted(uint64_t payload = 0);
 
     uint64_t GetRefCountForTesting() const;
     uint64_t GetRefCountPayload() const;
@@ -45,12 +45,8 @@ class RefCounted {
 template <typename T>
 struct RefCountedTraits {
     static constexpr T* kNullValue = nullptr;
-    static void Reference(T* value) {
-        value->Reference();
-    }
-    static void Release(T* value) {
-        value->Release();
-    }
+    static void Reference(T* value) { value->Reference(); }
+    static void Release(T* value) { value->Release(); }
 };
 
 template <typename T>
@@ -66,4 +62,4 @@ Ref<T> AcquireRef(T* pointee) {
     return ref;
 }
 
-#endif  // COMMON_REFCOUNTED_H_
+#endif  // SRC_DAWN_COMMON_REFCOUNTED_H_

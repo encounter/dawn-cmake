@@ -65,6 +65,10 @@ func run() error {
 	// Open up the output file
 	out := os.Stdout
 	if outputPath != "" {
+		dir := filepath.Dir(outputPath)
+		if err := os.MkdirAll(dir, 0777); err != nil {
+			return fmt.Errorf("failed to create output directory '%v'", dir)
+		}
 		file, err := os.Create(outputPath)
 		if err != nil {
 			return fmt.Errorf("failed to open output file '%v'", outputPath)
@@ -108,6 +112,7 @@ func run() error {
 		"ConstantsOf":                constantsOf,
 		"EnumEntryName":              enumEntryName,
 		"Eval":                       g.eval,
+		"HasAnnotation":              hasAnnotation,
 		"Include":                    g.include,
 		"IsBasicLiteral":             is(ast.BasicLiteral{}),
 		"IsConstructor":              isConstructor,
@@ -141,6 +146,9 @@ func run() error {
 
 	// simplify the definitions in the WebIDL before passing this to the template
 	idl, declarations := simplify(idl)
+
+	// Patch the IDL for the differences we need compared to the upstream IDL.
+	patch(idl, declarations)
 	g.declarations = declarations
 
 	// Write the file header
@@ -368,6 +376,17 @@ func (s *simplifier) visitType(t ast.Type) {
 	}
 }
 
+func patch(idl *ast.File, decl declarations) {
+	// Add [SameObject] to GPUDevice.lost
+	for _, member := range decl["GPUDevice"].(*ast.Interface).Members {
+		if m := member.(*ast.Member); m != nil && m.Name == "lost" {
+			annotation := &ast.Annotation{}
+			annotation.Name = "SameObject"
+			m.Annotations = append(m.Annotations, annotation)
+		}
+	}
+}
+
 // generator holds the template generator state
 type generator struct {
 	// the root template
@@ -491,6 +510,31 @@ func isUndefinedType(ty ast.Type) bool {
 // enumEntryName formats the enum entry name 's' for use in a C++ enum.
 func enumEntryName(s string) string {
 	return "k" + strings.ReplaceAll(pascalCase(strings.Trim(s, `"`)), "-", "")
+}
+
+func findAnnotation(list []*ast.Annotation, name string) *ast.Annotation {
+	for _, annotation := range list {
+		if annotation.Name == name {
+			return annotation
+		}
+	}
+	return nil
+}
+
+func hasAnnotation(obj interface{}, name string) bool {
+	switch obj := obj.(type) {
+	case *ast.Interface:
+		return findAnnotation(obj.Annotations, name) != nil
+	case *ast.Member:
+		return findAnnotation(obj.Annotations, name) != nil
+	case *ast.Namespace:
+		return findAnnotation(obj.Annotations, name) != nil
+	case *ast.Parameter:
+		return findAnnotation(obj.Annotations, name) != nil
+	case *ast.Typedef:
+		return findAnnotation(obj.Annotations, name) != nil || findAnnotation(obj.TypeAnnotations, name) != nil
+	}
+	panic("Unhandled AST node type in hasAnnotation")
 }
 
 // Method describes a WebIDL interface method
