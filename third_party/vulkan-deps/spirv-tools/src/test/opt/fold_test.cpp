@@ -7087,6 +7087,235 @@ INSTANTIATE_TEST_SUITE_P(DotProductMatchingTest, MatchingInstructionFoldingTest,
         3, true)
 ));
 
+INSTANTIATE_TEST_SUITE_P(VectorShuffleMatchingTest, MatchingInstructionFoldingTest,
+::testing::Values(
+    // Test case 0: Using OpDot to extract last element.
+    InstructionFoldingCase<bool>(
+        Header() +
+            "; CHECK: [[int:%\\w+]] = OpTypeInt 32 1\n" +
+            "; CHECK: [[v2int:%\\w+]] = OpTypeVector [[int]] 2{{[[:space:]]}}\n" +
+            "; CHECK: [[null:%\\w+]] = OpConstantNull [[v2int]]\n" +
+            "; CHECK: OpVectorShuffle\n" +
+            "; CHECK: %3 = OpVectorShuffle [[v2int]] [[null]] {{%\\w+}} 4294967295 2\n" +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%n = OpVariable %_ptr_int Function\n" +
+            "%load = OpLoad %int %n\n" +
+            "%2 = OpVectorShuffle %v2int %v2int_null %v2int_2_3 3 0xFFFFFFFF \n" +
+            "%3 = OpVectorShuffle %v2int %2 %v2int_2_3 1 2 \n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        3, true)
+ ));
+
+INSTANTIATE_TEST_SUITE_P(FmaGenerationMatchingTest, MatchingInstructionFoldingTest,
+::testing::Values(
+   // Test case 0: (x * y) + a = Fma(x, y, a)
+   InstructionFoldingCase<bool>(
+       Header() +
+           "; CHECK: [[ext:%\\w+]] = OpExtInstImport \"GLSL.std.450\"\n" +
+           "; CHECK: OpFunction\n" +
+           "; CHECK: [[x:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[y:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[a:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[lx:%\\w+]] = OpLoad {{%\\w+}} [[x]]\n" +
+           "; CHECK: [[ly:%\\w+]] = OpLoad {{%\\w+}} [[y]]\n" +
+           "; CHECK: [[la:%\\w+]] = OpLoad {{%\\w+}} [[a]]\n" +
+           "; CHECK: [[fma:%\\w+]] = OpExtInst {{%\\w+}} [[ext]] Fma [[lx]] [[ly]] [[la]]\n" +
+           "; CHECK: OpStore {{%\\w+}} [[fma]]\n" +
+           "%main = OpFunction %void None %void_func\n" +
+           "%main_lab = OpLabel\n" +
+           "%x = OpVariable %_ptr_float Function\n" +
+           "%y = OpVariable %_ptr_float Function\n" +
+           "%a = OpVariable %_ptr_float Function\n" +
+           "%lx = OpLoad %float %x\n" +
+           "%ly = OpLoad %float %y\n" +
+           "%mul = OpFMul %float %lx %ly\n" +
+           "%la = OpLoad %float %a\n" +
+           "%3 = OpFAdd %float %mul %la\n" +
+           "OpStore %a %3\n" +
+           "OpReturn\n" +
+           "OpFunctionEnd",
+       3, true),
+    // Test case 1:  a + (x * y) = Fma(x, y, a)
+   InstructionFoldingCase<bool>(
+       Header() +
+           "; CHECK: [[ext:%\\w+]] = OpExtInstImport \"GLSL.std.450\"\n" +
+           "; CHECK: OpFunction\n" +
+           "; CHECK: [[x:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[y:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[a:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[lx:%\\w+]] = OpLoad {{%\\w+}} [[x]]\n" +
+           "; CHECK: [[ly:%\\w+]] = OpLoad {{%\\w+}} [[y]]\n" +
+           "; CHECK: [[la:%\\w+]] = OpLoad {{%\\w+}} [[a]]\n" +
+           "; CHECK: [[fma:%\\w+]] = OpExtInst {{%\\w+}} [[ext]] Fma [[lx]] [[ly]] [[la]]\n" +
+           "; CHECK: OpStore {{%\\w+}} [[fma]]\n" +
+           "%main = OpFunction %void None %void_func\n" +
+           "%main_lab = OpLabel\n" +
+           "%x = OpVariable %_ptr_float Function\n" +
+           "%y = OpVariable %_ptr_float Function\n" +
+           "%a = OpVariable %_ptr_float Function\n" +
+           "%lx = OpLoad %float %x\n" +
+           "%ly = OpLoad %float %y\n" +
+           "%mul = OpFMul %float %lx %ly\n" +
+           "%la = OpLoad %float %a\n" +
+           "%3 = OpFAdd %float %la %mul\n" +
+           "OpStore %a %3\n" +
+           "OpReturn\n" +
+           "OpFunctionEnd",
+       3, true),
+   // Test case 2: (x * y) + a = Fma(x, y, a) with vectors
+   InstructionFoldingCase<bool>(
+       Header() +
+           "; CHECK: [[ext:%\\w+]] = OpExtInstImport \"GLSL.std.450\"\n" +
+           "; CHECK: OpFunction\n" +
+           "; CHECK: [[x:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[y:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[a:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[lx:%\\w+]] = OpLoad {{%\\w+}} [[x]]\n" +
+           "; CHECK: [[ly:%\\w+]] = OpLoad {{%\\w+}} [[y]]\n" +
+           "; CHECK: [[la:%\\w+]] = OpLoad {{%\\w+}} [[a]]\n" +
+           "; CHECK: [[fma:%\\w+]] = OpExtInst {{%\\w+}} [[ext]] Fma [[lx]] [[ly]] [[la]]\n" +
+           "; CHECK: OpStore {{%\\w+}} [[fma]]\n" +
+           "%main = OpFunction %void None %void_func\n" +
+           "%main_lab = OpLabel\n" +
+           "%x = OpVariable %_ptr_v4float Function\n" +
+           "%y = OpVariable %_ptr_v4float Function\n" +
+           "%a = OpVariable %_ptr_v4float Function\n" +
+           "%lx = OpLoad %v4float %x\n" +
+           "%ly = OpLoad %v4float %y\n" +
+           "%mul = OpFMul %v4float %lx %ly\n" +
+           "%la = OpLoad %v4float %a\n" +
+           "%3 = OpFAdd %v4float %mul %la\n" +
+           "OpStore %a %3\n" +
+           "OpReturn\n" +
+           "OpFunctionEnd",
+       3, true),
+    // Test case 3:  a + (x * y) = Fma(x, y, a) with vectors
+   InstructionFoldingCase<bool>(
+       Header() +
+           "; CHECK: [[ext:%\\w+]] = OpExtInstImport \"GLSL.std.450\"\n" +
+           "; CHECK: OpFunction\n" +
+           "; CHECK: [[x:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[y:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[a:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[lx:%\\w+]] = OpLoad {{%\\w+}} [[x]]\n" +
+           "; CHECK: [[ly:%\\w+]] = OpLoad {{%\\w+}} [[y]]\n" +
+           "; CHECK: [[la:%\\w+]] = OpLoad {{%\\w+}} [[a]]\n" +
+           "; CHECK: [[fma:%\\w+]] = OpExtInst {{%\\w+}} [[ext]] Fma [[lx]] [[ly]] [[la]]\n" +
+           "; CHECK: OpStore {{%\\w+}} [[fma]]\n" +
+           "%main = OpFunction %void None %void_func\n" +
+           "%main_lab = OpLabel\n" +
+           "%x = OpVariable %_ptr_float Function\n" +
+           "%y = OpVariable %_ptr_float Function\n" +
+           "%a = OpVariable %_ptr_float Function\n" +
+           "%lx = OpLoad %float %x\n" +
+           "%ly = OpLoad %float %y\n" +
+           "%mul = OpFMul %float %lx %ly\n" +
+           "%la = OpLoad %float %a\n" +
+           "%3 = OpFAdd %float %la %mul\n" +
+           "OpStore %a %3\n" +
+           "OpReturn\n" +
+           "OpFunctionEnd",
+       3, true),
+    // Test 5: that the OpExtInstImport instruction is generated if it is missing.
+   InstructionFoldingCase<bool>(
+           std::string() +
+           "; CHECK: [[ext:%\\w+]] = OpExtInstImport \"GLSL.std.450\"\n" +
+           "; CHECK: OpFunction\n" +
+           "; CHECK: [[x:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[y:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[a:%\\w+]] = OpVariable {{%\\w+}} Function\n" +
+           "; CHECK: [[lx:%\\w+]] = OpLoad {{%\\w+}} [[x]]\n" +
+           "; CHECK: [[ly:%\\w+]] = OpLoad {{%\\w+}} [[y]]\n" +
+           "; CHECK: [[la:%\\w+]] = OpLoad {{%\\w+}} [[a]]\n" +
+           "; CHECK: [[fma:%\\w+]] = OpExtInst {{%\\w+}} [[ext]] Fma [[lx]] [[ly]] [[la]]\n" +
+           "; CHECK: OpStore {{%\\w+}} [[fma]]\n" +
+           "OpCapability Shader\n" +
+           "OpMemoryModel Logical GLSL450\n" +
+           "OpEntryPoint Fragment %main \"main\"\n" +
+           "OpExecutionMode %main OriginUpperLeft\n" +
+           "OpSource GLSL 140\n" +
+           "OpName %main \"main\"\n" +
+           "%void = OpTypeVoid\n" +
+           "%void_func = OpTypeFunction %void\n" +
+           "%bool = OpTypeBool\n" +
+           "%float = OpTypeFloat 32\n" +
+           "%_ptr_float = OpTypePointer Function %float\n" +
+           "%main = OpFunction %void None %void_func\n" +
+           "%main_lab = OpLabel\n" +
+           "%x = OpVariable %_ptr_float Function\n" +
+           "%y = OpVariable %_ptr_float Function\n" +
+           "%a = OpVariable %_ptr_float Function\n" +
+           "%lx = OpLoad %float %x\n" +
+           "%ly = OpLoad %float %y\n" +
+           "%mul = OpFMul %float %lx %ly\n" +
+           "%la = OpLoad %float %a\n" +
+           "%3 = OpFAdd %float %mul %la\n" +
+           "OpStore %a %3\n" +
+           "OpReturn\n" +
+           "OpFunctionEnd",
+       3, true),
+   // Test 5: Don't fold if the multiple is marked no contract.
+   InstructionFoldingCase<bool>(
+       std::string() +
+           "OpCapability Shader\n" +
+           "OpMemoryModel Logical GLSL450\n" +
+           "OpEntryPoint Fragment %main \"main\"\n" +
+           "OpExecutionMode %main OriginUpperLeft\n" +
+           "OpSource GLSL 140\n" +
+           "OpName %main \"main\"\n" +
+           "OpDecorate %mul NoContraction\n" +
+           "%void = OpTypeVoid\n" +
+           "%void_func = OpTypeFunction %void\n" +
+           "%bool = OpTypeBool\n" +
+           "%float = OpTypeFloat 32\n" +
+           "%_ptr_float = OpTypePointer Function %float\n" +
+           "%main = OpFunction %void None %void_func\n" +
+           "%main_lab = OpLabel\n" +
+           "%x = OpVariable %_ptr_float Function\n" +
+           "%y = OpVariable %_ptr_float Function\n" +
+           "%a = OpVariable %_ptr_float Function\n" +
+           "%lx = OpLoad %float %x\n" +
+           "%ly = OpLoad %float %y\n" +
+           "%mul = OpFMul %float %lx %ly\n" +
+           "%la = OpLoad %float %a\n" +
+           "%3 = OpFAdd %float %mul %la\n" +
+           "OpStore %a %3\n" +
+           "OpReturn\n" +
+           "OpFunctionEnd",
+       3, false),
+       // Test 6: Don't fold if the add is marked no contract.
+       InstructionFoldingCase<bool>(
+           std::string() +
+               "OpCapability Shader\n" +
+               "OpMemoryModel Logical GLSL450\n" +
+               "OpEntryPoint Fragment %main \"main\"\n" +
+               "OpExecutionMode %main OriginUpperLeft\n" +
+               "OpSource GLSL 140\n" +
+               "OpName %main \"main\"\n" +
+               "OpDecorate %3 NoContraction\n" +
+               "%void = OpTypeVoid\n" +
+               "%void_func = OpTypeFunction %void\n" +
+               "%bool = OpTypeBool\n" +
+               "%float = OpTypeFloat 32\n" +
+               "%_ptr_float = OpTypePointer Function %float\n" +
+               "%main = OpFunction %void None %void_func\n" +
+               "%main_lab = OpLabel\n" +
+               "%x = OpVariable %_ptr_float Function\n" +
+               "%y = OpVariable %_ptr_float Function\n" +
+               "%a = OpVariable %_ptr_float Function\n" +
+               "%lx = OpLoad %float %x\n" +
+               "%ly = OpLoad %float %y\n" +
+               "%mul = OpFMul %float %lx %ly\n" +
+               "%la = OpLoad %float %a\n" +
+               "%3 = OpFAdd %float %mul %la\n" +
+               "OpStore %a %3\n" +
+               "OpReturn\n" +
+               "OpFunctionEnd",
+           3, false)
+));
+
 using MatchingInstructionWithNoResultFoldingTest =
 ::testing::TestWithParam<InstructionFoldingCase<bool>>;
 

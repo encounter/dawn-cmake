@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2020 The Khronos Group Inc.
+// Copyright (c) 2015-2022 The Khronos Group Inc.
 // Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights
 // reserved.
 //
@@ -528,6 +528,7 @@ bool spvOpcodeIsNonUniformGroupOperation(SpvOp opcode) {
     case SpvOpGroupNonUniformLogicalXor:
     case SpvOpGroupNonUniformQuadBroadcast:
     case SpvOpGroupNonUniformQuadSwap:
+    case SpvOpGroupNonUniformRotateKHR:
       return true;
     default:
       return false;
@@ -631,6 +632,7 @@ bool spvOpcodeIsDebug(SpvOp opcode) {
     case SpvOpString:
     case SpvOpLine:
     case SpvOpNoLine:
+    case SpvOpModuleProcessed:
       return true;
     default:
       return false;

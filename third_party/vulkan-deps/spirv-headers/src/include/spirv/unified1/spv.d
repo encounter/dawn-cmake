@@ -65,6 +65,7 @@ enum SourceLanguage : uint
     OpenCL_CPP = 4,
     HLSL = 5,
     CPP_for_OpenCL = 6,
+    SYCL = 7,
 }
 
 enum ExecutionModel : uint
@@ -179,6 +180,7 @@ enum ExecutionMode : uint
     NoGlobalOffsetINTEL = 5895,
     NumSIMDWorkitemsINTEL = 5896,
     SchedulerTargetFmaxMhzINTEL = 5903,
+    NamedBarrierCountINTEL = 6417,
 }
 
 enum StorageClass : uint
@@ -543,6 +545,8 @@ enum Decoration : uint
     PrefetchINTEL = 5902,
     StallEnableINTEL = 5905,
     FuseLoopsInFunctionINTEL = 5907,
+    AliasScopeINTEL = 5914,
+    NoAliasINTEL = 5915,
     BufferLocationINTEL = 5921,
     IOPipeStorageINTEL = 5944,
     FunctionFloatingPointModeINTEL = 6080,
@@ -674,6 +678,7 @@ enum BuiltIn : uint
     SMCountNV = 5375,
     WarpIDNV = 5376,
     SMIDNV = 5377,
+    CullMaskKHR = 6021,
 }
 
 enum SelectionControlShift : uint
@@ -805,6 +810,8 @@ enum MemoryAccessShift : uint
     MakePointerVisibleKHR = 4,
     NonPrivatePointer = 5,
     NonPrivatePointerKHR = 5,
+    AliasScopeINTELMask = 16,
+    NoAliasINTELMask = 17,
 }
 
 enum MemoryAccessMask : uint
@@ -819,6 +826,8 @@ enum MemoryAccessMask : uint
     MakePointerVisibleKHR = 0x00000010,
     NonPrivatePointer = 0x00000020,
     NonPrivatePointerKHR = 0x00000020,
+    AliasScopeINTELMask = 0x00010000,
+    NoAliasINTELMask = 0x00020000,
 }
 
 enum Scope : uint
@@ -1062,6 +1071,7 @@ enum Capability : uint
     FPGAMemoryAccessesINTEL = 5898,
     FPGAClusterAttributesINTEL = 5904,
     LoopFuseINTEL = 5906,
+    MemoryAccessAliasingINTEL = 5910,
     FPGABufferLocationINTEL = 5920,
     ArbitraryPrecisionFixedPointINTEL = 5922,
     USMStorageClassesINTEL = 5935,
@@ -1076,13 +1086,17 @@ enum Capability : uint
     DotProductInput4x8BitPackedKHR = 6018,
     DotProduct = 6019,
     DotProductKHR = 6019,
+    RayCullMaskKHR = 6020,
     BitInstructions = 6025,
+    GroupNonUniformRotateKHR = 6026,
     AtomicFloat32AddEXT = 6033,
     AtomicFloat64AddEXT = 6034,
     LongConstantCompositeINTEL = 6089,
     OptNoneINTEL = 6094,
     AtomicFloat16AddEXT = 6095,
     DebugInfoModuleINTEL = 6114,
+    SplitBarrierINTEL = 6141,
+    GroupUniformArithmeticKHR = 6400,
 }
 
 enum RayFlagsShift : uint
@@ -1540,6 +1554,7 @@ enum Op : uint
     OpSubgroupAllKHR = 4428,
     OpSubgroupAnyKHR = 4429,
     OpSubgroupAllEqualKHR = 4430,
+    OpGroupNonUniformRotateKHR = 4431,
     OpSubgroupReadInvocationKHR = 4432,
     OpTraceRayKHR = 4445,
     OpExecuteCallableKHR = 4446,
@@ -1806,6 +1821,9 @@ enum Op : uint
     OpArbitraryFloatPowRINTEL = 5881,
     OpArbitraryFloatPowNINTEL = 5882,
     OpLoopControlINTEL = 5887,
+    OpAliasDomainDeclINTEL = 5911,
+    OpAliasScopeDeclINTEL = 5912,
+    OpAliasScopeListDeclINTEL = 5913,
     OpFixedSqrtINTEL = 5923,
     OpFixedRecipINTEL = 5924,
     OpFixedRsqrtINTEL = 5925,
@@ -1844,6 +1862,16 @@ enum Op : uint
     OpTypeStructContinuedINTEL = 6090,
     OpConstantCompositeContinuedINTEL = 6091,
     OpSpecConstantCompositeContinuedINTEL = 6092,
+    OpControlBarrierArriveINTEL = 6142,
+    OpControlBarrierWaitINTEL = 6143,
+    OpGroupIMulKHR = 6401,
+    OpGroupFMulKHR = 6402,
+    OpGroupBitwiseAndKHR = 6403,
+    OpGroupBitwiseOrKHR = 6404,
+    OpGroupBitwiseXorKHR = 6405,
+    OpGroupLogicalAndKHR = 6406,
+    OpGroupLogicalOrKHR = 6407,
+    OpGroupLogicalXorKHR = 6408,
 }
 
 
