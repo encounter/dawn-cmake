@@ -20,7 +20,6 @@ rm -rf third_party/vulkan_memory_allocator
 rm -rf third_party/vulkan-deps/glslang
 rm -rf third_party/vulkan-deps/spirv-cross
 rm -rf third_party/vulkan-deps/vulkan-loader
-rm -rf third_party/vulkan-deps/vulkan-tools
 rm -rf third_party/vulkan-deps/vulkan-validation-layers
 rm -rf third_party/webgpu-cts
 rm -rf third_party/zlib
