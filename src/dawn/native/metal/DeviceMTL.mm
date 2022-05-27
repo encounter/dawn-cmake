@@ -163,6 +163,8 @@ void Device::InitTogglesFromDriver() {
             haveStoreAndMSAAResolve =
                 [*mMtlDevice supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v2];
         }
+#elif defined(DAWN_PLATFORM_TVOS)
+        haveStoreAndMSAAResolve = [*mMtlDevice supportsFeatureSet:MTLFeatureSet_tvOS_GPUFamily2_v1];
 #elif defined(DAWN_PLATFORM_IOS)
         haveStoreAndMSAAResolve = [*mMtlDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily3_v2];
 #endif
@@ -170,14 +172,19 @@ void Device::InitTogglesFromDriver() {
         SetToggle(Toggle::EmulateStoreAndMSAAResolve, !haveStoreAndMSAAResolve);
 
         bool haveSamplerCompare = true;
-#if defined(DAWN_PLATFORM_IOS)
+#if defined(DAWN_PLATFORM_TVOS)
+        haveSamplerCompare = [*mMtlDevice supportsFeatureSet:MTLFeatureSet_tvOS_GPUFamily2_v1];
+#elif defined(DAWN_PLATFORM_IOS)
         haveSamplerCompare = [*mMtlDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily3_v1];
 #endif
         // TODO(crbug.com/dawn/342): Investigate emulation -- possibly expensive.
         SetToggle(Toggle::MetalDisableSamplerCompare, !haveSamplerCompare);
 
         bool haveBaseVertexBaseInstance = true;
-#if defined(DAWN_PLATFORM_IOS)
+#if defined(DAWN_PLATFORM_TVOS)
+        haveBaseVertexBaseInstance =
+            [*mMtlDevice supportsFeatureSet:MTLFeatureSet_tvOS_GPUFamily2_v1];
+#elif defined(DAWN_PLATFORM_IOS)
         haveBaseVertexBaseInstance =
             [*mMtlDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily3_v1];
 #endif
@@ -201,7 +208,7 @@ void Device::InitTogglesFromDriver() {
     // TODO(crbug.com/dawn/847): Use MTLStorageModeShared instead of MTLStorageModePrivate when
     // creating MTLCounterSampleBuffer in QuerySet on Intel platforms, otherwise it fails to
     // create the buffer. Change to use MTLStorageModePrivate when the bug is fixed.
-    if (@available(macOS 10.15, iOS 14.0, *)) {
+    if (@available(macOS 10.15, iOS 14.0, tvOS 14.0, *)) {
         bool useSharedMode = gpu_info::IsIntel(vendorId);
         SetToggle(Toggle::MetalUseSharedModeForCounterSampleBuffer, useSharedMode);
     }

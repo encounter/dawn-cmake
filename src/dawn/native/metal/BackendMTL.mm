@@ -248,7 +248,7 @@ DAWN_NOINLINE bool IsGPUCounterSupported(id<MTLDevice> device,
         }
     }
 
-    if (@available(macOS 11.0, iOS 14.0, *)) {
+    if (@available(macOS 11.0, iOS 14.0, tvOS 14.0, *)) {
         // Check whether it can read GPU counters at the specified command boundary. Apple
         // family GPUs do not support sampling between different Metal commands, because
         // they defer fragment processing until after the GPU processes all the primitives
@@ -315,7 +315,7 @@ class Adapter : public AdapterBase {
             mSupportedFeatures.EnableFeature(Feature::TextureCompressionBC);
         }
 #endif
-#if defined(DAWN_PLATFORM_IOS)
+#if defined(DAWN_PLATFORM_IOS) && !defined(DAWN_PLATFORM_TVOS)
         if ([*mDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily1_v1]) {
             mSupportedFeatures.EnableFeature(Feature::TextureCompressionETC2);
         }
@@ -404,6 +404,14 @@ class Adapter : public AdapterBase {
     ResultOrError<MTLGPUFamily> GetMTLGPUFamily() const {
         // https://developer.apple.com/documentation/metal/mtldevice/detecting_gpu_features_and_metal_software_versions?language=objc
 
+#if defined(DAWN_PLATFORM_TVOS)
+        if ([*mDevice supportsFeatureSet:MTLFeatureSet_tvOS_GPUFamily2_v1]) {
+            return MTLGPUFamily::Apple3;
+        }
+        if ([*mDevice supportsFeatureSet:MTLFeatureSet_tvOS_GPUFamily1_v1]) {
+            return MTLGPUFamily::Apple2;
+        }
+#else
         if (@available(macOS 10.15, iOS 10.13, *)) {
             if ([*mDevice supportsFamily:MTLGPUFamilyMac2]) {
                 return MTLGPUFamily::Mac2;
@@ -433,6 +441,7 @@ class Adapter : public AdapterBase {
                 return MTLGPUFamily::Apple1;
             }
         }
+#endif
 
 #if TARGET_OS_OSX
         if (@available(macOS 10.14, *)) {

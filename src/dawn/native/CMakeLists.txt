@@ -355,9 +355,17 @@ if (DAWN_ENABLE_METAL)
         "metal/UtilsMetal.h"
         "metal/UtilsMetal.mm"
     )
+    if (NOT IOS AND NOT TVOS)
+        target_link_libraries(dawn_native PRIVATE
+            "-framework Cocoa"
+        )
+    endif ()
+    if (NOT TVOS)
+      target_link_libraries(dawn_native PRIVATE
+          "-framework IOKit"
+      )
+    endif ()
     target_link_libraries(dawn_native PRIVATE
-        "-framework Cocoa"
-        "-framework IOKit"
         "-framework IOSurface"
         "-framework QuartzCore"
         "-framework Metal"

@@ -86,7 +86,7 @@ MaybeError QuerySet::Initialize() {
             break;
         }
         case wgpu::QueryType::PipelineStatistics:
-            if (@available(macOS 10.15, iOS 14.0, *)) {
+            if (@available(macOS 10.15, iOS 14.0, tvOS 14.0, *)) {
                 DAWN_TRY_ASSIGN(mCounterSampleBuffer,
                                 CreateCounterSampleBuffer(device, MTLCommonCounterSetStatistic,
                                                           GetQueryCount()));
@@ -95,7 +95,7 @@ MaybeError QuerySet::Initialize() {
             }
             break;
         case wgpu::QueryType::Timestamp:
-            if (@available(macOS 10.15, iOS 14.0, *)) {
+            if (@available(macOS 10.15, iOS 14.0, tvOS 14.0, *)) {
                 DAWN_TRY_ASSIGN(mCounterSampleBuffer,
                                 CreateCounterSampleBuffer(device, MTLCommonCounterSetTimestamp,
                                                           GetQueryCount()));
@@ -129,7 +129,7 @@ void QuerySet::DestroyImpl() {
 
     // mCounterSampleBuffer isn't an NSRef because API_AVAILABLE doesn't work will with
     // templates.
-    if (@available(macOS 10.15, iOS 14.0, *)) {
+    if (@available(macOS 10.15, iOS 14.0, tvOS 14.0, *)) {
         [mCounterSampleBuffer release];
         mCounterSampleBuffer = nullptr;
     }
