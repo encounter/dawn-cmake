@@ -207,7 +207,7 @@ target_include_directories(dawn_internal_config INTERFACE
 target_link_libraries(dawn_internal_config INTERFACE dawn_public_config)
 
 # Compile definitions for the internal config
-if (DAWN_ALWAYS_ASSERT OR $<CONFIG:Debug>)
+if (DAWN_ALWAYS_ASSERT OR CMAKE_BUILD_TYPE STREQUAL Debug)
     target_compile_definitions(dawn_internal_config INTERFACE "DAWN_ENABLE_ASSERTS")
 endif()
 if (DAWN_ENABLE_D3D12)
