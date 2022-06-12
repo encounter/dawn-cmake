@@ -195,7 +195,12 @@ TextureViewBase* OldSwapChainBase::APIGetCurrentTextureView() {
 
     // Get the texture but remove the external refcount because it is never passed outside
     // of dawn_native
-    mCurrentTexture = AcquireRef(GetNextTextureImpl(&descriptor));
+    TextureBase* texture = GetNextTextureImpl(&descriptor);
+    if (texture == nullptr) {
+        // Swapchain out of date
+        return nullptr;
+    }
+    mCurrentTexture = AcquireRef(texture);
 
     mCurrentTextureView = mCurrentTexture->APICreateView();
     return mCurrentTextureView.Get();

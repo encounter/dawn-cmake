@@ -59,7 +59,9 @@ TextureBase* OldSwapChain::GetNextTextureImpl(const TextureDescriptor* descripto
     DawnSwapChainError error = im.GetNextTexture(im.userData, &next);
 
     if (error) {
-        GetDevice()->HandleError(InternalErrorType::Internal, error);
+        if (error != DAWN_SWAP_CHAIN_ERROR_OUT_OF_DATE) {
+            GetDevice()->HandleError(InternalErrorType::Internal, error);
+        }
         return nullptr;
     }
 

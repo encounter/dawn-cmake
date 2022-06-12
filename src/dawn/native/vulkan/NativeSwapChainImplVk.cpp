@@ -103,10 +103,10 @@ DawnSwapChainError NativeSwapChainImpl::Configure(WGPUTextureFormat format,
                                                   uint32_t height) {
     UpdateSurfaceConfig();
 
-    ASSERT(mInfo.capabilities.minImageExtent.width <= width);
-    ASSERT(mInfo.capabilities.maxImageExtent.width >= width);
-    ASSERT(mInfo.capabilities.minImageExtent.height <= height);
-    ASSERT(mInfo.capabilities.maxImageExtent.height >= height);
+//    ASSERT(mInfo.capabilities.minImageExtent.width <= width);
+//    ASSERT(mInfo.capabilities.maxImageExtent.width >= width);
+//    ASSERT(mInfo.capabilities.minImageExtent.height <= height);
+//    ASSERT(mInfo.capabilities.maxImageExtent.height >= height);
 
     ASSERT(format == static_cast<WGPUTextureFormat>(GetPreferredFormat()));
     // TODO(crbug.com/dawn/269): need to check usage works too
@@ -177,9 +177,12 @@ DawnSwapChainError NativeSwapChainImpl::GetNextTexture(DawnSwapChainNextTexture*
         }
     }
 
-    if (mDevice->fn.AcquireNextImageKHR(mDevice->GetVkDevice(), mSwapChain,
-                                        std::numeric_limits<uint64_t>::max(), semaphore, VkFence{},
-                                        &mLastImageIndex) != VK_SUCCESS) {
+    const auto result = mDevice->fn.AcquireNextImageKHR(
+        mDevice->GetVkDevice(), mSwapChain, std::numeric_limits<uint64_t>::max(), semaphore,
+        VkFence{}, &mLastImageIndex);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        return DAWN_SWAP_CHAIN_ERROR_OUT_OF_DATE;
+    } else if (result != VK_SUCCESS) {
         ASSERT(false);
     }
 
@@ -211,7 +214,8 @@ DawnSwapChainError NativeSwapChainImpl::Present() {
     presentInfo.pResults = nullptr;
 
     VkQueue queue = mDevice->GetQueue();
-    if (mDevice->fn.QueuePresentKHR(queue, &presentInfo) != VK_SUCCESS) {
+    const auto result = mDevice->fn.QueuePresentKHR(queue, &presentInfo);
+    if (result != VK_SUCCESS && result != VK_ERROR_OUT_OF_DATE_KHR) {
         ASSERT(false);
     }
 

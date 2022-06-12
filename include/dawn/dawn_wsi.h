@@ -20,6 +20,7 @@
 // Error message (or nullptr if there was no error)
 typedef const char* DawnSwapChainError;
 constexpr DawnSwapChainError DAWN_SWAP_CHAIN_NO_ERROR = nullptr;
+constexpr DawnSwapChainError DAWN_SWAP_CHAIN_ERROR_OUT_OF_DATE = "Out of date";
 
 typedef struct {
     /// Backend-specific texture id/name/pointer
