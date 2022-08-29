@@ -106,7 +106,7 @@ endif()
 
 # GLFW is not supported in UWP
 if ((WIN32 AND NOT WINDOWS_STORE) OR UNIX AND NOT ANDROID)
-    set(DAWN_SUPPORTS_GLFW_FOR_WINDOWING ON)
+    set(DAWN_SUPPORTS_GLFW_FOR_WINDOWING OFF)
 endif()
 
 # Current examples are depend on GLFW
