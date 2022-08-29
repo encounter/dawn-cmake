@@ -23,7 +23,11 @@ namespace dawn::native::opengl {
 
 class Adapter : public AdapterBase {
   public:
-    Adapter(InstanceBase* instance, wgpu::BackendType backendType);
+    Adapter(InstanceBase* instance,
+            wgpu::BackendType backendType,
+            void (*makeCurrent)(void*),
+            void (*destroy)(void*),
+            void* userData);
 
     MaybeError InitializeGLFunctions(void* (*getProc)(const char*));
 
@@ -40,6 +44,9 @@ class Adapter : public AdapterBase {
 
     OpenGLFunctions mFunctions;
     EGLFunctions mEGLFunctions;
+    void (*mMakeCurrent)(void*);
+    void (*mDestroy)(void*);
+    void* mUserData;
 };
 
 }  // namespace dawn::native::opengl

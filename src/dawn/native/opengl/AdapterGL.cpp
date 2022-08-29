@@ -21,6 +21,7 @@
 #include "dawn/common/GPUInfo.h"
 #include "dawn/native/Instance.h"
 #include "dawn/native/opengl/ContextEGL.h"
+#include "dawn/native/opengl/ContextExternal.h"
 #include "dawn/native/opengl/DeviceGL.h"
 
 namespace dawn::native::opengl {
@@ -53,12 +54,21 @@ uint32_t GetVendorIdFromVendors(const char* vendor) {
 
 }  // anonymous namespace
 
-Adapter::Adapter(InstanceBase* instance, wgpu::BackendType backendType)
-    : AdapterBase(instance, backendType) {}
+Adapter::Adapter(InstanceBase* instance,
+                 wgpu::BackendType backendType,
+                 void (*makeCurrent)(void*),
+                 void (*destroy)(void*),
+                 void* userData)
+    : AdapterBase(instance, backendType),
+      mMakeCurrent(makeCurrent),
+      mDestroy(destroy),
+      mUserData(userData) {}
 
 MaybeError Adapter::InitializeGLFunctions(void* (*getProc)(const char*)) {
-    // Use getProc to populate the dispatch table
-    mEGLFunctions.Init(getProc);
+    if (mMakeCurrent == nullptr) {
+        // Use getProc to populate the dispatch table
+        mEGLFunctions.Init(getProc);
+    }
     return mFunctions.Initialize(getProc);
 }
 
@@ -153,7 +163,11 @@ ResultOrError<Ref<DeviceBase>> Adapter::CreateDeviceImpl(const DeviceDescriptor*
     EGLenum api =
         GetBackendType() == wgpu::BackendType::OpenGL ? EGL_OPENGL_API : EGL_OPENGL_ES_API;
     std::unique_ptr<Device::Context> context;
-    DAWN_TRY_ASSIGN(context, ContextEGL::Create(mEGLFunctions, api));
+    if (mMakeCurrent != nullptr) {
+        DAWN_TRY_ASSIGN(context, ContextExternal::Create(mMakeCurrent, mDestroy, mUserData));
+    } else {
+        DAWN_TRY_ASSIGN(context, ContextEGL::Create(mEGLFunctions, api));
+    }
     return Device::Create(this, descriptor, mFunctions, std::move(context));
 }
 

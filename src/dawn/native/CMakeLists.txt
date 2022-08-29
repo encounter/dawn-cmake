@@ -444,6 +444,8 @@ if (DAWN_ENABLE_OPENGL)
         "opengl/ComputePipelineGL.h"
         "opengl/ContextEGL.cpp"
         "opengl/ContextEGL.h"
+        "opengl/ContextExternal.cpp"
+        "opengl/ContextExternal.h"
         "opengl/DeviceGL.cpp"
         "opengl/DeviceGL.h"
         "opengl/EGLFunctions.cpp"

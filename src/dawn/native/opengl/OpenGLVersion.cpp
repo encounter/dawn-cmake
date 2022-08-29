@@ -25,8 +25,16 @@ MaybeError OpenGLVersion::Initialize(GetProcAddress getProc) {
     if (getString == nullptr) {
         return DAWN_INTERNAL_ERROR("Couldn't load glGetString");
     }
+    PFNGLGETERRORPROC getError = reinterpret_cast<PFNGLGETERRORPROC>(getProc("glGetError"));
+    if (getError == nullptr) {
+        return DAWN_INTERNAL_ERROR("Couldn't load glGetError");
+    }
 
     const char* version = reinterpret_cast<const char*>(getString(GL_VERSION));
+    if (version == nullptr) {
+        GLenum error = getError();
+        return DAWN_INTERNAL_ERROR("glGetString failed: {}");
+    }
 
     if (strstr(version, "OpenGL ES") != nullptr) {
         // ES spec states that the GL_VERSION string will be in the following format:

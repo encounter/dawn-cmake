@@ -26,6 +26,10 @@ struct DAWN_NATIVE_EXPORT AdapterDiscoveryOptions : public AdapterDiscoveryOptio
     explicit AdapterDiscoveryOptions(WGPUBackendType type);
 
     void* (*getProc)(const char*);
+    // Context
+    void (*makeCurrent)(void*);
+    void (*destroy)(void*);
+    void* userData;
 };
 
 // TODO(crbug.com/dawn/810): This struct can be removed once Chrome is no longer using it.
