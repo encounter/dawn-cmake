@@ -33,11 +33,14 @@ jobs:
                 cxx: [ g++, clang++ ]
                 config: [ Debug, Release ]
                 os: [ ubuntu-18.04, ubuntu-20.04 ]
+                cube_wsi: [ XCB, XLIB, WAYLAND, DISPLAY ]
                 exclude:
                     - cc: gcc
                       cxx: clang++
                     - cc: clang
                       cxx: g++
+                    - os: ubuntu-18.04
+                      cube_wsi: WAYLAND
 
         steps:
             - uses: actions/checkout@v2
@@ -52,7 +55,7 @@ jobs:
               run: python scripts/update_deps.py --dir external
 
             - name: Generate build files
-              run: cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=${{matrix.config}} -Cexternal/helper.cmake
+              run: cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=${{matrix.config}} -DCUBE_WSI_SELECTION=${{matrix.cube_wsi}} -Cexternal/helper.cmake
               env:
                 CC: ${{matrix.cc}}
                 CXX: ${{matrix.cxx}}
@@ -150,8 +153,9 @@ jobs:
             - name: Setup Environment
               run: |
                   echo "ANDROID_SDK_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+                  echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> $GITHUB_ENV
                   echo "$ANDROID_SDK_ROOT/build-tools/31.0.0" >> $GITHUB_PATH
-                  echo "$ANDROID_NDK_ROOT" >> $GITHUB_PATH
+                  echo "$ANDROID_NDK_LATEST_HOME" >> $GITHUB_PATH
                   $ANDROID_SDK_ROOT/tools/bin/sdkmanager "platforms;android-23"
                   keytool -genkey -v -keystore $HOME/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "C=US, O=Android, CN=Android Debug"
             - name: Build vkcube

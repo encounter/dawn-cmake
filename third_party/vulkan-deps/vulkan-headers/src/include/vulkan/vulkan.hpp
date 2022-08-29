@@ -26,21 +26,11 @@
 #  error "vulkan.hpp needs at least c++ standard version 11"
 #endif
 
-#include <algorithm>
-#include <array>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <functional>
-#include <initializer_list>
-#include <sstream>
-#include <string>
-#include <system_error>
-#include <tuple>
-#include <type_traits>
+#include <array>   // ArrayWrapperND
+#include <string>  // std::string
 #include <vulkan/vulkan.h>
 #if 17 <= VULKAN_HPP_CPP_VERSION
-#  include <string_view>
+#  include <string_view>  // std::string_view
 #endif
 
 #if defined( VULKAN_HPP_DISABLE_ENHANCED_MODE )
@@ -48,8 +38,16 @@
 #    define VULKAN_HPP_NO_SMART_HANDLE
 #  endif
 #else
-#  include <memory>
-#  include <vector>
+#  include <tuple>   // std::tie
+#  include <vector>  // std::vector
+#endif
+
+#if !defined( VULKAN_HPP_NO_EXCEPTIONS )
+#  include <system_error>  // std::is_error_code_enum
+#endif
+
+#if !defined( VULKAN_HPP_NO_SMART_HANDLE )
+#  include <algorithm>  // std::transform
 #endif
 
 #if defined( VULKAN_HPP_NO_CONSTRUCTORS )
@@ -107,7 +105,7 @@ extern "C" __declspec( dllimport ) FARPROC __stdcall GetProcAddress( HINSTANCE h
 #  define __has_include( x ) false
 #endif
 
-#if ( 201711 <= __cpp_impl_three_way_comparison ) && __has_include( <compare> ) && !defined( VULKAN_HPP_NO_SPACESHIP_OPERATOR )
+#if ( 201907 <= __cpp_lib_three_way_comparison ) && __has_include( <compare> ) && !defined( VULKAN_HPP_NO_SPACESHIP_OPERATOR )
 #  define VULKAN_HPP_HAS_SPACESHIP_OPERATOR
 #endif
 #if defined( VULKAN_HPP_HAS_SPACESHIP_OPERATOR )
@@ -119,7 +117,7 @@ extern "C" __declspec( dllimport ) FARPROC __stdcall GetProcAddress( HINSTANCE h
 #  include <span>
 #endif
 
-static_assert( VK_HEADER_VERSION == 212, "Wrong VK_HEADER_VERSION!" );
+static_assert( VK_HEADER_VERSION == 225, "Wrong VK_HEADER_VERSION!" );
 
 // 32-bit vulkan is not typesafe for non-dispatchable handles, so don't allow copy constructors on this platform by default.
 // To enable this feature on 32-bit platforms please define VULKAN_HPP_TYPESAFE_CONVERSION
@@ -240,318 +238,6 @@ static_assert( VK_HEADER_VERSION == 212, "Wrong VK_HEADER_VERSION!" );
 
 namespace VULKAN_HPP_NAMESPACE
 {
-#if !defined( VULKAN_HPP_DISABLE_ENHANCED_MODE )
-  template <typename T>
-  class ArrayProxy
-  {
-  public:
-    VULKAN_HPP_CONSTEXPR ArrayProxy() VULKAN_HPP_NOEXCEPT
-      : m_count( 0 )
-      , m_ptr( nullptr )
-    {
-    }
-
-    VULKAN_HPP_CONSTEXPR ArrayProxy( std::nullptr_t ) VULKAN_HPP_NOEXCEPT
-      : m_count( 0 )
-      , m_ptr( nullptr )
-    {
-    }
-
-    ArrayProxy( T & value ) VULKAN_HPP_NOEXCEPT
-      : m_count( 1 )
-      , m_ptr( &value )
-    {
-    }
-
-    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxy( typename std::remove_const<T>::type & value ) VULKAN_HPP_NOEXCEPT
-      : m_count( 1 )
-      , m_ptr( &value )
-    {
-    }
-
-    ArrayProxy( uint32_t count, T * ptr ) VULKAN_HPP_NOEXCEPT
-      : m_count( count )
-      , m_ptr( ptr )
-    {
-    }
-
-    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxy( uint32_t count, typename std::remove_const<T>::type * ptr ) VULKAN_HPP_NOEXCEPT
-      : m_count( count )
-      , m_ptr( ptr )
-    {
-    }
-
-    template <std::size_t C>
-    ArrayProxy( T ( &ptr )[C] ) VULKAN_HPP_NOEXCEPT
-      : m_count( C )
-      , m_ptr( ptr )
-    {
-    }
-
-    template <std::size_t C, typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxy( typename std::remove_const<T>::type ( &ptr )[C] ) VULKAN_HPP_NOEXCEPT
-      : m_count( C )
-      , m_ptr( ptr )
-    {
-    }
-
-#  if __GNUC__ >= 9
-#    pragma GCC diagnostic push
-#    pragma GCC diagnostic ignored "-Winit-list-lifetime"
-#  endif
-
-    ArrayProxy( std::initializer_list<T> const & list ) VULKAN_HPP_NOEXCEPT
-      : m_count( static_cast<uint32_t>( list.size() ) )
-      , m_ptr( list.begin() )
-    {
-    }
-
-    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxy( std::initializer_list<typename std::remove_const<T>::type> const & list ) VULKAN_HPP_NOEXCEPT
-      : m_count( static_cast<uint32_t>( list.size() ) )
-      , m_ptr( list.begin() )
-    {
-    }
-
-    ArrayProxy( std::initializer_list<T> & list ) VULKAN_HPP_NOEXCEPT
-      : m_count( static_cast<uint32_t>( list.size() ) )
-      , m_ptr( list.begin() )
-    {
-    }
-
-    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxy( std::initializer_list<typename std::remove_const<T>::type> & list ) VULKAN_HPP_NOEXCEPT
-      : m_count( static_cast<uint32_t>( list.size() ) )
-      , m_ptr( list.begin() )
-    {
-    }
-
-#  if __GNUC__ >= 9
-#    pragma GCC diagnostic pop
-#  endif
-
-    // Any type with a .data() return type implicitly convertible to T*, and a .size() return type implicitly
-    // convertible to size_t. The const version can capture temporaries, with lifetime ending at end of statement.
-    template <typename V,
-              typename std::enable_if<std::is_convertible<decltype( std::declval<V>().data() ), T *>::value &&
-                                      std::is_convertible<decltype( std::declval<V>().size() ), std::size_t>::value>::type * = nullptr>
-    ArrayProxy( V const & v ) VULKAN_HPP_NOEXCEPT
-      : m_count( static_cast<uint32_t>( v.size() ) )
-      , m_ptr( v.data() )
-    {
-    }
-
-    template <typename V,
-              typename std::enable_if<std::is_convertible<decltype( std::declval<V>().data() ), T *>::value &&
-                                      std::is_convertible<decltype( std::declval<V>().size() ), std::size_t>::value>::type * = nullptr>
-    ArrayProxy( V & v ) VULKAN_HPP_NOEXCEPT
-      : m_count( static_cast<uint32_t>( v.size() ) )
-      , m_ptr( v.data() )
-    {
-    }
-
-    const T * begin() const VULKAN_HPP_NOEXCEPT
-    {
-      return m_ptr;
-    }
-
-    const T * end() const VULKAN_HPP_NOEXCEPT
-    {
-      return m_ptr + m_count;
-    }
-
-    const T & front() const VULKAN_HPP_NOEXCEPT
-    {
-      VULKAN_HPP_ASSERT( m_count && m_ptr );
-      return *m_ptr;
-    }
-
-    const T & back() const VULKAN_HPP_NOEXCEPT
-    {
-      VULKAN_HPP_ASSERT( m_count && m_ptr );
-      return *( m_ptr + m_count - 1 );
-    }
-
-    bool empty() const VULKAN_HPP_NOEXCEPT
-    {
-      return ( m_count == 0 );
-    }
-
-    uint32_t size() const VULKAN_HPP_NOEXCEPT
-    {
-      return m_count;
-    }
-
-    T * data() const VULKAN_HPP_NOEXCEPT
-    {
-      return m_ptr;
-    }
-
-  private:
-    uint32_t m_count;
-    T *      m_ptr;
-  };
-
-  template <typename T>
-  class ArrayProxyNoTemporaries
-  {
-  public:
-    VULKAN_HPP_CONSTEXPR ArrayProxyNoTemporaries() VULKAN_HPP_NOEXCEPT
-      : m_count( 0 )
-      , m_ptr( nullptr )
-    {
-    }
-
-    VULKAN_HPP_CONSTEXPR ArrayProxyNoTemporaries( std::nullptr_t ) VULKAN_HPP_NOEXCEPT
-      : m_count( 0 )
-      , m_ptr( nullptr )
-    {
-    }
-
-    ArrayProxyNoTemporaries( T & value ) VULKAN_HPP_NOEXCEPT
-      : m_count( 1 )
-      , m_ptr( &value )
-    {
-    }
-
-    template <typename V>
-    ArrayProxyNoTemporaries( V && value ) = delete;
-
-    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxyNoTemporaries( typename std::remove_const<T>::type & value ) VULKAN_HPP_NOEXCEPT
-      : m_count( 1 )
-      , m_ptr( &value )
-    {
-    }
-
-    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxyNoTemporaries( typename std::remove_const<T>::type && value ) = delete;
-
-    ArrayProxyNoTemporaries( uint32_t count, T * ptr ) VULKAN_HPP_NOEXCEPT
-      : m_count( count )
-      , m_ptr( ptr )
-    {
-    }
-
-    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxyNoTemporaries( uint32_t count, typename std::remove_const<T>::type * ptr ) VULKAN_HPP_NOEXCEPT
-      : m_count( count )
-      , m_ptr( ptr )
-    {
-    }
-
-    template <std::size_t C>
-    ArrayProxyNoTemporaries( T ( &ptr )[C] ) VULKAN_HPP_NOEXCEPT
-      : m_count( C )
-      , m_ptr( ptr )
-    {
-    }
-
-    template <std::size_t C>
-    ArrayProxyNoTemporaries( T( &&ptr )[C] ) = delete;
-
-    template <std::size_t C, typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxyNoTemporaries( typename std::remove_const<T>::type ( &ptr )[C] ) VULKAN_HPP_NOEXCEPT
-      : m_count( C )
-      , m_ptr( ptr )
-    {
-    }
-
-    template <std::size_t C, typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxyNoTemporaries( typename std::remove_const<T>::type( &&ptr )[C] ) = delete;
-
-    ArrayProxyNoTemporaries( std::initializer_list<T> const & list ) VULKAN_HPP_NOEXCEPT
-      : m_count( static_cast<uint32_t>( list.size() ) )
-      , m_ptr( list.begin() )
-    {
-    }
-
-    ArrayProxyNoTemporaries( std::initializer_list<T> const && list ) = delete;
-
-    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxyNoTemporaries( std::initializer_list<typename std::remove_const<T>::type> const & list ) VULKAN_HPP_NOEXCEPT
-      : m_count( static_cast<uint32_t>( list.size() ) )
-      , m_ptr( list.begin() )
-    {
-    }
-
-    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxyNoTemporaries( std::initializer_list<typename std::remove_const<T>::type> const && list ) = delete;
-
-    ArrayProxyNoTemporaries( std::initializer_list<T> & list ) VULKAN_HPP_NOEXCEPT
-      : m_count( static_cast<uint32_t>( list.size() ) )
-      , m_ptr( list.begin() )
-    {
-    }
-
-    ArrayProxyNoTemporaries( std::initializer_list<T> && list ) = delete;
-
-    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxyNoTemporaries( std::initializer_list<typename std::remove_const<T>::type> & list ) VULKAN_HPP_NOEXCEPT
-      : m_count( static_cast<uint32_t>( list.size() ) )
-      , m_ptr( list.begin() )
-    {
-    }
-
-    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
-    ArrayProxyNoTemporaries( std::initializer_list<typename std::remove_const<T>::type> && list ) = delete;
-
-    // Any type with a .data() return type implicitly convertible to T*, and a // .size() return type implicitly
-    // convertible to size_t.
-    template <typename V,
-              typename std::enable_if<std::is_convertible<decltype( std::declval<V>().data() ), T *>::value &&
-                                      std::is_convertible<decltype( std::declval<V>().size() ), std::size_t>::value>::type * = nullptr>
-    ArrayProxyNoTemporaries( V & v ) VULKAN_HPP_NOEXCEPT
-      : m_count( static_cast<uint32_t>( v.size() ) )
-      , m_ptr( v.data() )
-    {
-    }
-
-    const T * begin() const VULKAN_HPP_NOEXCEPT
-    {
-      return m_ptr;
-    }
-
-    const T * end() const VULKAN_HPP_NOEXCEPT
-    {
-      return m_ptr + m_count;
-    }
-
-    const T & front() const VULKAN_HPP_NOEXCEPT
-    {
-      VULKAN_HPP_ASSERT( m_count && m_ptr );
-      return *m_ptr;
-    }
-
-    const T & back() const VULKAN_HPP_NOEXCEPT
-    {
-      VULKAN_HPP_ASSERT( m_count && m_ptr );
-      return *( m_ptr + m_count - 1 );
-    }
-
-    bool empty() const VULKAN_HPP_NOEXCEPT
-    {
-      return ( m_count == 0 );
-    }
-
-    uint32_t size() const VULKAN_HPP_NOEXCEPT
-    {
-      return m_count;
-    }
-
-    T * data() const VULKAN_HPP_NOEXCEPT
-    {
-      return m_ptr;
-    }
-
-  private:
-    uint32_t m_count;
-    T *      m_ptr;
-  };
-#endif
-
   template <typename T, size_t N>
   class ArrayWrapper1D : public std::array<T, N>
   {
@@ -871,6 +557,317 @@ namespace VULKAN_HPP_NAMESPACE
     return flags.operator^( bit );
   }
 
+#if !defined( VULKAN_HPP_DISABLE_ENHANCED_MODE )
+  template <typename T>
+  class ArrayProxy
+  {
+  public:
+    VULKAN_HPP_CONSTEXPR ArrayProxy() VULKAN_HPP_NOEXCEPT
+      : m_count( 0 )
+      , m_ptr( nullptr )
+    {
+    }
+
+    VULKAN_HPP_CONSTEXPR ArrayProxy( std::nullptr_t ) VULKAN_HPP_NOEXCEPT
+      : m_count( 0 )
+      , m_ptr( nullptr )
+    {
+    }
+
+    ArrayProxy( T & value ) VULKAN_HPP_NOEXCEPT
+      : m_count( 1 )
+      , m_ptr( &value )
+    {
+    }
+
+    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxy( typename std::remove_const<T>::type & value ) VULKAN_HPP_NOEXCEPT
+      : m_count( 1 )
+      , m_ptr( &value )
+    {
+    }
+
+    ArrayProxy( uint32_t count, T * ptr ) VULKAN_HPP_NOEXCEPT
+      : m_count( count )
+      , m_ptr( ptr )
+    {
+    }
+
+    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxy( uint32_t count, typename std::remove_const<T>::type * ptr ) VULKAN_HPP_NOEXCEPT
+      : m_count( count )
+      , m_ptr( ptr )
+    {
+    }
+
+    template <std::size_t C>
+    ArrayProxy( T ( &ptr )[C] ) VULKAN_HPP_NOEXCEPT
+      : m_count( C )
+      , m_ptr( ptr )
+    {
+    }
+
+    template <std::size_t C, typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxy( typename std::remove_const<T>::type ( &ptr )[C] ) VULKAN_HPP_NOEXCEPT
+      : m_count( C )
+      , m_ptr( ptr )
+    {
+    }
+
+#  if __GNUC__ >= 9
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Winit-list-lifetime"
+#  endif
+
+    ArrayProxy( std::initializer_list<T> const & list ) VULKAN_HPP_NOEXCEPT
+      : m_count( static_cast<uint32_t>( list.size() ) )
+      , m_ptr( list.begin() )
+    {
+    }
+
+    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxy( std::initializer_list<typename std::remove_const<T>::type> const & list ) VULKAN_HPP_NOEXCEPT
+      : m_count( static_cast<uint32_t>( list.size() ) )
+      , m_ptr( list.begin() )
+    {
+    }
+
+    ArrayProxy( std::initializer_list<T> & list ) VULKAN_HPP_NOEXCEPT
+      : m_count( static_cast<uint32_t>( list.size() ) )
+      , m_ptr( list.begin() )
+    {
+    }
+
+    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxy( std::initializer_list<typename std::remove_const<T>::type> & list ) VULKAN_HPP_NOEXCEPT
+      : m_count( static_cast<uint32_t>( list.size() ) )
+      , m_ptr( list.begin() )
+    {
+    }
+
+#  if __GNUC__ >= 9
+#    pragma GCC diagnostic pop
+#  endif
+
+    // Any type with a .data() return type implicitly convertible to T*, and a .size() return type implicitly
+    // convertible to size_t. The const version can capture temporaries, with lifetime ending at end of statement.
+    template <typename V,
+              typename std::enable_if<std::is_convertible<decltype( std::declval<V>().data() ), T *>::value &&
+                                      std::is_convertible<decltype( std::declval<V>().size() ), std::size_t>::value>::type * = nullptr>
+    ArrayProxy( V const & v ) VULKAN_HPP_NOEXCEPT
+      : m_count( static_cast<uint32_t>( v.size() ) )
+      , m_ptr( v.data() )
+    {
+    }
+
+    template <typename V,
+              typename std::enable_if<std::is_convertible<decltype( std::declval<V>().data() ), T *>::value &&
+                                      std::is_convertible<decltype( std::declval<V>().size() ), std::size_t>::value>::type * = nullptr>
+    ArrayProxy( V & v ) VULKAN_HPP_NOEXCEPT
+      : m_count( static_cast<uint32_t>( v.size() ) )
+      , m_ptr( v.data() )
+    {
+    }
+
+    const T * begin() const VULKAN_HPP_NOEXCEPT
+    {
+      return m_ptr;
+    }
+
+    const T * end() const VULKAN_HPP_NOEXCEPT
+    {
+      return m_ptr + m_count;
+    }
+
+    const T & front() const VULKAN_HPP_NOEXCEPT
+    {
+      VULKAN_HPP_ASSERT( m_count && m_ptr );
+      return *m_ptr;
+    }
+
+    const T & back() const VULKAN_HPP_NOEXCEPT
+    {
+      VULKAN_HPP_ASSERT( m_count && m_ptr );
+      return *( m_ptr + m_count - 1 );
+    }
+
+    bool empty() const VULKAN_HPP_NOEXCEPT
+    {
+      return ( m_count == 0 );
+    }
+
+    uint32_t size() const VULKAN_HPP_NOEXCEPT
+    {
+      return m_count;
+    }
+
+    T * data() const VULKAN_HPP_NOEXCEPT
+    {
+      return m_ptr;
+    }
+
+  private:
+    uint32_t m_count;
+    T *      m_ptr;
+  };
+
+  template <typename T>
+  class ArrayProxyNoTemporaries
+  {
+  public:
+    VULKAN_HPP_CONSTEXPR ArrayProxyNoTemporaries() VULKAN_HPP_NOEXCEPT
+      : m_count( 0 )
+      , m_ptr( nullptr )
+    {
+    }
+
+    VULKAN_HPP_CONSTEXPR ArrayProxyNoTemporaries( std::nullptr_t ) VULKAN_HPP_NOEXCEPT
+      : m_count( 0 )
+      , m_ptr( nullptr )
+    {
+    }
+
+    ArrayProxyNoTemporaries( T & value ) VULKAN_HPP_NOEXCEPT
+      : m_count( 1 )
+      , m_ptr( &value )
+    {
+    }
+
+    template <typename V>
+    ArrayProxyNoTemporaries( V && value ) = delete;
+
+    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxyNoTemporaries( typename std::remove_const<T>::type & value ) VULKAN_HPP_NOEXCEPT
+      : m_count( 1 )
+      , m_ptr( &value )
+    {
+    }
+
+    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxyNoTemporaries( typename std::remove_const<T>::type && value ) = delete;
+
+    ArrayProxyNoTemporaries( uint32_t count, T * ptr ) VULKAN_HPP_NOEXCEPT
+      : m_count( count )
+      , m_ptr( ptr )
+    {
+    }
+
+    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxyNoTemporaries( uint32_t count, typename std::remove_const<T>::type * ptr ) VULKAN_HPP_NOEXCEPT
+      : m_count( count )
+      , m_ptr( ptr )
+    {
+    }
+
+    template <std::size_t C>
+    ArrayProxyNoTemporaries( T ( &ptr )[C] ) VULKAN_HPP_NOEXCEPT
+      : m_count( C )
+      , m_ptr( ptr )
+    {
+    }
+
+    template <std::size_t C>
+    ArrayProxyNoTemporaries( T( &&ptr )[C] ) = delete;
+
+    template <std::size_t C, typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxyNoTemporaries( typename std::remove_const<T>::type ( &ptr )[C] ) VULKAN_HPP_NOEXCEPT
+      : m_count( C )
+      , m_ptr( ptr )
+    {
+    }
+
+    template <std::size_t C, typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxyNoTemporaries( typename std::remove_const<T>::type( &&ptr )[C] ) = delete;
+
+    ArrayProxyNoTemporaries( std::initializer_list<T> const & list ) VULKAN_HPP_NOEXCEPT
+      : m_count( static_cast<uint32_t>( list.size() ) )
+      , m_ptr( list.begin() )
+    {
+    }
+
+    ArrayProxyNoTemporaries( std::initializer_list<T> const && list ) = delete;
+
+    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxyNoTemporaries( std::initializer_list<typename std::remove_const<T>::type> const & list ) VULKAN_HPP_NOEXCEPT
+      : m_count( static_cast<uint32_t>( list.size() ) )
+      , m_ptr( list.begin() )
+    {
+    }
+
+    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxyNoTemporaries( std::initializer_list<typename std::remove_const<T>::type> const && list ) = delete;
+
+    ArrayProxyNoTemporaries( std::initializer_list<T> & list ) VULKAN_HPP_NOEXCEPT
+      : m_count( static_cast<uint32_t>( list.size() ) )
+      , m_ptr( list.begin() )
+    {
+    }
+
+    ArrayProxyNoTemporaries( std::initializer_list<T> && list ) = delete;
+
+    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxyNoTemporaries( std::initializer_list<typename std::remove_const<T>::type> & list ) VULKAN_HPP_NOEXCEPT
+      : m_count( static_cast<uint32_t>( list.size() ) )
+      , m_ptr( list.begin() )
+    {
+    }
+
+    template <typename B = T, typename std::enable_if<std::is_const<B>::value, int>::type = 0>
+    ArrayProxyNoTemporaries( std::initializer_list<typename std::remove_const<T>::type> && list ) = delete;
+
+    // Any type with a .data() return type implicitly convertible to T*, and a // .size() return type implicitly
+    // convertible to size_t.
+    template <typename V,
+              typename std::enable_if<std::is_convertible<decltype( std::declval<V>().data() ), T *>::value &&
+                                      std::is_convertible<decltype( std::declval<V>().size() ), std::size_t>::value>::type * = nullptr>
+    ArrayProxyNoTemporaries( V & v ) VULKAN_HPP_NOEXCEPT
+      : m_count( static_cast<uint32_t>( v.size() ) )
+      , m_ptr( v.data() )
+    {
+    }
+
+    const T * begin() const VULKAN_HPP_NOEXCEPT
+    {
+      return m_ptr;
+    }
+
+    const T * end() const VULKAN_HPP_NOEXCEPT
+    {
+      return m_ptr + m_count;
+    }
+
+    const T & front() const VULKAN_HPP_NOEXCEPT
+    {
+      VULKAN_HPP_ASSERT( m_count && m_ptr );
+      return *m_ptr;
+    }
+
+    const T & back() const VULKAN_HPP_NOEXCEPT
+    {
+      VULKAN_HPP_ASSERT( m_count && m_ptr );
+      return *( m_ptr + m_count - 1 );
+    }
+
+    bool empty() const VULKAN_HPP_NOEXCEPT
+    {
+      return ( m_count == 0 );
+    }
+
+    uint32_t size() const VULKAN_HPP_NOEXCEPT
+    {
+      return m_count;
+    }
+
+    T * data() const VULKAN_HPP_NOEXCEPT
+    {
+      return m_ptr;
+    }
+
+  private:
+    uint32_t m_count;
+    T *      m_ptr;
+  };
+
   template <typename RefType>
   class Optional
   {
@@ -1141,7 +1138,7 @@ namespace VULKAN_HPP_NAMESPACE
     }
   };
 
-#if !defined( VULKAN_HPP_NO_SMART_HANDLE )
+#  if !defined( VULKAN_HPP_NO_SMART_HANDLE )
   template <typename Type, typename Dispatch>
   class UniqueHandleTraits;
 
@@ -1264,7 +1261,8 @@ namespace VULKAN_HPP_NAMESPACE
   {
     lhs.swap( rhs );
   }
-#endif
+#  endif
+#endif  // VULKAN_HPP_DISABLE_ENHANCED_MODE
 
   class DispatchLoaderBase
   {
@@ -3031,9 +3029,9 @@ namespace VULKAN_HPP_NAMESPACE
 #  if defined( VK_ENABLE_BETA_EXTENSIONS )
     //=== VK_KHR_video_queue ===
 
-    VkResult vkGetPhysicalDeviceVideoCapabilitiesKHR( VkPhysicalDevice          physicalDevice,
-                                                      const VkVideoProfileKHR * pVideoProfile,
-                                                      VkVideoCapabilitiesKHR *  pCapabilities ) const VULKAN_HPP_NOEXCEPT
+    VkResult vkGetPhysicalDeviceVideoCapabilitiesKHR( VkPhysicalDevice              physicalDevice,
+                                                      const VkVideoProfileInfoKHR * pVideoProfile,
+                                                      VkVideoCapabilitiesKHR *      pCapabilities ) const VULKAN_HPP_NOEXCEPT
     {
       return ::vkGetPhysicalDeviceVideoCapabilitiesKHR( physicalDevice, pVideoProfile, pCapabilities );
     }
@@ -3059,20 +3057,20 @@ namespace VULKAN_HPP_NAMESPACE
       return ::vkDestroyVideoSessionKHR( device, videoSession, pAllocator );
     }
 
-    VkResult vkGetVideoSessionMemoryRequirementsKHR( VkDevice                        device,
-                                                     VkVideoSessionKHR               videoSession,
-                                                     uint32_t *                      pVideoSessionMemoryRequirementsCount,
-                                                     VkVideoGetMemoryPropertiesKHR * pVideoSessionMemoryRequirements ) const VULKAN_HPP_NOEXCEPT
+    VkResult vkGetVideoSessionMemoryRequirementsKHR( VkDevice                              device,
+                                                     VkVideoSessionKHR                     videoSession,
+                                                     uint32_t *                            pMemoryRequirementsCount,
+                                                     VkVideoSessionMemoryRequirementsKHR * pMemoryRequirements ) const VULKAN_HPP_NOEXCEPT
     {
-      return ::vkGetVideoSessionMemoryRequirementsKHR( device, videoSession, pVideoSessionMemoryRequirementsCount, pVideoSessionMemoryRequirements );
+      return ::vkGetVideoSessionMemoryRequirementsKHR( device, videoSession, pMemoryRequirementsCount, pMemoryRequirements );
     }
 
-    VkResult vkBindVideoSessionMemoryKHR( VkDevice                     device,
-                                          VkVideoSessionKHR            videoSession,
-                                          uint32_t                     videoSessionBindMemoryCount,
-                                          const VkVideoBindMemoryKHR * pVideoSessionBindMemories ) const VULKAN_HPP_NOEXCEPT
+    VkResult vkBindVideoSessionMemoryKHR( VkDevice                                device,
+                                          VkVideoSessionKHR                       videoSession,
+                                          uint32_t                                bindSessionMemoryInfoCount,
+                                          const VkBindVideoSessionMemoryInfoKHR * pBindSessionMemoryInfos ) const VULKAN_HPP_NOEXCEPT
     {
-      return ::vkBindVideoSessionMemoryKHR( device, videoSession, videoSessionBindMemoryCount, pVideoSessionBindMemories );
+      return ::vkBindVideoSessionMemoryKHR( device, videoSession, bindSessionMemoryInfoCount, pBindSessionMemoryInfos );
     }
 
     VkResult vkCreateVideoSessionParametersKHR( VkDevice                                      device,
@@ -4853,6 +4851,15 @@ namespace VULKAN_HPP_NAMESPACE
     }
 #  endif /*VK_ENABLE_BETA_EXTENSIONS*/
 
+#  if defined( VK_USE_PLATFORM_METAL_EXT )
+    //=== VK_EXT_metal_objects ===
+
+    void vkExportMetalObjectsEXT( VkDevice device, VkExportMetalObjectsInfoEXT * pMetalObjectsInfo ) const VULKAN_HPP_NOEXCEPT
+    {
+      return ::vkExportMetalObjectsEXT( device, pMetalObjectsInfo );
+    }
+#  endif /*VK_USE_PLATFORM_METAL_EXT*/
+
     //=== VK_KHR_synchronization2 ===
 
     void vkCmdSetEvent2KHR( VkCommandBuffer commandBuffer, VkEvent event, const VkDependencyInfo * pDependencyInfo ) const VULKAN_HPP_NOEXCEPT
@@ -4938,6 +4945,16 @@ namespace VULKAN_HPP_NAMESPACE
     void vkCmdResolveImage2KHR( VkCommandBuffer commandBuffer, const VkResolveImageInfo2 * pResolveImageInfo ) const VULKAN_HPP_NOEXCEPT
     {
       return ::vkCmdResolveImage2KHR( commandBuffer, pResolveImageInfo );
+    }
+
+    //=== VK_EXT_image_compression_control ===
+
+    void vkGetImageSubresourceLayout2EXT( VkDevice                       device,
+                                          VkImage                        image,
+                                          const VkImageSubresource2EXT * pSubresource,
+                                          VkSubresourceLayout2EXT *      pLayout ) const VULKAN_HPP_NOEXCEPT
+    {
+      return ::vkGetImageSubresourceLayout2EXT( device, image, pSubresource, pLayout );
     }
 
 #  if defined( VK_USE_PLATFORM_WIN32_KHR )
@@ -5151,6 +5168,14 @@ namespace VULKAN_HPP_NAMESPACE
       return ::vkGetMemoryRemoteAddressNV( device, pMemoryGetRemoteAddressInfo, pAddress );
     }
 
+    //=== VK_EXT_pipeline_properties ===
+
+    VkResult
+      vkGetPipelinePropertiesEXT( VkDevice device, const VkPipelineInfoEXT * pPipelineInfo, VkBaseOutStructure * pPipelineProperties ) const VULKAN_HPP_NOEXCEPT
+    {
+      return ::vkGetPipelinePropertiesEXT( device, pPipelineInfo, pPipelineProperties );
+    }
+
     //=== VK_EXT_extended_dynamic_state2 ===
 
     void vkCmdSetPatchControlPointsEXT( VkCommandBuffer commandBuffer, uint32_t patchControlPoints ) const VULKAN_HPP_NOEXCEPT
@@ -5202,6 +5227,13 @@ namespace VULKAN_HPP_NAMESPACE
     void vkCmdSetColorWriteEnableEXT( VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkBool32 * pColorWriteEnables ) const VULKAN_HPP_NOEXCEPT
     {
       return ::vkCmdSetColorWriteEnableEXT( commandBuffer, attachmentCount, pColorWriteEnables );
+    }
+
+    //=== VK_KHR_ray_tracing_maintenance1 ===
+
+    void vkCmdTraceRaysIndirect2KHR( VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress ) const VULKAN_HPP_NOEXCEPT
+    {
+      return ::vkCmdTraceRaysIndirect2KHR( commandBuffer, indirectDeviceAddress );
     }
 
     //=== VK_EXT_multi_draw ===
@@ -5270,6 +5302,37 @@ namespace VULKAN_HPP_NAMESPACE
     void vkGetDescriptorSetHostMappingVALVE( VkDevice device, VkDescriptorSet descriptorSet, void ** ppData ) const VULKAN_HPP_NOEXCEPT
     {
       return ::vkGetDescriptorSetHostMappingVALVE( device, descriptorSet, ppData );
+    }
+
+    //=== VK_EXT_shader_module_identifier ===
+
+    void vkGetShaderModuleIdentifierEXT( VkDevice device, VkShaderModule shaderModule, VkShaderModuleIdentifierEXT * pIdentifier ) const VULKAN_HPP_NOEXCEPT
+    {
+      return ::vkGetShaderModuleIdentifierEXT( device, shaderModule, pIdentifier );
+    }
+
+    void vkGetShaderModuleCreateInfoIdentifierEXT( VkDevice                         device,
+                                                   const VkShaderModuleCreateInfo * pCreateInfo,
+                                                   VkShaderModuleIdentifierEXT *    pIdentifier ) const VULKAN_HPP_NOEXCEPT
+    {
+      return ::vkGetShaderModuleCreateInfoIdentifierEXT( device, pCreateInfo, pIdentifier );
+    }
+
+    //=== VK_QCOM_tile_properties ===
+
+    VkResult vkGetFramebufferTilePropertiesQCOM( VkDevice               device,
+                                                 VkFramebuffer          framebuffer,
+                                                 uint32_t *             pPropertiesCount,
+                                                 VkTilePropertiesQCOM * pProperties ) const VULKAN_HPP_NOEXCEPT
+    {
+      return ::vkGetFramebufferTilePropertiesQCOM( device, framebuffer, pPropertiesCount, pProperties );
+    }
+
+    VkResult vkGetDynamicRenderingTilePropertiesQCOM( VkDevice                device,
+                                                      const VkRenderingInfo * pRenderingInfo,
+                                                      VkTilePropertiesQCOM *  pProperties ) const VULKAN_HPP_NOEXCEPT
+    {
+      return ::vkGetDynamicRenderingTilePropertiesQCOM( device, pRenderingInfo, pProperties );
     }
   };
 #endif
@@ -5344,6 +5407,7 @@ namespace VULKAN_HPP_NAMESPACE
 #  define VULKAN_HPP_DEFAULT_DISPATCHER_ASSIGNMENT       = VULKAN_HPP_DEFAULT_DISPATCHER
 #endif
 
+#if !defined( VULKAN_HPP_NO_SMART_HANDLE )
   struct AllocationCallbacks;
 
   template <typename OwnerType, typename Dispatch>
@@ -5521,6 +5585,8 @@ namespace VULKAN_HPP_NAMESPACE
     Dispatch const * m_dispatch = nullptr;
   };
 
+#endif  // !VULKAN_HPP_NO_SMART_HANDLE
+
   //==================
   //=== BASE TYPEs ===
   //==================
@@ -5534,6 +5600,9 @@ namespace VULKAN_HPP_NAMESPACE
 }  // namespace VULKAN_HPP_NAMESPACE
 
 #include <vulkan/vulkan_enums.hpp>
+#if !defined( VULKAN_HPP_NO_TO_STRING )
+#  include <vulkan/vulkan_to_string.hpp>
+#endif
 
 #ifndef VULKAN_HPP_NO_EXCEPTIONS
 namespace std
@@ -5548,7 +5617,6 @@ namespace std
 namespace VULKAN_HPP_NAMESPACE
 {
 #ifndef VULKAN_HPP_NO_EXCEPTIONS
-
   class ErrorCategoryImpl : public std::error_category
   {
   public:
@@ -5558,7 +5626,11 @@ namespace VULKAN_HPP_NAMESPACE
     }
     virtual std::string message( int ev ) const override
     {
-      return to_string( static_cast<Result>( ev ) );
+#  if defined( VULKAN_HPP_NO_TO_STRING )
+      return std::to_string( ev );
+#  else
+      return VULKAN_HPP_NAMESPACE::to_string( static_cast<VULKAN_HPP_NAMESPACE::Result>( ev ) );
+#  endif
     }
   };
 
@@ -5781,6 +5853,81 @@ namespace VULKAN_HPP_NAMESPACE
     InvalidShaderNVError( char const * message ) : SystemError( make_error_code( Result::eErrorInvalidShaderNV ), message ) {}
   };
 
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
+  class ImageUsageNotSupportedKHRError : public SystemError
+  {
+  public:
+    ImageUsageNotSupportedKHRError( std::string const & message ) : SystemError( make_error_code( Result::eErrorImageUsageNotSupportedKHR ), message ) {}
+    ImageUsageNotSupportedKHRError( char const * message ) : SystemError( make_error_code( Result::eErrorImageUsageNotSupportedKHR ), message ) {}
+  };
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
+
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
+  class VideoPictureLayoutNotSupportedKHRError : public SystemError
+  {
+  public:
+    VideoPictureLayoutNotSupportedKHRError( std::string const & message )
+      : SystemError( make_error_code( Result::eErrorVideoPictureLayoutNotSupportedKHR ), message )
+    {
+    }
+    VideoPictureLayoutNotSupportedKHRError( char const * message ) : SystemError( make_error_code( Result::eErrorVideoPictureLayoutNotSupportedKHR ), message )
+    {
+    }
+  };
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
+
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
+  class VideoProfileOperationNotSupportedKHRError : public SystemError
+  {
+  public:
+    VideoProfileOperationNotSupportedKHRError( std::string const & message )
+      : SystemError( make_error_code( Result::eErrorVideoProfileOperationNotSupportedKHR ), message )
+    {
+    }
+    VideoProfileOperationNotSupportedKHRError( char const * message )
+      : SystemError( make_error_code( Result::eErrorVideoProfileOperationNotSupportedKHR ), message )
+    {
+    }
+  };
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
+
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
+  class VideoProfileFormatNotSupportedKHRError : public SystemError
+  {
+  public:
+    VideoProfileFormatNotSupportedKHRError( std::string const & message )
+      : SystemError( make_error_code( Result::eErrorVideoProfileFormatNotSupportedKHR ), message )
+    {
+    }
+    VideoProfileFormatNotSupportedKHRError( char const * message ) : SystemError( make_error_code( Result::eErrorVideoProfileFormatNotSupportedKHR ), message )
+    {
+    }
+  };
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
+
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
+  class VideoProfileCodecNotSupportedKHRError : public SystemError
+  {
+  public:
+    VideoProfileCodecNotSupportedKHRError( std::string const & message )
+      : SystemError( make_error_code( Result::eErrorVideoProfileCodecNotSupportedKHR ), message )
+    {
+    }
+    VideoProfileCodecNotSupportedKHRError( char const * message ) : SystemError( make_error_code( Result::eErrorVideoProfileCodecNotSupportedKHR ), message ) {}
+  };
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
+
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
+  class VideoStdVersionNotSupportedKHRError : public SystemError
+  {
+  public:
+    VideoStdVersionNotSupportedKHRError( std::string const & message ) : SystemError( make_error_code( Result::eErrorVideoStdVersionNotSupportedKHR ), message )
+    {
+    }
+    VideoStdVersionNotSupportedKHRError( char const * message ) : SystemError( make_error_code( Result::eErrorVideoStdVersionNotSupportedKHR ), message ) {}
+  };
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
+
   class InvalidDrmFormatModifierPlaneLayoutEXTError : public SystemError
   {
   public:
@@ -5812,6 +5959,13 @@ namespace VULKAN_HPP_NAMESPACE
   };
 #  endif /*VK_USE_PLATFORM_WIN32_KHR*/
 
+  class CompressionExhaustedEXTError : public SystemError
+  {
+  public:
+    CompressionExhaustedEXTError( std::string const & message ) : SystemError( make_error_code( Result::eErrorCompressionExhaustedEXT ), message ) {}
+    CompressionExhaustedEXTError( char const * message ) : SystemError( make_error_code( Result::eErrorCompressionExhaustedEXT ), message ) {}
+  };
+
   namespace
   {
     [[noreturn]] void throwResultException( Result result, char const * message )
@@ -5841,11 +5995,30 @@ namespace VULKAN_HPP_NAMESPACE
         case Result::eErrorIncompatibleDisplayKHR: throw IncompatibleDisplayKHRError( message );
         case Result::eErrorValidationFailedEXT: throw ValidationFailedEXTError( message );
         case Result::eErrorInvalidShaderNV: throw InvalidShaderNVError( message );
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
+        case Result::eErrorImageUsageNotSupportedKHR: throw ImageUsageNotSupportedKHRError( message );
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
+        case Result::eErrorVideoPictureLayoutNotSupportedKHR: throw VideoPictureLayoutNotSupportedKHRError( message );
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
+        case Result::eErrorVideoProfileOperationNotSupportedKHR: throw VideoProfileOperationNotSupportedKHRError( message );
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
+        case Result::eErrorVideoProfileFormatNotSupportedKHR: throw VideoProfileFormatNotSupportedKHRError( message );
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
+        case Result::eErrorVideoProfileCodecNotSupportedKHR: throw VideoProfileCodecNotSupportedKHRError( message );
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
+        case Result::eErrorVideoStdVersionNotSupportedKHR: throw VideoStdVersionNotSupportedKHRError( message );
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
         case Result::eErrorInvalidDrmFormatModifierPlaneLayoutEXT: throw InvalidDrmFormatModifierPlaneLayoutEXTError( message );
         case Result::eErrorNotPermittedKHR: throw NotPermittedKHRError( message );
 #  if defined( VK_USE_PLATFORM_WIN32_KHR )
         case Result::eErrorFullScreenExclusiveModeLostEXT: throw FullScreenExclusiveModeLostEXTError( message );
 #  endif /*VK_USE_PLATFORM_WIN32_KHR*/
+        case Result::eErrorCompressionExhaustedEXT: throw CompressionExhaustedEXTError( message );
         default: throw SystemError( make_error_code( result ) );
       }
     }
@@ -5885,32 +6058,6 @@ namespace VULKAN_HPP_NAMESPACE
     {
       return std::tuple<Result &, T &>( result, value );
     }
-
-#if !defined( VULKAN_HPP_DISABLE_IMPLICIT_RESULT_VALUE_CAST )
-    VULKAN_HPP_DEPRECATED( "Implicit-cast operators on vk::ResultValue are deprecated. Explicitly access the value as member of ResultValue." )
-    operator T const &() const & VULKAN_HPP_NOEXCEPT
-    {
-      return value;
-    }
-
-    VULKAN_HPP_DEPRECATED( "Implicit-cast operators on vk::ResultValue are deprecated. Explicitly access the value as member of ResultValue." )
-    operator T &() & VULKAN_HPP_NOEXCEPT
-    {
-      return value;
-    }
-
-    VULKAN_HPP_DEPRECATED( "Implicit-cast operators on vk::ResultValue are deprecated. Explicitly access the value as member of ResultValue." )
-    operator T const &&() const && VULKAN_HPP_NOEXCEPT
-    {
-      return std::move( value );
-    }
-
-    VULKAN_HPP_DEPRECATED( "Implicit-cast operators on vk::ResultValue are deprecated. Explicitly access the value as member of ResultValue." )
-    operator T &&() && VULKAN_HPP_NOEXCEPT
-    {
-      return std::move( value );
-    }
-#endif
   };
 
 #if !defined( VULKAN_HPP_NO_SMART_HANDLE )
@@ -5931,20 +6078,6 @@ namespace VULKAN_HPP_NAMESPACE
     {
       return std::make_tuple( result, std::move( value ) );
     }
-
-#  if !defined( VULKAN_HPP_DISABLE_IMPLICIT_RESULT_VALUE_CAST )
-    VULKAN_HPP_DEPRECATED( "Implicit-cast operators on vk::ResultValue are deprecated. Explicitly access the value as member of ResultValue." )
-    operator UniqueHandle<Type, Dispatch> &() & VULKAN_HPP_NOEXCEPT
-    {
-      return value;
-    }
-
-    VULKAN_HPP_DEPRECATED( "Implicit-cast operators on vk::ResultValue are deprecated. Explicitly access the value as member of ResultValue." )
-    operator UniqueHandle<Type, Dispatch>() VULKAN_HPP_NOEXCEPT
-    {
-      return std::move( value );
-    }
-#  endif
 
     Result                       result;
     UniqueHandle<Type, Dispatch> value;
@@ -5970,14 +6103,6 @@ namespace VULKAN_HPP_NAMESPACE
 
     Result                                    result;
     std::vector<UniqueHandle<Type, Dispatch>> value;
-
-#  if !defined( VULKAN_HPP_DISABLE_IMPLICIT_RESULT_VALUE_CAST )
-    VULKAN_HPP_DEPRECATED( "Implicit-cast operators on vk::ResultValue are deprecated. Explicitly access the value as member of ResultValue." )
-    operator std::tuple<Result &, std::vector<UniqueHandle<Type, Dispatch>> &>() VULKAN_HPP_NOEXCEPT
-    {
-      return std::tuple<Result &, std::vector<UniqueHandle<Type, Dispatch>> &>( result, value );
-    }
-#  endif
   };
 #endif
 
@@ -6000,58 +6125,6 @@ namespace VULKAN_HPP_NAMESPACE
     typedef void type;
 #endif
   };
-
-  template <typename T>
-  VULKAN_HPP_INLINE typename ResultValueType<T>::type createResultValue( Result result, T & data, char const * message )
-  {
-#ifdef VULKAN_HPP_NO_EXCEPTIONS
-    ignore( message );
-    VULKAN_HPP_ASSERT_ON_RESULT( result == Result::eSuccess );
-    return ResultValue<T>( result, std::move( data ) );
-#else
-    if ( result != Result::eSuccess )
-    {
-      throwResultException( result, message );
-    }
-    return std::move( data );
-#endif
-  }
-
-#ifndef VULKAN_HPP_NO_SMART_HANDLE
-  template <typename T, typename D, typename Allocator = std::allocator<UniqueHandle<T, D>>>
-  VULKAN_HPP_INLINE typename ResultValueType<std::vector<UniqueHandle<T, D>, Allocator>>::type
-    createResultValue( Result result, std::vector<UniqueHandle<T, D>, Allocator> && data, char const * message )
-  {
-#  ifdef VULKAN_HPP_NO_EXCEPTIONS
-    ignore( message );
-    VULKAN_HPP_ASSERT_ON_RESULT( result == Result::eSuccess );
-    return ResultValue<std::vector<UniqueHandle<T, D>, Allocator>>( result, std::move( data ) );
-#  else
-    if ( result != Result::eSuccess )
-    {
-      throwResultException( result, message );
-    }
-    return std::move( data );
-#  endif
-  }
-
-  template <typename T, typename D, typename Allocator = std::allocator<UniqueHandle<T, D>>>
-  VULKAN_HPP_INLINE ResultValue<std::vector<UniqueHandle<T, D>, Allocator>>
-    createResultValue( Result result, std::vector<UniqueHandle<T, D>, Allocator> && data, char const * message, std::initializer_list<Result> successCodes )
-  {
-#  ifdef VULKAN_HPP_NO_EXCEPTIONS
-    ignore( message );
-    ignore( successCodes );  // just in case VULKAN_HPP_ASSERT_ON_RESULT is empty
-    VULKAN_HPP_ASSERT_ON_RESULT( std::find( successCodes.begin(), successCodes.end(), result ) != successCodes.end() );
-#  else
-    if ( std::find( successCodes.begin(), successCodes.end(), result ) == successCodes.end() )
-    {
-      throwResultException( result, message );
-    }
-#  endif
-    return ResultValue<std::vector<UniqueHandle<T, D>, Allocator>>( result, std::move( data ) );
-  }
-#endif
 
   VULKAN_HPP_INLINE typename ResultValueType<void>::type createResultValueType( Result result )
   {
@@ -6122,6 +6195,8 @@ namespace VULKAN_HPP_NAMESPACE
 
 namespace VULKAN_HPP_NAMESPACE
 {
+#if !defined( VULKAN_HPP_DISABLE_ENHANCED_MODE )
+
   //=======================
   //=== STRUCTS EXTENDS ===
   //=======================
@@ -7414,10 +7489,10 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
-#if defined( VK_ENABLE_BETA_EXTENSIONS )
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
   //=== VK_KHR_video_queue ===
   template <>
-  struct StructExtends<QueueFamilyQueryResultStatusProperties2KHR, QueueFamilyProperties2>
+  struct StructExtends<QueueFamilyQueryResultStatusPropertiesKHR, QueueFamilyProperties2>
   {
     enum
     {
@@ -7425,7 +7500,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoQueueFamilyProperties2KHR, QueueFamilyProperties2>
+  struct StructExtends<QueueFamilyVideoPropertiesKHR, QueueFamilyProperties2>
   {
     enum
     {
@@ -7433,7 +7508,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoProfileKHR, QueryPoolCreateInfo>
+  struct StructExtends<VideoProfileInfoKHR, QueryPoolCreateInfo>
   {
     enum
     {
@@ -7441,7 +7516,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoProfileKHR, FormatProperties2>
+  struct StructExtends<VideoProfileListInfoKHR, PhysicalDeviceImageFormatInfo2>
   {
     enum
     {
@@ -7449,7 +7524,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoProfileKHR, ImageCreateInfo>
+  struct StructExtends<VideoProfileListInfoKHR, PhysicalDeviceVideoFormatInfoKHR>
   {
     enum
     {
@@ -7457,7 +7532,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoProfileKHR, ImageViewCreateInfo>
+  struct StructExtends<VideoProfileListInfoKHR, ImageCreateInfo>
   {
     enum
     {
@@ -7465,48 +7540,16 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoProfileKHR, BufferCreateInfo>
+  struct StructExtends<VideoProfileListInfoKHR, BufferCreateInfo>
   {
     enum
     {
       value = true
     };
   };
-  template <>
-  struct StructExtends<VideoProfilesKHR, FormatProperties2>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoProfilesKHR, ImageCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoProfilesKHR, ImageViewCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoProfilesKHR, BufferCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-#endif /*VK_ENABLE_BETA_EXTENSIONS*/
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
 
-#if defined( VK_ENABLE_BETA_EXTENSIONS )
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
   //=== VK_KHR_video_decode_queue ===
   template <>
   struct StructExtends<VideoDecodeCapabilitiesKHR, VideoCapabilitiesKHR>
@@ -7516,7 +7559,7 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_ENABLE_BETA_EXTENSIONS*/
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
 
   //=== VK_NV_dedicated_allocation ===
   template <>
@@ -7578,10 +7621,10 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
-#if defined( VK_ENABLE_BETA_EXTENSIONS )
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
   //=== VK_EXT_video_encode_h264 ===
   template <>
-  struct StructExtends<VideoEncodeH264CapabilitiesEXT, VideoEncodeCapabilitiesKHR>
+  struct StructExtends<VideoEncodeH264CapabilitiesEXT, VideoCapabilitiesKHR>
   {
     enum
     {
@@ -7613,7 +7656,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoEncodeH264EmitPictureParametersEXT, VideoEncodeInfoKHR>
+  struct StructExtends<VideoEncodeH264EmitPictureParametersInfoEXT, VideoEncodeInfoKHR>
   {
     enum
     {
@@ -7621,7 +7664,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoEncodeH264ProfileEXT, VideoProfileKHR>
+  struct StructExtends<VideoEncodeH264ProfileInfoEXT, VideoProfileInfoKHR>
   {
     enum
     {
@@ -7629,7 +7672,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoEncodeH264ProfileEXT, QueryPoolCreateInfo>
+  struct StructExtends<VideoEncodeH264ProfileInfoEXT, QueryPoolCreateInfo>
   {
     enum
     {
@@ -7637,7 +7680,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoEncodeH264ProfileEXT, FormatProperties2>
+  struct StructExtends<VideoEncodeH264RateControlInfoEXT, VideoCodingControlInfoKHR>
   {
     enum
     {
@@ -7645,31 +7688,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoEncodeH264ProfileEXT, ImageCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoEncodeH264ProfileEXT, ImageViewCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoEncodeH264ProfileEXT, BufferCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoEncodeH264RateControlInfoEXT, VideoEncodeRateControlInfoKHR>
+  struct StructExtends<VideoEncodeH264RateControlLayerInfoEXT, VideoCodingControlInfoKHR>
   {
     enum
     {
@@ -7684,12 +7703,12 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_ENABLE_BETA_EXTENSIONS*/
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
 
-#if defined( VK_ENABLE_BETA_EXTENSIONS )
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
   //=== VK_EXT_video_encode_h265 ===
   template <>
-  struct StructExtends<VideoEncodeH265CapabilitiesEXT, VideoEncodeCapabilitiesKHR>
+  struct StructExtends<VideoEncodeH265CapabilitiesEXT, VideoCapabilitiesKHR>
   {
     enum
     {
@@ -7721,7 +7740,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoEncodeH265EmitPictureParametersEXT, VideoEncodeInfoKHR>
+  struct StructExtends<VideoEncodeH265EmitPictureParametersInfoEXT, VideoEncodeInfoKHR>
   {
     enum
     {
@@ -7729,7 +7748,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoEncodeH265ProfileEXT, VideoProfileKHR>
+  struct StructExtends<VideoEncodeH265ProfileInfoEXT, VideoProfileInfoKHR>
   {
     enum
     {
@@ -7737,7 +7756,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoEncodeH265ProfileEXT, QueryPoolCreateInfo>
+  struct StructExtends<VideoEncodeH265ProfileInfoEXT, QueryPoolCreateInfo>
   {
     enum
     {
@@ -7745,7 +7764,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoEncodeH265ProfileEXT, FormatProperties2>
+  struct StructExtends<VideoEncodeH265RateControlInfoEXT, VideoCodingControlInfoKHR>
   {
     enum
     {
@@ -7753,31 +7772,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoEncodeH265ProfileEXT, ImageCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoEncodeH265ProfileEXT, ImageViewCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoEncodeH265ProfileEXT, BufferCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoEncodeH265RateControlInfoEXT, VideoEncodeRateControlInfoKHR>
+  struct StructExtends<VideoEncodeH265RateControlLayerInfoEXT, VideoCodingControlInfoKHR>
   {
     enum
     {
@@ -7792,12 +7787,12 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_ENABLE_BETA_EXTENSIONS*/
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
 
-#if defined( VK_ENABLE_BETA_EXTENSIONS )
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
   //=== VK_EXT_video_decode_h264 ===
   template <>
-  struct StructExtends<VideoDecodeH264ProfileEXT, VideoProfileKHR>
+  struct StructExtends<VideoDecodeH264ProfileInfoEXT, VideoProfileInfoKHR>
   {
     enum
     {
@@ -7805,7 +7800,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoDecodeH264ProfileEXT, QueryPoolCreateInfo>
+  struct StructExtends<VideoDecodeH264ProfileInfoEXT, QueryPoolCreateInfo>
   {
     enum
     {
@@ -7813,39 +7808,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoDecodeH264ProfileEXT, FormatProperties2>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoDecodeH264ProfileEXT, ImageCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoDecodeH264ProfileEXT, ImageViewCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoDecodeH264ProfileEXT, BufferCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoDecodeH264CapabilitiesEXT, VideoDecodeCapabilitiesKHR>
+  struct StructExtends<VideoDecodeH264CapabilitiesEXT, VideoCapabilitiesKHR>
   {
     enum
     {
@@ -7877,7 +7840,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoDecodeH264MvcEXT, VideoDecodeH264PictureInfoEXT>
+  struct StructExtends<VideoDecodeH264MvcInfoEXT, VideoDecodeH264PictureInfoEXT>
   {
     enum
     {
@@ -7885,14 +7848,14 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoDecodeH264DpbSlotInfoEXT, VideoReferenceSlotKHR>
+  struct StructExtends<VideoDecodeH264DpbSlotInfoEXT, VideoReferenceSlotInfoKHR>
   {
     enum
     {
       value = true
     };
   };
-#endif /*VK_ENABLE_BETA_EXTENSIONS*/
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
 
   //=== VK_AMD_texture_gather_bias_lod ===
   template <>
@@ -7998,7 +7961,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
-#if defined( VK_USE_PLATFORM_WIN32_KHR )
+#  if defined( VK_USE_PLATFORM_WIN32_KHR )
   //=== VK_NV_external_memory_win32 ===
   template <>
   struct StructExtends<ImportMemoryWin32HandleInfoNV, MemoryAllocateInfo>
@@ -8016,9 +7979,9 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_USE_PLATFORM_WIN32_KHR*/
+#  endif /*VK_USE_PLATFORM_WIN32_KHR*/
 
-#if defined( VK_USE_PLATFORM_WIN32_KHR )
+#  if defined( VK_USE_PLATFORM_WIN32_KHR )
   //=== VK_NV_win32_keyed_mutex ===
   template <>
   struct StructExtends<Win32KeyedMutexAcquireReleaseInfoNV, SubmitInfo>
@@ -8036,7 +7999,7 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_USE_PLATFORM_WIN32_KHR*/
+#  endif /*VK_USE_PLATFORM_WIN32_KHR*/
 
   //=== VK_EXT_validation_flags ===
   template <>
@@ -8074,7 +8037,65 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
-#if defined( VK_USE_PLATFORM_WIN32_KHR )
+  //=== VK_EXT_pipeline_robustness ===
+  template <>
+  struct StructExtends<PhysicalDevicePipelineRobustnessFeaturesEXT, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDevicePipelineRobustnessFeaturesEXT, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDevicePipelineRobustnessPropertiesEXT, PhysicalDeviceProperties2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PipelineRobustnessCreateInfoEXT, GraphicsPipelineCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PipelineRobustnessCreateInfoEXT, ComputePipelineCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PipelineRobustnessCreateInfoEXT, PipelineShaderStageCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PipelineRobustnessCreateInfoEXT, RayTracingPipelineCreateInfoKHR>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
+#  if defined( VK_USE_PLATFORM_WIN32_KHR )
   //=== VK_KHR_external_memory_win32 ===
   template <>
   struct StructExtends<ImportMemoryWin32HandleInfoKHR, MemoryAllocateInfo>
@@ -8092,7 +8113,7 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_USE_PLATFORM_WIN32_KHR*/
+#  endif /*VK_USE_PLATFORM_WIN32_KHR*/
 
   //=== VK_KHR_external_memory_fd ===
   template <>
@@ -8104,7 +8125,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
-#if defined( VK_USE_PLATFORM_WIN32_KHR )
+#  if defined( VK_USE_PLATFORM_WIN32_KHR )
   //=== VK_KHR_win32_keyed_mutex ===
   template <>
   struct StructExtends<Win32KeyedMutexAcquireReleaseInfoKHR, SubmitInfo>
@@ -8122,9 +8143,9 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_USE_PLATFORM_WIN32_KHR*/
+#  endif /*VK_USE_PLATFORM_WIN32_KHR*/
 
-#if defined( VK_USE_PLATFORM_WIN32_KHR )
+#  if defined( VK_USE_PLATFORM_WIN32_KHR )
   //=== VK_KHR_external_semaphore_win32 ===
   template <>
   struct StructExtends<ExportSemaphoreWin32HandleInfoKHR, SemaphoreCreateInfo>
@@ -8142,7 +8163,7 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_USE_PLATFORM_WIN32_KHR*/
+#  endif /*VK_USE_PLATFORM_WIN32_KHR*/
 
   //=== VK_KHR_push_descriptor ===
   template <>
@@ -8312,7 +8333,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
-#if defined( VK_USE_PLATFORM_WIN32_KHR )
+#  if defined( VK_USE_PLATFORM_WIN32_KHR )
   //=== VK_KHR_external_fence_win32 ===
   template <>
   struct StructExtends<ExportFenceWin32HandleInfoKHR, FenceCreateInfo>
@@ -8322,7 +8343,7 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_USE_PLATFORM_WIN32_KHR*/
+#  endif /*VK_USE_PLATFORM_WIN32_KHR*/
 
   //=== VK_KHR_performance_query ===
   template <>
@@ -8392,7 +8413,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
-#if defined( VK_USE_PLATFORM_ANDROID_KHR )
+#  if defined( VK_USE_PLATFORM_ANDROID_KHR )
   //=== VK_ANDROID_external_memory_android_hardware_buffer ===
   template <>
   struct StructExtends<AndroidHardwareBufferUsageANDROID, ImageFormatProperties2>
@@ -8442,7 +8463,7 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_USE_PLATFORM_ANDROID_KHR*/
+#  endif /*VK_USE_PLATFORM_ANDROID_KHR*/
 
   //=== VK_EXT_sample_locations ===
   template <>
@@ -8651,8 +8672,16 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
+  template <>
+  struct StructExtends<ShaderModuleValidationCacheCreateInfoEXT, PipelineShaderStageCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
 
-#if defined( VK_ENABLE_BETA_EXTENSIONS )
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
   //=== VK_KHR_portability_subset ===
   template <>
   struct StructExtends<PhysicalDevicePortabilitySubsetFeaturesKHR, PhysicalDeviceFeatures2>
@@ -8678,7 +8707,7 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_ENABLE_BETA_EXTENSIONS*/
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
 
   //=== VK_NV_shading_rate_image ===
   template <>
@@ -8848,10 +8877,10 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
-#if defined( VK_ENABLE_BETA_EXTENSIONS )
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
   //=== VK_EXT_video_decode_h265 ===
   template <>
-  struct StructExtends<VideoDecodeH265ProfileEXT, VideoProfileKHR>
+  struct StructExtends<VideoDecodeH265ProfileInfoEXT, VideoProfileInfoKHR>
   {
     enum
     {
@@ -8859,7 +8888,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoDecodeH265ProfileEXT, QueryPoolCreateInfo>
+  struct StructExtends<VideoDecodeH265ProfileInfoEXT, QueryPoolCreateInfo>
   {
     enum
     {
@@ -8867,39 +8896,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoDecodeH265ProfileEXT, FormatProperties2>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoDecodeH265ProfileEXT, ImageCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoDecodeH265ProfileEXT, ImageViewCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoDecodeH265ProfileEXT, BufferCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<VideoDecodeH265CapabilitiesEXT, VideoDecodeCapabilitiesKHR>
+  struct StructExtends<VideoDecodeH265CapabilitiesEXT, VideoCapabilitiesKHR>
   {
     enum
     {
@@ -8931,14 +8928,14 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
   template <>
-  struct StructExtends<VideoDecodeH265DpbSlotInfoEXT, VideoReferenceSlotKHR>
+  struct StructExtends<VideoDecodeH265DpbSlotInfoEXT, VideoReferenceSlotInfoKHR>
   {
     enum
     {
       value = true
     };
   };
-#endif /*VK_ENABLE_BETA_EXTENSIONS*/
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
 
   //=== VK_KHR_global_priority ===
   template <>
@@ -9018,7 +9015,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
-#if defined( VK_USE_PLATFORM_GGP )
+#  if defined( VK_USE_PLATFORM_GGP )
   //=== VK_GGP_frame_token ===
   template <>
   struct StructExtends<PresentFrameTokenGGP, PresentInfoKHR>
@@ -9028,7 +9025,7 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_USE_PLATFORM_GGP*/
+#  endif /*VK_USE_PLATFORM_GGP*/
 
   //=== VK_NV_compute_shader_derivatives ===
   template <>
@@ -9067,24 +9064,6 @@ namespace VULKAN_HPP_NAMESPACE
   };
   template <>
   struct StructExtends<PhysicalDeviceMeshShaderPropertiesNV, PhysicalDeviceProperties2>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-
-  //=== VK_NV_fragment_shader_barycentric ===
-  template <>
-  struct StructExtends<PhysicalDeviceFragmentShaderBarycentricFeaturesNV, PhysicalDeviceFeatures2>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<PhysicalDeviceFragmentShaderBarycentricFeaturesNV, DeviceCreateInfo>
   {
     enum
     {
@@ -9572,7 +9551,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
-#if defined( VK_USE_PLATFORM_WIN32_KHR )
+#  if defined( VK_USE_PLATFORM_WIN32_KHR )
   //=== VK_EXT_full_screen_exclusive ===
   template <>
   struct StructExtends<SurfaceFullScreenExclusiveInfoEXT, PhysicalDeviceSurfaceInfo2KHR>
@@ -9614,7 +9593,7 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_USE_PLATFORM_WIN32_KHR*/
+#  endif /*VK_USE_PLATFORM_WIN32_KHR*/
 
   //=== VK_EXT_line_rasterization ===
   template <>
@@ -9958,7 +9937,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
-#if defined( VK_ENABLE_BETA_EXTENSIONS )
+#  if defined( VK_ENABLE_BETA_EXTENSIONS )
   //=== VK_KHR_video_encode_queue ===
   template <>
   struct StructExtends<VideoEncodeCapabilitiesKHR, VideoCapabilitiesKHR>
@@ -9984,7 +9963,7 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_ENABLE_BETA_EXTENSIONS*/
+#  endif /*VK_ENABLE_BETA_EXTENSIONS*/
 
   //=== VK_NV_device_diagnostics_config ===
   template <>
@@ -10011,6 +9990,154 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
+
+#  if defined( VK_USE_PLATFORM_METAL_EXT )
+  //=== VK_EXT_metal_objects ===
+  template <>
+  struct StructExtends<ExportMetalObjectCreateInfoEXT, InstanceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ExportMetalObjectCreateInfoEXT, MemoryAllocateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ExportMetalObjectCreateInfoEXT, ImageCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ExportMetalObjectCreateInfoEXT, ImageViewCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ExportMetalObjectCreateInfoEXT, BufferViewCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ExportMetalObjectCreateInfoEXT, SemaphoreCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ExportMetalObjectCreateInfoEXT, EventCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ExportMetalDeviceInfoEXT, ExportMetalObjectsInfoEXT>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ExportMetalCommandQueueInfoEXT, ExportMetalObjectsInfoEXT>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ExportMetalBufferInfoEXT, ExportMetalObjectsInfoEXT>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ImportMetalBufferInfoEXT, MemoryAllocateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ExportMetalTextureInfoEXT, ExportMetalObjectsInfoEXT>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ImportMetalTextureInfoEXT, ImageCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ExportMetalIOSurfaceInfoEXT, ExportMetalObjectsInfoEXT>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ImportMetalIOSurfaceInfoEXT, ImageCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ExportMetalSharedEventInfoEXT, ExportMetalObjectsInfoEXT>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ImportMetalSharedEventInfoEXT, SemaphoreCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ImportMetalSharedEventInfoEXT, EventCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+#  endif /*VK_USE_PLATFORM_METAL_EXT*/
 
   //=== VK_KHR_synchronization2 ===
   template <>
@@ -10049,6 +10176,50 @@ namespace VULKAN_HPP_NAMESPACE
   };
   template <>
   struct StructExtends<GraphicsPipelineLibraryCreateInfoEXT, GraphicsPipelineCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
+  //=== VK_AMD_shader_early_and_late_fragment_tests ===
+  template <>
+  struct StructExtends<PhysicalDeviceShaderEarlyAndLateFragmentTestsFeaturesAMD, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceShaderEarlyAndLateFragmentTestsFeaturesAMD, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
+  //=== VK_KHR_fragment_shader_barycentric ===
+  template <>
+  struct StructExtends<PhysicalDeviceFragmentShaderBarycentricFeaturesKHR, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceFragmentShaderBarycentricFeaturesKHR, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceFragmentShaderBarycentricPropertiesKHR, PhysicalDeviceProperties2>
   {
     enum
     {
@@ -10222,6 +10393,90 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
+  //=== VK_EXT_image_compression_control ===
+  template <>
+  struct StructExtends<PhysicalDeviceImageCompressionControlFeaturesEXT, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceImageCompressionControlFeaturesEXT, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ImageCompressionControlEXT, ImageCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ImageCompressionControlEXT, SwapchainCreateInfoKHR>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ImageCompressionControlEXT, PhysicalDeviceImageFormatInfo2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ImageCompressionPropertiesEXT, ImageFormatProperties2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ImageCompressionPropertiesEXT, SurfaceFormat2KHR>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<ImageCompressionPropertiesEXT, SubresourceLayout2EXT>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
+  //=== VK_EXT_attachment_feedback_loop_layout ===
+  template <>
+  struct StructExtends<PhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
   //=== VK_EXT_4444_formats ===
   template <>
   struct StructExtends<PhysicalDevice4444FormatsFeaturesEXT, PhysicalDeviceFeatures2>
@@ -10233,24 +10488,6 @@ namespace VULKAN_HPP_NAMESPACE
   };
   template <>
   struct StructExtends<PhysicalDevice4444FormatsFeaturesEXT, DeviceCreateInfo>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-
-  //=== VK_ARM_rasterization_order_attachment_access ===
-  template <>
-  struct StructExtends<PhysicalDeviceRasterizationOrderAttachmentAccessFeaturesARM, PhysicalDeviceFeatures2>
-  {
-    enum
-    {
-      value = true
-    };
-  };
-  template <>
-  struct StructExtends<PhysicalDeviceRasterizationOrderAttachmentAccessFeaturesARM, DeviceCreateInfo>
   {
     enum
     {
@@ -10426,7 +10663,7 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
-#if defined( VK_USE_PLATFORM_FUCHSIA )
+#  if defined( VK_USE_PLATFORM_FUCHSIA )
   //=== VK_FUCHSIA_external_memory ===
   template <>
   struct StructExtends<ImportMemoryZirconHandleInfoFUCHSIA, MemoryAllocateInfo>
@@ -10436,9 +10673,9 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_USE_PLATFORM_FUCHSIA*/
+#  endif /*VK_USE_PLATFORM_FUCHSIA*/
 
-#if defined( VK_USE_PLATFORM_FUCHSIA )
+#  if defined( VK_USE_PLATFORM_FUCHSIA )
   //=== VK_FUCHSIA_buffer_collection ===
   template <>
   struct StructExtends<ImportMemoryBufferCollectionFUCHSIA, MemoryAllocateInfo>
@@ -10464,7 +10701,7 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
-#endif /*VK_USE_PLATFORM_FUCHSIA*/
+#  endif /*VK_USE_PLATFORM_FUCHSIA*/
 
   //=== VK_HUAWEI_subpass_shading ===
   template <>
@@ -10536,6 +10773,66 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
+  //=== VK_EXT_pipeline_properties ===
+  template <>
+  struct StructExtends<PhysicalDevicePipelinePropertiesFeaturesEXT, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDevicePipelinePropertiesFeaturesEXT, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
+  //=== VK_EXT_multisampled_render_to_single_sampled ===
+  template <>
+  struct StructExtends<PhysicalDeviceMultisampledRenderToSingleSampledFeaturesEXT, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceMultisampledRenderToSingleSampledFeaturesEXT, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<SubpassResolvePerformanceQueryEXT, FormatProperties2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<MultisampledRenderToSingleSampledInfoEXT, SubpassDescription2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<MultisampledRenderToSingleSampledInfoEXT, RenderingInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
   //=== VK_EXT_extended_dynamic_state2 ===
   template <>
   struct StructExtends<PhysicalDeviceExtendedDynamicState2FeaturesEXT, PhysicalDeviceFeatures2>
@@ -10591,6 +10888,24 @@ namespace VULKAN_HPP_NAMESPACE
   };
   template <>
   struct StructExtends<PhysicalDevicePrimitivesGeneratedQueryFeaturesEXT, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
+  //=== VK_KHR_ray_tracing_maintenance1 ===
+  template <>
+  struct StructExtends<PhysicalDeviceRayTracingMaintenance1FeaturesKHR, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceRayTracingMaintenance1FeaturesKHR, DeviceCreateInfo>
   {
     enum
     {
@@ -10730,6 +11045,24 @@ namespace VULKAN_HPP_NAMESPACE
     };
   };
 
+  //=== VK_EXT_non_seamless_cube_map ===
+  template <>
+  struct StructExtends<PhysicalDeviceNonSeamlessCubeMapFeaturesEXT, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceNonSeamlessCubeMapFeaturesEXT, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
   //=== VK_QCOM_fragment_density_map_offset ===
   template <>
   struct StructExtends<PhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM, PhysicalDeviceFeatures2>
@@ -10781,6 +11114,206 @@ namespace VULKAN_HPP_NAMESPACE
       value = true
     };
   };
+
+  //=== VK_EXT_image_compression_control_swapchain ===
+  template <>
+  struct StructExtends<PhysicalDeviceImageCompressionControlSwapchainFeaturesEXT, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceImageCompressionControlSwapchainFeaturesEXT, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
+  //=== VK_QCOM_image_processing ===
+  template <>
+  struct StructExtends<ImageViewSampleWeightCreateInfoQCOM, ImageViewCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceImageProcessingFeaturesQCOM, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceImageProcessingFeaturesQCOM, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceImageProcessingPropertiesQCOM, PhysicalDeviceProperties2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
+  //=== VK_EXT_subpass_merge_feedback ===
+  template <>
+  struct StructExtends<PhysicalDeviceSubpassMergeFeedbackFeaturesEXT, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceSubpassMergeFeedbackFeaturesEXT, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<RenderPassCreationControlEXT, RenderPassCreateInfo2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<RenderPassCreationControlEXT, SubpassDescription2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<RenderPassCreationFeedbackCreateInfoEXT, RenderPassCreateInfo2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<RenderPassSubpassFeedbackCreateInfoEXT, SubpassDescription2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
+  //=== VK_EXT_shader_module_identifier ===
+  template <>
+  struct StructExtends<PhysicalDeviceShaderModuleIdentifierFeaturesEXT, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceShaderModuleIdentifierFeaturesEXT, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceShaderModuleIdentifierPropertiesEXT, PhysicalDeviceProperties2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PipelineShaderStageModuleIdentifierCreateInfoEXT, PipelineShaderStageCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
+  //=== VK_EXT_rasterization_order_attachment_access ===
+  template <>
+  struct StructExtends<PhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
+  //=== VK_QCOM_tile_properties ===
+  template <>
+  struct StructExtends<PhysicalDeviceTilePropertiesFeaturesQCOM, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceTilePropertiesFeaturesQCOM, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
+  //=== VK_SEC_amigo_profiling ===
+  template <>
+  struct StructExtends<PhysicalDeviceAmigoProfilingFeaturesSEC, PhysicalDeviceFeatures2>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<PhysicalDeviceAmigoProfilingFeaturesSEC, DeviceCreateInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+  template <>
+  struct StructExtends<AmigoProfilingSubmitInfoSEC, SubmitInfo>
+  {
+    enum
+    {
+      value = true
+    };
+  };
+
+#endif  // VULKAN_HPP_DISABLE_ENHANCED_MODE
 
 #if VULKAN_HPP_ENABLE_DYNAMIC_LOADER_TOOL
   class DynamicLoader
@@ -11686,6 +12219,13 @@ namespace VULKAN_HPP_NAMESPACE
     PFN_dummy vkCmdEncodeVideoKHR_placeholder                               = 0;
 #endif /*VK_ENABLE_BETA_EXTENSIONS*/
 
+#if defined( VK_USE_PLATFORM_METAL_EXT )
+    //=== VK_EXT_metal_objects ===
+    PFN_vkExportMetalObjectsEXT vkExportMetalObjectsEXT = 0;
+#else
+    PFN_dummy vkExportMetalObjectsEXT_placeholder                           = 0;
+#endif /*VK_USE_PLATFORM_METAL_EXT*/
+
     //=== VK_KHR_synchronization2 ===
     PFN_vkCmdSetEvent2KHR           vkCmdSetEvent2KHR           = 0;
     PFN_vkCmdResetEvent2KHR         vkCmdResetEvent2KHR         = 0;
@@ -11706,6 +12246,9 @@ namespace VULKAN_HPP_NAMESPACE
     PFN_vkCmdCopyImageToBuffer2KHR vkCmdCopyImageToBuffer2KHR = 0;
     PFN_vkCmdBlitImage2KHR         vkCmdBlitImage2KHR         = 0;
     PFN_vkCmdResolveImage2KHR      vkCmdResolveImage2KHR      = 0;
+
+    //=== VK_EXT_image_compression_control ===
+    PFN_vkGetImageSubresourceLayout2EXT vkGetImageSubresourceLayout2EXT = 0;
 
 #if defined( VK_USE_PLATFORM_WIN32_KHR )
     //=== VK_NV_acquire_winrt_display ===
@@ -11780,6 +12323,9 @@ namespace VULKAN_HPP_NAMESPACE
     //=== VK_NV_external_memory_rdma ===
     PFN_vkGetMemoryRemoteAddressNV vkGetMemoryRemoteAddressNV = 0;
 
+    //=== VK_EXT_pipeline_properties ===
+    PFN_vkGetPipelinePropertiesEXT vkGetPipelinePropertiesEXT = 0;
+
     //=== VK_EXT_extended_dynamic_state2 ===
     PFN_vkCmdSetPatchControlPointsEXT      vkCmdSetPatchControlPointsEXT      = 0;
     PFN_vkCmdSetRasterizerDiscardEnableEXT vkCmdSetRasterizerDiscardEnableEXT = 0;
@@ -11799,6 +12345,9 @@ namespace VULKAN_HPP_NAMESPACE
     //=== VK_EXT_color_write_enable ===
     PFN_vkCmdSetColorWriteEnableEXT vkCmdSetColorWriteEnableEXT = 0;
 
+    //=== VK_KHR_ray_tracing_maintenance1 ===
+    PFN_vkCmdTraceRaysIndirect2KHR vkCmdTraceRaysIndirect2KHR = 0;
+
     //=== VK_EXT_multi_draw ===
     PFN_vkCmdDrawMultiEXT        vkCmdDrawMultiEXT        = 0;
     PFN_vkCmdDrawMultiIndexedEXT vkCmdDrawMultiIndexedEXT = 0;
@@ -11814,6 +12363,14 @@ namespace VULKAN_HPP_NAMESPACE
     //=== VK_VALVE_descriptor_set_host_mapping ===
     PFN_vkGetDescriptorSetLayoutHostMappingInfoVALVE vkGetDescriptorSetLayoutHostMappingInfoVALVE = 0;
     PFN_vkGetDescriptorSetHostMappingVALVE           vkGetDescriptorSetHostMappingVALVE           = 0;
+
+    //=== VK_EXT_shader_module_identifier ===
+    PFN_vkGetShaderModuleIdentifierEXT           vkGetShaderModuleIdentifierEXT           = 0;
+    PFN_vkGetShaderModuleCreateInfoIdentifierEXT vkGetShaderModuleCreateInfoIdentifierEXT = 0;
+
+    //=== VK_QCOM_tile_properties ===
+    PFN_vkGetFramebufferTilePropertiesQCOM      vkGetFramebufferTilePropertiesQCOM      = 0;
+    PFN_vkGetDynamicRenderingTilePropertiesQCOM vkGetDynamicRenderingTilePropertiesQCOM = 0;
 
   public:
     DispatchLoaderDynamic() VULKAN_HPP_NOEXCEPT                                    = default;
@@ -12828,6 +13385,11 @@ namespace VULKAN_HPP_NAMESPACE
       vkCmdEncodeVideoKHR = PFN_vkCmdEncodeVideoKHR( vkGetInstanceProcAddr( instance, "vkCmdEncodeVideoKHR" ) );
 #endif /*VK_ENABLE_BETA_EXTENSIONS*/
 
+#if defined( VK_USE_PLATFORM_METAL_EXT )
+      //=== VK_EXT_metal_objects ===
+      vkExportMetalObjectsEXT = PFN_vkExportMetalObjectsEXT( vkGetInstanceProcAddr( instance, "vkExportMetalObjectsEXT" ) );
+#endif /*VK_USE_PLATFORM_METAL_EXT*/
+
       //=== VK_KHR_synchronization2 ===
       vkCmdSetEvent2KHR = PFN_vkCmdSetEvent2KHR( vkGetInstanceProcAddr( instance, "vkCmdSetEvent2KHR" ) );
       if ( !vkCmdSetEvent2 )
@@ -12872,6 +13434,9 @@ namespace VULKAN_HPP_NAMESPACE
       vkCmdResolveImage2KHR = PFN_vkCmdResolveImage2KHR( vkGetInstanceProcAddr( instance, "vkCmdResolveImage2KHR" ) );
       if ( !vkCmdResolveImage2 )
         vkCmdResolveImage2 = vkCmdResolveImage2KHR;
+
+      //=== VK_EXT_image_compression_control ===
+      vkGetImageSubresourceLayout2EXT = PFN_vkGetImageSubresourceLayout2EXT( vkGetInstanceProcAddr( instance, "vkGetImageSubresourceLayout2EXT" ) );
 
 #if defined( VK_USE_PLATFORM_WIN32_KHR )
       //=== VK_NV_acquire_winrt_display ===
@@ -12939,6 +13504,9 @@ namespace VULKAN_HPP_NAMESPACE
       //=== VK_NV_external_memory_rdma ===
       vkGetMemoryRemoteAddressNV = PFN_vkGetMemoryRemoteAddressNV( vkGetInstanceProcAddr( instance, "vkGetMemoryRemoteAddressNV" ) );
 
+      //=== VK_EXT_pipeline_properties ===
+      vkGetPipelinePropertiesEXT = PFN_vkGetPipelinePropertiesEXT( vkGetInstanceProcAddr( instance, "vkGetPipelinePropertiesEXT" ) );
+
       //=== VK_EXT_extended_dynamic_state2 ===
       vkCmdSetPatchControlPointsEXT      = PFN_vkCmdSetPatchControlPointsEXT( vkGetInstanceProcAddr( instance, "vkCmdSetPatchControlPointsEXT" ) );
       vkCmdSetRasterizerDiscardEnableEXT = PFN_vkCmdSetRasterizerDiscardEnableEXT( vkGetInstanceProcAddr( instance, "vkCmdSetRasterizerDiscardEnableEXT" ) );
@@ -12961,6 +13529,9 @@ namespace VULKAN_HPP_NAMESPACE
 
       //=== VK_EXT_color_write_enable ===
       vkCmdSetColorWriteEnableEXT = PFN_vkCmdSetColorWriteEnableEXT( vkGetInstanceProcAddr( instance, "vkCmdSetColorWriteEnableEXT" ) );
+
+      //=== VK_KHR_ray_tracing_maintenance1 ===
+      vkCmdTraceRaysIndirect2KHR = PFN_vkCmdTraceRaysIndirect2KHR( vkGetInstanceProcAddr( instance, "vkCmdTraceRaysIndirect2KHR" ) );
 
       //=== VK_EXT_multi_draw ===
       vkCmdDrawMultiEXT        = PFN_vkCmdDrawMultiEXT( vkGetInstanceProcAddr( instance, "vkCmdDrawMultiEXT" ) );
@@ -12987,6 +13558,16 @@ namespace VULKAN_HPP_NAMESPACE
       vkGetDescriptorSetLayoutHostMappingInfoVALVE =
         PFN_vkGetDescriptorSetLayoutHostMappingInfoVALVE( vkGetInstanceProcAddr( instance, "vkGetDescriptorSetLayoutHostMappingInfoVALVE" ) );
       vkGetDescriptorSetHostMappingVALVE = PFN_vkGetDescriptorSetHostMappingVALVE( vkGetInstanceProcAddr( instance, "vkGetDescriptorSetHostMappingVALVE" ) );
+
+      //=== VK_EXT_shader_module_identifier ===
+      vkGetShaderModuleIdentifierEXT = PFN_vkGetShaderModuleIdentifierEXT( vkGetInstanceProcAddr( instance, "vkGetShaderModuleIdentifierEXT" ) );
+      vkGetShaderModuleCreateInfoIdentifierEXT =
+        PFN_vkGetShaderModuleCreateInfoIdentifierEXT( vkGetInstanceProcAddr( instance, "vkGetShaderModuleCreateInfoIdentifierEXT" ) );
+
+      //=== VK_QCOM_tile_properties ===
+      vkGetFramebufferTilePropertiesQCOM = PFN_vkGetFramebufferTilePropertiesQCOM( vkGetInstanceProcAddr( instance, "vkGetFramebufferTilePropertiesQCOM" ) );
+      vkGetDynamicRenderingTilePropertiesQCOM =
+        PFN_vkGetDynamicRenderingTilePropertiesQCOM( vkGetInstanceProcAddr( instance, "vkGetDynamicRenderingTilePropertiesQCOM" ) );
     }
 
     void init( VULKAN_HPP_NAMESPACE::Device deviceCpp ) VULKAN_HPP_NOEXCEPT
@@ -13672,6 +14253,11 @@ namespace VULKAN_HPP_NAMESPACE
       vkCmdEncodeVideoKHR = PFN_vkCmdEncodeVideoKHR( vkGetDeviceProcAddr( device, "vkCmdEncodeVideoKHR" ) );
 #endif /*VK_ENABLE_BETA_EXTENSIONS*/
 
+#if defined( VK_USE_PLATFORM_METAL_EXT )
+      //=== VK_EXT_metal_objects ===
+      vkExportMetalObjectsEXT = PFN_vkExportMetalObjectsEXT( vkGetDeviceProcAddr( device, "vkExportMetalObjectsEXT" ) );
+#endif /*VK_USE_PLATFORM_METAL_EXT*/
+
       //=== VK_KHR_synchronization2 ===
       vkCmdSetEvent2KHR = PFN_vkCmdSetEvent2KHR( vkGetDeviceProcAddr( device, "vkCmdSetEvent2KHR" ) );
       if ( !vkCmdSetEvent2 )
@@ -13716,6 +14302,9 @@ namespace VULKAN_HPP_NAMESPACE
       vkCmdResolveImage2KHR = PFN_vkCmdResolveImage2KHR( vkGetDeviceProcAddr( device, "vkCmdResolveImage2KHR" ) );
       if ( !vkCmdResolveImage2 )
         vkCmdResolveImage2 = vkCmdResolveImage2KHR;
+
+      //=== VK_EXT_image_compression_control ===
+      vkGetImageSubresourceLayout2EXT = PFN_vkGetImageSubresourceLayout2EXT( vkGetDeviceProcAddr( device, "vkGetImageSubresourceLayout2EXT" ) );
 
       //=== VK_KHR_ray_tracing_pipeline ===
       vkCmdTraceRaysKHR                    = PFN_vkCmdTraceRaysKHR( vkGetDeviceProcAddr( device, "vkCmdTraceRaysKHR" ) );
@@ -13768,6 +14357,9 @@ namespace VULKAN_HPP_NAMESPACE
       //=== VK_NV_external_memory_rdma ===
       vkGetMemoryRemoteAddressNV = PFN_vkGetMemoryRemoteAddressNV( vkGetDeviceProcAddr( device, "vkGetMemoryRemoteAddressNV" ) );
 
+      //=== VK_EXT_pipeline_properties ===
+      vkGetPipelinePropertiesEXT = PFN_vkGetPipelinePropertiesEXT( vkGetDeviceProcAddr( device, "vkGetPipelinePropertiesEXT" ) );
+
       //=== VK_EXT_extended_dynamic_state2 ===
       vkCmdSetPatchControlPointsEXT      = PFN_vkCmdSetPatchControlPointsEXT( vkGetDeviceProcAddr( device, "vkCmdSetPatchControlPointsEXT" ) );
       vkCmdSetRasterizerDiscardEnableEXT = PFN_vkCmdSetRasterizerDiscardEnableEXT( vkGetDeviceProcAddr( device, "vkCmdSetRasterizerDiscardEnableEXT" ) );
@@ -13783,6 +14375,9 @@ namespace VULKAN_HPP_NAMESPACE
 
       //=== VK_EXT_color_write_enable ===
       vkCmdSetColorWriteEnableEXT = PFN_vkCmdSetColorWriteEnableEXT( vkGetDeviceProcAddr( device, "vkCmdSetColorWriteEnableEXT" ) );
+
+      //=== VK_KHR_ray_tracing_maintenance1 ===
+      vkCmdTraceRaysIndirect2KHR = PFN_vkCmdTraceRaysIndirect2KHR( vkGetDeviceProcAddr( device, "vkCmdTraceRaysIndirect2KHR" ) );
 
       //=== VK_EXT_multi_draw ===
       vkCmdDrawMultiEXT        = PFN_vkCmdDrawMultiEXT( vkGetDeviceProcAddr( device, "vkCmdDrawMultiEXT" ) );
@@ -13809,6 +14404,16 @@ namespace VULKAN_HPP_NAMESPACE
       vkGetDescriptorSetLayoutHostMappingInfoVALVE =
         PFN_vkGetDescriptorSetLayoutHostMappingInfoVALVE( vkGetDeviceProcAddr( device, "vkGetDescriptorSetLayoutHostMappingInfoVALVE" ) );
       vkGetDescriptorSetHostMappingVALVE = PFN_vkGetDescriptorSetHostMappingVALVE( vkGetDeviceProcAddr( device, "vkGetDescriptorSetHostMappingVALVE" ) );
+
+      //=== VK_EXT_shader_module_identifier ===
+      vkGetShaderModuleIdentifierEXT = PFN_vkGetShaderModuleIdentifierEXT( vkGetDeviceProcAddr( device, "vkGetShaderModuleIdentifierEXT" ) );
+      vkGetShaderModuleCreateInfoIdentifierEXT =
+        PFN_vkGetShaderModuleCreateInfoIdentifierEXT( vkGetDeviceProcAddr( device, "vkGetShaderModuleCreateInfoIdentifierEXT" ) );
+
+      //=== VK_QCOM_tile_properties ===
+      vkGetFramebufferTilePropertiesQCOM = PFN_vkGetFramebufferTilePropertiesQCOM( vkGetDeviceProcAddr( device, "vkGetFramebufferTilePropertiesQCOM" ) );
+      vkGetDynamicRenderingTilePropertiesQCOM =
+        PFN_vkGetDynamicRenderingTilePropertiesQCOM( vkGetDeviceProcAddr( device, "vkGetDynamicRenderingTilePropertiesQCOM" ) );
     }
   };
 }  // namespace VULKAN_HPP_NAMESPACE

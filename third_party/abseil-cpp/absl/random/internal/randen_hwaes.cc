@@ -31,7 +31,7 @@
 // a hardware accelerated implementation of randen, or whether it
 // will contain stubs that exit the process.
 #if ABSL_HAVE_ACCELERATED_AES
-// The following plaforms have implemented RandenHwAws.
+// The following plaforms have implemented RandenHwAes.
 #if defined(ABSL_ARCH_X86_64) || defined(ABSL_ARCH_X86_32) || \
     defined(ABSL_ARCH_PPC) || defined(ABSL_ARCH_ARM) ||       \
     defined(ABSL_ARCH_AARCH64)
@@ -211,7 +211,7 @@ inline ABSL_TARGET_CRYPTO void SwapEndian(void*) {}
 
 #elif defined(ABSL_ARCH_X86_64) || defined(ABSL_ARCH_X86_32)
 // On x86 we rely on the aesni instructions
-#include <wmmintrin.h>
+#include <immintrin.h>
 
 namespace {
 
