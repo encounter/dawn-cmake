@@ -143,7 +143,7 @@ else()
 endif()
 
 option_if_not_defined(TINT_BUILD_SAMPLES "Build samples" ${DAWN_BUILD_SAMPLES})
-option_if_not_defined(TINT_BUILD_DOCS "Build documentation" ON)
+option_if_not_defined(TINT_BUILD_DOCS "Build documentation" OFF)
 option_if_not_defined(TINT_DOCS_WARN_AS_ERROR "When building documentation, treat warnings as errors" OFF)
 
 option_if_not_defined(TINT_BUILD_SPV_READER "Build the SPIR-V input reader" ${DAWN_ENABLE_VULKAN})
@@ -159,7 +159,7 @@ option_if_not_defined(TINT_BUILD_SPIRV_TOOLS_FUZZER "Build SPIRV-Tools fuzzer" O
 option_if_not_defined(TINT_BUILD_AST_FUZZER "Build AST fuzzer" OFF)
 option_if_not_defined(TINT_BUILD_REGEX_FUZZER "Build regex fuzzer" OFF)
 option_if_not_defined(TINT_BUILD_BENCHMARKS "Build benchmarks" OFF)
-option_if_not_defined(TINT_BUILD_TESTS "Build tests" ON)
+option_if_not_defined(TINT_BUILD_TESTS "Build tests" OFF)
 option_if_not_defined(TINT_BUILD_AS_OTHER_OS "Override OS detection to force building of *_other.cc files" OFF)
 option_if_not_defined(TINT_BUILD_REMOTE_COMPILE "Build the remote-compile tool for validating shaders on a remote machine" OFF)
 
