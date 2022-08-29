@@ -32,6 +32,8 @@ target_sources(dawn_native PRIVATE
     ${DAWN_NATIVE_UTILS_GEN_SOURCES}
     "Adapter.cpp"
     "Adapter.h"
+    "ApplyClearColorValueWithDrawHelper.cpp"
+    "ApplyClearColorValueWithDrawHelper.h"
     "AsyncTask.cpp"
     "AsyncTask.h"
     "AttachmentState.cpp"
@@ -45,6 +47,8 @@ target_sources(dawn_native PRIVATE
     "BindGroupTracker.h"
     "BindingInfo.cpp"
     "BindingInfo.h"
+    "Blob.cpp"
+    "Blob.h"
     "BlobCache.cpp"
     "BlobCache.h"
     "BuddyAllocator.cpp"
@@ -57,6 +61,9 @@ target_sources(dawn_native PRIVATE
     "CachedObject.h"
     "CacheKey.cpp"
     "CacheKey.h"
+    "CacheRequest.cpp"
+    "CacheRequest.h"
+    "CacheResult.h"
     "CallbackTaskManager.cpp"
     "CallbackTaskManager.h"
     "CommandAllocator.cpp"
@@ -119,6 +126,7 @@ target_sources(dawn_native PRIVATE
     "Limits.h"
     "ObjectBase.cpp"
     "ObjectBase.h"
+    "PassResourceUsage.cpp"
     "PassResourceUsage.h"
     "PassResourceUsageTracker.cpp"
     "PassResourceUsageTracker.h"
@@ -140,6 +148,8 @@ target_sources(dawn_native PRIVATE
     "QuerySet.h"
     "Queue.cpp"
     "Queue.h"
+    "RefCountedWithExternalCount.cpp"
+    "RefCountedWithExternalCount.h"
     "RenderBundle.cpp"
     "RenderBundle.h"
     "RenderBundleEncoder.cpp"
@@ -160,10 +170,12 @@ target_sources(dawn_native PRIVATE
     "Sampler.h"
     "ScratchBuffer.cpp"
     "ScratchBuffer.h"
+    "Serializable.h"
     "ShaderModule.cpp"
     "ShaderModule.h"
     "StagingBuffer.cpp"
     "StagingBuffer.h"
+    "StreamImplTint.cpp"
     "Subresource.cpp"
     "Subresource.h"
     "SubresourceStorage.h"
@@ -178,11 +190,21 @@ target_sources(dawn_native PRIVATE
     "ToBackend.h"
     "Toggles.cpp"
     "Toggles.h"
+    "UsageValidationMode.h"
     "VertexFormat.cpp"
     "VertexFormat.h"
+    "VisitableMembers.h"
     "dawn_platform.h"
     "webgpu_absl_format.cpp"
     "webgpu_absl_format.h"
+    "stream/BlobSource.cpp"
+    "stream/BlobSource.h"
+    "stream/ByteVectorSink.cpp"
+    "stream/ByteVectorSink.h"
+    "stream/Sink.h"
+    "stream/Source.h"
+    "stream/Stream.cpp"
+    "stream/Stream.h"
     "utils/WGPUHelpers.cpp"
     "utils/WGPUHelpers.h"
 )
@@ -238,6 +260,8 @@ if (DAWN_ENABLE_D3D12)
         "d3d12/BindGroupD3D12.h"
         "d3d12/BindGroupLayoutD3D12.cpp"
         "d3d12/BindGroupLayoutD3D12.h"
+        "d3d12/BlobD3D12.cpp"
+        "d3d12/BlobD3D12.h"
         "d3d12/BufferD3D12.cpp"
         "d3d12/BufferD3D12.h"
         "d3d12/CPUDescriptorHeapAllocationD3D12.cpp"
@@ -258,6 +282,8 @@ if (DAWN_ENABLE_D3D12)
         "d3d12/D3D12Info.h"
         "d3d12/DeviceD3D12.cpp"
         "d3d12/DeviceD3D12.h"
+        "d3d12/ExternalImageDXGIImpl.cpp"
+        "d3d12/ExternalImageDXGIImpl.h"
         "d3d12/Forward.h"
         "d3d12/GPUDescriptorHeapAllocationD3D12.cpp"
         "d3d12/GPUDescriptorHeapAllocationD3D12.h"
@@ -300,6 +326,7 @@ if (DAWN_ENABLE_D3D12)
         "d3d12/StagingBufferD3D12.h"
         "d3d12/StagingDescriptorAllocatorD3D12.cpp"
         "d3d12/StagingDescriptorAllocatorD3D12.h"
+        "d3d12/StreamImplD3D12.cpp"
         "d3d12/SwapChainD3D12.cpp"
         "d3d12/SwapChainD3D12.h"
         "d3d12/TextureCopySplitter.cpp"
@@ -401,6 +428,8 @@ if (DAWN_ENABLE_OPENGL)
     target_sources(dawn_native PRIVATE
         "${DAWN_INCLUDE_DIR}/dawn/native/OpenGLBackend.h"
         ${DAWN_NATIVE_OPENGL_AUTOGEN_SOURCES}
+        "opengl/AdapterGL.cpp"
+        "opengl/AdapterGL.h"
         "opengl/BackendGL.cpp"
         "opengl/BackendGL.h"
         "opengl/BindGroupGL.cpp"
@@ -413,8 +442,12 @@ if (DAWN_ENABLE_OPENGL)
         "opengl/CommandBufferGL.h"
         "opengl/ComputePipelineGL.cpp"
         "opengl/ComputePipelineGL.h"
+        "opengl/ContextEGL.cpp"
+        "opengl/ContextEGL.h"
         "opengl/DeviceGL.cpp"
         "opengl/DeviceGL.h"
+        "opengl/EGLFunctions.cpp"
+        "opengl/EGLFunctions.h"
         "opengl/Forward.h"
         "opengl/GLFormat.cpp"
         "opengl/GLFormat.h"
@@ -444,11 +477,14 @@ if (DAWN_ENABLE_OPENGL)
         "opengl/SwapChainGL.h"
         "opengl/TextureGL.cpp"
         "opengl/TextureGL.h"
+        "opengl/UtilsEGL.cpp"
+        "opengl/UtilsEGL.h"
         "opengl/UtilsGL.cpp"
         "opengl/UtilsGL.h"
         "opengl/opengl_platform.h"
     )
 
+    target_include_directories(dawn_native PRIVATE ${DAWN_KHRONOS_DIR})
     target_link_libraries(dawn_native PRIVATE dawn_khronos_platform)
 endif()
 
@@ -469,8 +505,6 @@ if (DAWN_ENABLE_VULKAN)
         "vulkan/BindGroupVk.h"
         "vulkan/BufferVk.cpp"
         "vulkan/BufferVk.h"
-        "vulkan/CacheKeyVk.cpp"
-        "vulkan/CacheKeyVk.h"
         "vulkan/CommandBufferVk.cpp"
         "vulkan/CommandBufferVk.h"
         "vulkan/CommandRecordingContext.h"
@@ -509,6 +543,7 @@ if (DAWN_ENABLE_VULKAN)
         "vulkan/ShaderModuleVk.h"
         "vulkan/StagingBufferVk.cpp"
         "vulkan/StagingBufferVk.h"
+        "vulkan/StreamImplVk.cpp"
         "vulkan/SwapChainVk.cpp"
         "vulkan/SwapChainVk.h"
         "vulkan/TextureVk.cpp"
@@ -570,6 +605,7 @@ DawnJSONGenerator(
 add_library(webgpu_dawn ${DAWN_PLACEHOLDER_FILE})
 common_compile_options(webgpu_dawn)
 target_link_libraries(webgpu_dawn PRIVATE dawn_native)
+target_link_libraries(webgpu_dawn PUBLIC dawn_headers)
 target_compile_definitions(webgpu_dawn PRIVATE "WGPU_IMPLEMENTATION")
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(webgpu_dawn PRIVATE "WGPU_SHARED_LIBRARY")

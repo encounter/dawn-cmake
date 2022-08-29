@@ -23,6 +23,7 @@
 #include "dawn/native/d3d12/D3D12Error.h"
 #include "dawn/native/d3d12/DeviceD3D12.h"
 #include "dawn/native/d3d12/PlatformFunctions.h"
+#include "dawn/native/d3d12/UtilsD3D12.h"
 
 namespace dawn::native::d3d12 {
 
@@ -66,7 +67,7 @@ MaybeError Adapter::InitializeImpl() {
     // rendering.
     const PlatformFunctions* functions = GetBackend()->GetFunctions();
     if (FAILED(functions->d3d12CreateDevice(GetHardwareAdapter(), D3D_FEATURE_LEVEL_11_0,
-                                            _uuidof(ID3D12Device), &mD3d12Device))) {
+                                            __uuidof(ID3D12Device), &mD3d12Device))) {
         return DAWN_INTERNAL_ERROR("D3D12CreateDevice failed");
     }
 
@@ -134,8 +135,19 @@ MaybeError Adapter::InitializeSupportedFeaturesImpl() {
     mSupportedFeatures.EnableFeature(Feature::TextureCompressionBC);
     mSupportedFeatures.EnableFeature(Feature::PipelineStatisticsQuery);
     mSupportedFeatures.EnableFeature(Feature::MultiPlanarFormats);
-    mSupportedFeatures.EnableFeature(Feature::Depth24UnormStencil8);
     mSupportedFeatures.EnableFeature(Feature::Depth32FloatStencil8);
+    mSupportedFeatures.EnableFeature(Feature::IndirectFirstInstance);
+
+    if (GetBackend()->GetFunctions()->IsDXCAvailable()) {
+        uint64_t dxcVersion = 0;
+        DAWN_TRY_ASSIGN(dxcVersion, GetBackend()->GetDXCompilerVersion());
+        constexpr uint64_t kLeastMajorVersionForDP4a = 1;
+        constexpr uint64_t kLeastMinorVersionForDP4a = 4;
+        if (mDeviceInfo.supportsDP4a &&
+            dxcVersion >= MakeDXCVersion(kLeastMajorVersionForDP4a, kLeastMinorVersionForDP4a)) {
+            mSupportedFeatures.EnableFeature(Feature::ChromiumExperimentalDp4a);
+        }
+    }
 
     return {};
 }
@@ -228,6 +240,8 @@ MaybeError Adapter::InitializeSupportedLimitsImpl(CombinedLimits* limits) {
     limits->v1.maxSampledTexturesPerShaderStage = maxSRVsPerStage;
     limits->v1.maxSamplersPerShaderStage = maxSamplersPerStage;
 
+    limits->v1.maxColorAttachments = D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT;
+
     // https://docs.microsoft.com/en-us/windows/win32/direct3d12/root-signature-limits
     // In DWORDS. Descriptor tables cost 1, Root constants cost 1, Root descriptors cost 2.
     static constexpr uint32_t kMaxRootSignatureSize = 64u;
@@ -287,10 +301,13 @@ MaybeError Adapter::InitializeSupportedLimitsImpl(CombinedLimits* limits) {
     // D3D12 has no documented limit on the size of a storage buffer binding.
     limits->v1.maxStorageBufferBindingSize = 4294967295;
 
+    // Using base limits for:
     // TODO(crbug.com/dawn/685):
-    // LIMITS NOT SET:
     // - maxInterStageShaderComponents
     // - maxVertexBufferArrayStride
+
+    // TODO(crbug.com/dawn/1448):
+    // - maxInterStageShaderVariables
 
     return {};
 }

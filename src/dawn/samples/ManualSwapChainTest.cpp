@@ -63,10 +63,10 @@
 #include "dawn/dawn_proc.h"
 #include "dawn/native/DawnNative.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
-#include "dawn/utils/GLFWUtils.h"
 #include "dawn/utils/ScopedAutoreleasePool.h"
 #include "dawn/utils/WGPUHelpers.h"
 #include "dawn/webgpu_cpp.h"
+#include "webgpu/webgpu_glfw.h"
 
 struct WindowData {
     GLFWwindow* window = nullptr;
@@ -123,7 +123,7 @@ void AddWindow() {
     std::unique_ptr<WindowData> data = std::make_unique<WindowData>();
     data->window = window;
     data->serial = windowSerial++;
-    data->surface = utils::CreateSurfaceForWindow(instance->Get(), window);
+    data->surface = wgpu::glfw::CreateSurfaceForWindow(instance->Get(), window);
     data->currentDesc = descriptor;
     data->targetDesc = descriptor;
     SyncFromWindow(data.get());
@@ -316,7 +316,7 @@ int main(int argc, const char* argv[]) {
     // The hacky pipeline to render a triangle.
     utils::ComboRenderPipelineDescriptor pipelineDesc;
     pipelineDesc.vertex.module = utils::CreateShaderModule(device, R"(
-        @stage(vertex) fn main(@builtin(vertex_index) VertexIndex : u32)
+        @vertex fn main(@builtin(vertex_index) VertexIndex : u32)
                             -> @builtin(position) vec4<f32> {
             var pos = array<vec2<f32>, 3>(
                 vec2<f32>( 0.0,  0.5),
@@ -326,7 +326,7 @@ int main(int argc, const char* argv[]) {
             return vec4<f32>(pos[VertexIndex], 0.0, 1.0);
         })");
     pipelineDesc.cFragment.module = utils::CreateShaderModule(device, R"(
-        @stage(fragment) fn main() -> @location(0) vec4<f32> {
+        @fragment fn main() -> @location(0) vec4<f32> {
             return vec4<f32>(1.0, 0.0, 0.0, 1.0);
         })");
     // BGRA shouldn't be hardcoded. Consider having a map[format -> pipeline].

@@ -23,8 +23,9 @@ TINT_INSTANTIATE_TYPEINFO(tint::Cloneable);
 
 namespace tint {
 
-CloneContext::ListTransforms::ListTransforms() = default;
-CloneContext::ListTransforms::~ListTransforms() = default;
+Cloneable::Cloneable() = default;
+Cloneable::Cloneable(Cloneable&&) = default;
+Cloneable::~Cloneable() = default;
 
 CloneContext::CloneContext(ProgramBuilder* to, Program const* from, bool auto_clone_symbols)
     : dst(to), src(from) {
@@ -44,7 +45,7 @@ Symbol CloneContext::Clone(Symbol s) {
     if (!src) {
         return s;  // In-place clone
     }
-    return utils::GetOrCreate(cloned_symbols_, s, [&]() -> Symbol {
+    return cloned_symbols_.GetOrCreate(s, [&]() -> Symbol {
         if (symbol_transform_) {
             return symbol_transform_(s);
         }
@@ -58,7 +59,7 @@ void CloneContext::Clone() {
 
 ast::FunctionList CloneContext::Clone(const ast::FunctionList& v) {
     ast::FunctionList out;
-    out.reserve(v.size());
+    out.Reserve(v.Length());
     for (const ast::Function* el : v) {
         out.Add(Clone(el));
     }
@@ -72,9 +73,8 @@ const tint::Cloneable* CloneContext::CloneCloneable(const Cloneable* object) {
     }
 
     // Was Replace() called for this object?
-    auto it = replacements_.find(object);
-    if (it != replacements_.end()) {
-        return it->second();
+    if (auto* fn = replacements_.Find(object)) {
+        return (*fn)();
     }
 
     // Attempt to clone using the registered replacer functions.

@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "src/tint/ast/unary_op_expression.h"
 #include "src/tint/fuzzers/tint_ast_fuzzer/mutations/change_unary_operator.h"
 #include "src/tint/fuzzers/tint_ast_fuzzer/util.h"
 #include "src/tint/sem/reference.h"
@@ -46,6 +47,12 @@ MutationList MutationFinderChangeUnaryOperators::FindMutations(
 
         // Only signed integer or vector of signed integer can be mutated.
         if (!basic_type->is_signed_scalar_or_vector()) {
+            continue;
+        }
+
+        // Only complement and negation operators can be swapped.
+        if (!(unary_expr->op == ast::UnaryOp::kComplement ||
+              unary_expr->op == ast::UnaryOp::kNegation)) {
             continue;
         }
 

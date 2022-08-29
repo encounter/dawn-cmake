@@ -23,7 +23,7 @@
 // TODO(crbug.com/dawn/685):
 // For now, only expose these tiers until metrics can determine better ones.
 #define LIMITS_WORKGROUP_STORAGE_SIZE(X)                                  \
-    X(Maximum, maxComputeWorkgroupStorageSize, 16352, 32768, 49152, 65536)
+    X(Maximum, maxComputeWorkgroupStorageSize, 16384, 32768, 49152, 65536)
 
 #define LIMITS_STORAGE_BUFFER_BINDING_SIZE(X)                                             \
     X(Maximum, maxStorageBufferBindingSize, 134217728, 1073741824, 2147483647, 4294967295)
@@ -51,6 +51,8 @@
     X(Maximum,                         maxVertexAttributes,    16,    16) \
     X(Maximum,                  maxVertexBufferArrayStride,  2048,  2048) \
     X(Maximum,               maxInterStageShaderComponents,    60,    60) \
+    X(Maximum,               maxInterStageShaderVariables,     16,    16) \
+    X(Maximum,                         maxColorAttachments,     8,     8) \
     X(Maximum,           maxComputeInvocationsPerWorkgroup,   256,   256) \
     X(Maximum,                    maxComputeWorkgroupSizeX,   256,   256) \
     X(Maximum,                    maxComputeWorkgroupSizeY,   256,   256) \

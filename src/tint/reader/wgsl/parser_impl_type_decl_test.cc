@@ -55,6 +55,17 @@ TEST_F(ParserImplTest, TypeDecl_Bool) {
     EXPECT_EQ(t.value->source.range, (Source::Range{{1u, 1u}, {1u, 5u}}));
 }
 
+TEST_F(ParserImplTest, TypeDecl_F16) {
+    auto p = parser("f16");
+
+    auto t = p->type_decl();
+    EXPECT_TRUE(t.matched);
+    EXPECT_FALSE(t.errored);
+    ASSERT_NE(t.value, nullptr) << p->error();
+    ASSERT_TRUE(t.value->Is<ast::F16>());
+    EXPECT_EQ(t.value->source.range, (Source::Range{{1u, 1u}, {1u, 4u}}));
+}
+
 TEST_F(ParserImplTest, TypeDecl_F32) {
     auto p = parser("f32");
 
@@ -261,7 +272,7 @@ TEST_F(ParserImplTest, TypeDecl_Ptr_MissingStorageClass) {
     EXPECT_FALSE(t.matched);
     ASSERT_EQ(t.value, nullptr);
     ASSERT_TRUE(p->has_error());
-    ASSERT_EQ(p->error(), "1:5: invalid storage class for ptr declaration");
+    ASSERT_EQ(p->error(), "1:5: expected identifier for storage class");
 }
 
 TEST_F(ParserImplTest, TypeDecl_Ptr_MissingType) {
@@ -291,7 +302,7 @@ TEST_F(ParserImplTest, TypeDecl_Ptr_MissingParams) {
     EXPECT_FALSE(t.matched);
     ASSERT_EQ(t.value, nullptr);
     ASSERT_TRUE(p->has_error());
-    ASSERT_EQ(p->error(), "1:5: invalid storage class for ptr declaration");
+    ASSERT_EQ(p->error(), "1:5: expected identifier for storage class");
 }
 
 TEST_F(ParserImplTest, TypeDecl_Ptr_BadStorageClass) {
@@ -388,7 +399,7 @@ TEST_F(ParserImplTest, TypeDecl_Array_AbstractIntLiteralSize) {
     auto* a = t.value->As<ast::Array>();
     ASSERT_FALSE(a->IsRuntimeArray());
     ASSERT_TRUE(a->type->Is<ast::F32>());
-    EXPECT_EQ(a->attributes.size(), 0u);
+    EXPECT_EQ(a->attributes.Length(), 0u);
     EXPECT_EQ(t.value->source.range, (Source::Range{{1u, 1u}, {1u, 14u}}));
 
     auto* size = a->count->As<ast::IntLiteralExpression>();
@@ -409,7 +420,7 @@ TEST_F(ParserImplTest, TypeDecl_Array_SintLiteralSize) {
     auto* a = t.value->As<ast::Array>();
     ASSERT_FALSE(a->IsRuntimeArray());
     ASSERT_TRUE(a->type->Is<ast::F32>());
-    EXPECT_EQ(a->attributes.size(), 0u);
+    EXPECT_EQ(a->attributes.Length(), 0u);
     EXPECT_EQ(t.value->source.range, (Source::Range{{1u, 1u}, {1u, 15u}}));
 
     auto* size = a->count->As<ast::IntLiteralExpression>();
@@ -430,7 +441,7 @@ TEST_F(ParserImplTest, TypeDecl_Array_UintLiteralSize) {
     auto* a = t.value->As<ast::Array>();
     ASSERT_FALSE(a->IsRuntimeArray());
     ASSERT_TRUE(a->type->Is<ast::F32>());
-    EXPECT_EQ(a->attributes.size(), 0u);
+    EXPECT_EQ(a->attributes.Length(), 0u);
     EXPECT_EQ(t.value->source.range, (Source::Range{{1u, 1u}, {1u, 15u}}));
 
     auto* size = a->count->As<ast::IntLiteralExpression>();
@@ -450,12 +461,39 @@ TEST_F(ParserImplTest, TypeDecl_Array_ConstantSize) {
     auto* a = t.value->As<ast::Array>();
     ASSERT_FALSE(a->IsRuntimeArray());
     ASSERT_TRUE(a->type->Is<ast::F32>());
-    EXPECT_EQ(a->attributes.size(), 0u);
+    EXPECT_EQ(a->attributes.Length(), 0u);
     EXPECT_EQ(t.value->source.range, (Source::Range{{1u, 1u}, {1u, 17u}}));
 
     auto* count_expr = a->count->As<ast::IdentifierExpression>();
     ASSERT_NE(count_expr, nullptr);
     EXPECT_EQ(p->builder().Symbols().NameFor(count_expr->symbol), "size");
+}
+
+TEST_F(ParserImplTest, TypeDecl_Array_ExpressionSize) {
+    auto p = parser("array<f32, size + 2>");
+    auto t = p->type_decl();
+    EXPECT_TRUE(t.matched);
+    EXPECT_FALSE(t.errored);
+    ASSERT_NE(t.value, nullptr) << p->error();
+    ASSERT_FALSE(p->has_error());
+    ASSERT_TRUE(t.value->Is<ast::Array>());
+
+    auto* a = t.value->As<ast::Array>();
+    ASSERT_FALSE(a->IsRuntimeArray());
+    ASSERT_TRUE(a->type->Is<ast::F32>());
+    EXPECT_EQ(a->attributes.Length(), 0u);
+
+    ASSERT_TRUE(a->count->Is<ast::BinaryExpression>());
+    auto* count_expr = a->count->As<ast::BinaryExpression>();
+    EXPECT_EQ(ast::BinaryOp::kAdd, count_expr->op);
+
+    ASSERT_TRUE(count_expr->lhs->Is<ast::IdentifierExpression>());
+    auto* ident = count_expr->lhs->As<ast::IdentifierExpression>();
+    EXPECT_EQ(p->builder().Symbols().NameFor(ident->symbol), "size");
+
+    ASSERT_TRUE(count_expr->rhs->Is<ast::IntLiteralExpression>());
+    auto* val = count_expr->rhs->As<ast::IntLiteralExpression>();
+    EXPECT_EQ(2, static_cast<int32_t>(val->value));
 }
 
 TEST_F(ParserImplTest, TypeDecl_Array_Runtime) {
@@ -497,7 +535,7 @@ TEST_F(ParserImplTest, TypeDecl_Array_BadSize) {
     EXPECT_FALSE(t.matched);
     ASSERT_EQ(t.value, nullptr);
     ASSERT_TRUE(p->has_error());
-    ASSERT_EQ(p->error(), "1:12: expected array size expression");
+    ASSERT_EQ(p->error(), "1:13: unable to parse right side of ! expression");
 }
 
 TEST_F(ParserImplTest, TypeDecl_Array_MissingSize) {
@@ -508,16 +546,6 @@ TEST_F(ParserImplTest, TypeDecl_Array_MissingSize) {
     ASSERT_EQ(t.value, nullptr);
     ASSERT_TRUE(p->has_error());
     ASSERT_EQ(p->error(), "1:11: expected array size expression");
-}
-
-TEST_F(ParserImplTest, TypeDecl_Array_MissingLessThan) {
-    auto p = parser("array f32>");
-    auto t = p->type_decl();
-    EXPECT_TRUE(t.errored);
-    EXPECT_FALSE(t.matched);
-    ASSERT_EQ(t.value, nullptr);
-    ASSERT_TRUE(p->has_error());
-    ASSERT_EQ(p->error(), "1:7: expected '<' for array declaration");
 }
 
 TEST_F(ParserImplTest, TypeDecl_Array_MissingGreaterThan) {

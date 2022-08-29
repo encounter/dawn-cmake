@@ -51,7 +51,10 @@ group("abseil") {
   if (build_with_chromium) {
     public_deps = [ "$dawn_abseil_dir:absl" ]
   } else {
-    public_deps = [ "${dawn_root}/third_party/gn/abseil-cpp:str_format" ]
+    public_deps = [
+      "${dawn_root}/third_party/gn/abseil-cpp:str_format",
+      "${dawn_root}/third_party/gn/abseil-cpp:strings",
+    ]
   }
 }
 
@@ -94,9 +97,9 @@ dawn_json_generator("utils_gen") {
     "src/dawn/native/ValidationUtils_autogen.cpp",
     "src/dawn/native/webgpu_absl_format_autogen.h",
     "src/dawn/native/webgpu_absl_format_autogen.cpp",
+    "src/dawn/native/webgpu_StreamImpl_autogen.cpp",
     "src/dawn/native/ObjectType_autogen.h",
     "src/dawn/native/ObjectType_autogen.cpp",
-    "src/dawn/native/CacheKey_autogen.cpp",
   ]
 }
 
@@ -154,6 +157,12 @@ source_set("sources") {
 
   configs += [ ":internal" ]
 
+  # Enable -Wglobal-constructors here only, instead of in internal_config,
+  # because gtest and some other targets don't build with it.
+  if (is_clang) {
+    cflags = [ "-Wglobal-constructors" ]
+  }
+
   # Dependencies that are needed to compile dawn native entry points in
   # FooBackend.cpp need to be public deps so they are propagated to the
   # dawn native target
@@ -166,6 +175,8 @@ source_set("sources") {
   sources += [
     "Adapter.cpp",
     "Adapter.h",
+    "ApplyClearColorValueWithDrawHelper.cpp",
+    "ApplyClearColorValueWithDrawHelper.h",
     "AsyncTask.cpp",
     "AsyncTask.h",
     "AttachmentState.cpp",
@@ -179,6 +190,8 @@ source_set("sources") {
     "BindGroupTracker.h",
     "BindingInfo.cpp",
     "BindingInfo.h",
+    "Blob.cpp",
+    "Blob.h",
     "BlobCache.cpp",
     "BlobCache.h",
     "BuddyAllocator.cpp",
@@ -189,6 +202,9 @@ source_set("sources") {
     "Buffer.h",
     "CacheKey.cpp",
     "CacheKey.h",
+    "CacheRequest.cpp",
+    "CacheRequest.h",
+    "CacheResult.h",
     "CachedObject.cpp",
     "CachedObject.h",
     "CallbackTaskManager.cpp",
@@ -253,6 +269,7 @@ source_set("sources") {
     "ObjectBase.h",
     "ObjectContentHasher.cpp",
     "ObjectContentHasher.h",
+    "PassResourceUsage.cpp",
     "PassResourceUsage.h",
     "PassResourceUsageTracker.cpp",
     "PassResourceUsageTracker.h",
@@ -274,6 +291,8 @@ source_set("sources") {
     "QuerySet.h",
     "Queue.cpp",
     "Queue.h",
+    "RefCountedWithExternalCount.cpp",
+    "RefCountedWithExternalCount.h",
     "RenderBundle.cpp",
     "RenderBundle.h",
     "RenderBundleEncoder.cpp",
@@ -294,10 +313,12 @@ source_set("sources") {
     "Sampler.h",
     "ScratchBuffer.cpp",
     "ScratchBuffer.h",
+    "Serializable.h",
     "ShaderModule.cpp",
     "ShaderModule.h",
     "StagingBuffer.cpp",
     "StagingBuffer.h",
+    "StreamImplTint.cpp",
     "Subresource.cpp",
     "Subresource.h",
     "SubresourceStorage.h",
@@ -312,9 +333,19 @@ source_set("sources") {
     "ToBackend.h",
     "Toggles.cpp",
     "Toggles.h",
+    "UsageValidationMode.h",
     "VertexFormat.cpp",
     "VertexFormat.h",
+    "VisitableMembers.h",
     "dawn_platform.h",
+    "stream/BlobSource.cpp",
+    "stream/BlobSource.h",
+    "stream/ByteVectorSink.cpp",
+    "stream/ByteVectorSink.h",
+    "stream/Sink.h",
+    "stream/Source.h",
+    "stream/Stream.cpp",
+    "stream/Stream.h",
     "utils/WGPUHelpers.cpp",
     "utils/WGPUHelpers.h",
     "webgpu_absl_format.cpp",
@@ -362,6 +393,8 @@ source_set("sources") {
       "d3d12/BindGroupD3D12.h",
       "d3d12/BindGroupLayoutD3D12.cpp",
       "d3d12/BindGroupLayoutD3D12.h",
+      "d3d12/BlobD3D12.cpp",
+      "d3d12/BlobD3D12.h",
       "d3d12/BufferD3D12.cpp",
       "d3d12/BufferD3D12.h",
       "d3d12/CPUDescriptorHeapAllocationD3D12.cpp",
@@ -382,6 +415,8 @@ source_set("sources") {
       "d3d12/D3D12Info.h",
       "d3d12/DeviceD3D12.cpp",
       "d3d12/DeviceD3D12.h",
+      "d3d12/ExternalImageDXGIImpl.cpp",
+      "d3d12/ExternalImageDXGIImpl.h",
       "d3d12/Forward.h",
       "d3d12/GPUDescriptorHeapAllocationD3D12.cpp",
       "d3d12/GPUDescriptorHeapAllocationD3D12.h",
@@ -424,6 +459,7 @@ source_set("sources") {
       "d3d12/StagingBufferD3D12.h",
       "d3d12/StagingDescriptorAllocatorD3D12.cpp",
       "d3d12/StagingDescriptorAllocatorD3D12.h",
+      "d3d12/StreamImplD3D12.cpp",
       "d3d12/SwapChainD3D12.cpp",
       "d3d12/SwapChainD3D12.h",
       "d3d12/TextureCopySplitter.cpp",
@@ -506,6 +542,8 @@ source_set("sources") {
     ]
     sources += get_target_outputs(":opengl_loader_gen")
     sources += [
+      "opengl/AdapterGL.cpp",
+      "opengl/AdapterGL.h",
       "opengl/BackendGL.cpp",
       "opengl/BackendGL.h",
       "opengl/BindGroupGL.cpp",
@@ -518,8 +556,12 @@ source_set("sources") {
       "opengl/CommandBufferGL.h",
       "opengl/ComputePipelineGL.cpp",
       "opengl/ComputePipelineGL.h",
+      "opengl/ContextEGL.cpp",
+      "opengl/ContextEGL.h",
       "opengl/DeviceGL.cpp",
       "opengl/DeviceGL.h",
+      "opengl/EGLFunctions.cpp",
+      "opengl/EGLFunctions.h",
       "opengl/Forward.h",
       "opengl/GLFormat.cpp",
       "opengl/GLFormat.h",
@@ -549,10 +591,13 @@ source_set("sources") {
       "opengl/SwapChainGL.h",
       "opengl/TextureGL.cpp",
       "opengl/TextureGL.h",
+      "opengl/UtilsEGL.cpp",
+      "opengl/UtilsEGL.h",
       "opengl/UtilsGL.cpp",
       "opengl/UtilsGL.h",
       "opengl/opengl_platform.h",
     ]
+    include_dirs = [ "//third_party/khronos" ]
   }
 
   if (dawn_enable_vulkan) {
@@ -570,8 +615,6 @@ source_set("sources") {
       "vulkan/BindGroupVk.h",
       "vulkan/BufferVk.cpp",
       "vulkan/BufferVk.h",
-      "vulkan/CacheKeyVk.cpp",
-      "vulkan/CacheKeyVk.h",
       "vulkan/CommandBufferVk.cpp",
       "vulkan/CommandBufferVk.h",
       "vulkan/CommandRecordingContext.h",
@@ -610,6 +653,7 @@ source_set("sources") {
       "vulkan/ShaderModuleVk.h",
       "vulkan/StagingBufferVk.cpp",
       "vulkan/StagingBufferVk.h",
+      "vulkan/StreamImplVk.cpp",
       "vulkan/SwapChainVk.cpp",
       "vulkan/SwapChainVk.h",
       "vulkan/TextureVk.cpp",

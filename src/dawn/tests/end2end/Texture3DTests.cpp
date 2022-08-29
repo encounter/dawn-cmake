@@ -30,7 +30,7 @@ TEST_P(Texture3DTests, Sampling) {
     // Set up pipeline. Two triangles will be drawn via the pipeline. They will fill the entire
     // color attachment with data sampled from 3D texture.
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-        @stage(vertex)
+        @vertex
         fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
             var pos = array<vec2<f32>, 6>(
                 vec2<f32>(-1.0, 1.0),
@@ -47,7 +47,7 @@ TEST_P(Texture3DTests, Sampling) {
         @group(0) @binding(0) var samp : sampler;
         @group(0) @binding(1) var tex : texture_3d<f32>;
 
-        @stage(fragment)
+        @fragment
         fn main(@builtin(position) FragCoord : vec4<f32>) -> @location(0) vec4<f32> {
             return textureSample(tex, samp, vec3<f32>(FragCoord.xy / 4.0, 1.5 / 4.0));
         })");
@@ -77,12 +77,12 @@ TEST_P(Texture3DTests, Sampling) {
         utils::RequiredBytesInCopy(bytesPerRow, copySize.height, copySize, kFormat);
     const uint32_t bytesPerTexel = utils::GetTexelBlockSizeInBytes(kFormat);
     uint32_t size = sizeInBytes / bytesPerTexel;
-    std::vector<RGBA8> data = std::vector<RGBA8>(size);
+    std::vector<utils::RGBA8> data = std::vector<utils::RGBA8>(size);
     for (uint32_t z = 0; z < copySize.depthOrArrayLayers; ++z) {
         for (uint32_t y = 0; y < copySize.height; ++y) {
             for (uint32_t x = 0; x < copySize.width; ++x) {
                 uint32_t i = (z * copySize.height + y) * bytesPerRow / bytesPerTexel + x;
-                data[i] = RGBA8(x, y, z, 255);
+                data[i] = utils::RGBA8(x, y, z, 255);
             }
         }
     }
@@ -112,7 +112,7 @@ TEST_P(Texture3DTests, Sampling) {
     // in shader, so the expected color at coordinate(x, y) should be (x, y, 1, 255).
     for (uint32_t i = 0; i < kRTSize; ++i) {
         for (uint32_t j = 0; j < kRTSize; ++j) {
-            EXPECT_PIXEL_RGBA8_EQ(RGBA8(i, j, 1, 255), renderPass.color, i, j);
+            EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(i, j, 1, 255), renderPass.color, i, j);
         }
     }
 }

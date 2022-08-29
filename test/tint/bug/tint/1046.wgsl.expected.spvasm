@@ -112,7 +112,7 @@
 %_ptr_Function_v4float = OpTypePointer Function %v4float
      %uint_3 = OpConstant %uint 3
 %_ptr_Uniform_uint = OpTypePointer Uniform %uint
-     %uint_0 = OpConstant %uint 0
+         %41 = OpConstantNull %uint
        %bool = OpTypeBool
      %uint_1 = OpConstant %uint 1
 %_ptr_Function_float = OpTypePointer Function %float
@@ -125,8 +125,9 @@
          %82 = OpTypeFunction %FragmentOutput %FragmentInput
 %_ptr_Function_FragmentOutput = OpTypePointer Function %FragmentOutput
          %89 = OpConstantNull %FragmentOutput
-    %float_0 = OpConstant %float 0
-         %92 = OpConstantComposite %v4float %float_1 %float_0 %float_0 %float_1
+     %uint_0 = OpConstant %uint 0
+         %92 = OpConstantNull %float
+         %93 = OpConstantComposite %v4float %float_1 %92 %92 %float_1
        %void = OpTypeVoid
          %95 = OpTypeFunction %void
    %getColor = OpFunction %v4float None %30
@@ -135,7 +136,7 @@
       %color = OpVariable %_ptr_Function_v4float Function %13
          %39 = OpAccessChain %_ptr_Uniform_uint %uniforms %uint_3
          %40 = OpLoad %uint %39
-         %42 = OpIEqual %bool %40 %uint_0
+         %42 = OpIEqual %bool %40 %41
                OpSelectionMerge %44 None
                OpBranchConditional %42 %45 %46
          %45 = OpLabel
@@ -193,8 +194,8 @@
  %fragment_0 = OpFunctionParameter %FragmentInput
          %86 = OpLabel
      %output = OpVariable %_ptr_Function_FragmentOutput Function %89
-         %90 = OpAccessChain %_ptr_Function_v4float %output %uint_0
-               OpStore %90 %92
+         %91 = OpAccessChain %_ptr_Function_v4float %output %uint_0
+               OpStore %91 %93
          %94 = OpLoad %FragmentOutput %output
                OpReturnValue %94
                OpFunctionEnd

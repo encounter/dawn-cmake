@@ -20,7 +20,7 @@
 #include "dawn/common/Assert.h"
 #include "dawn/common/Platform.h"
 
-#if defined(DAWN_PLATFORM_ANDROID)
+#if DAWN_PLATFORM_IS(ANDROID)
 #include <android/log.h>
 #endif
 
@@ -28,6 +28,7 @@ namespace dawn {
 
 namespace {
 
+#if !defined(DAWN_DISABLE_LOGGING)
 const char* SeverityName(LogSeverity severity) {
     switch (severity) {
         case LogSeverity::Debug:
@@ -43,8 +44,9 @@ const char* SeverityName(LogSeverity severity) {
             return "";
     }
 }
+#endif
 
-#if defined(DAWN_PLATFORM_ANDROID)
+#if DAWN_PLATFORM_IS(ANDROID)
 android_LogPriority AndroidLogPriority(LogSeverity severity) {
     switch (severity) {
         case LogSeverity::Debug:
@@ -60,12 +62,24 @@ android_LogPriority AndroidLogPriority(LogSeverity severity) {
             return ANDROID_LOG_ERROR;
     }
 }
-#endif  // defined(DAWN_PLATFORM_ANDROID)
+#endif  // DAWN_PLATFORM_IS(ANDROID)
 
 }  // anonymous namespace
 
 LogMessage::LogMessage(LogSeverity severity) : mSeverity(severity) {}
 
+LogMessage::LogMessage(LogMessage&& other) = default;
+
+LogMessage& LogMessage::operator=(LogMessage&& other) = default;
+
+#if defined(DAWN_DISABLE_LOGGING)
+LogMessage::~LogMessage() {
+    (void)mSeverity;
+    // Don't print logs to make fuzzing more efficient. Implemented as
+    // an early return to avoid warnings about unused member variables.
+    return;
+}
+#else  // defined(DAWN_DISABLE_LOGGING)
 LogMessage::~LogMessage() {
     std::string fullMessage = mStream.str();
 
@@ -76,10 +90,10 @@ LogMessage::~LogMessage() {
 
     const char* severityName = SeverityName(mSeverity);
 
-#if defined(DAWN_PLATFORM_ANDROID)
+#if DAWN_PLATFORM_IS(ANDROID)
     android_LogPriority androidPriority = AndroidLogPriority(mSeverity);
     __android_log_print(androidPriority, "Dawn", "%s: %s\n", severityName, fullMessage.c_str());
-#else   // defined(DAWN_PLATFORM_ANDROID)
+#else   // DAWN_PLATFORM_IS(ANDROID)
     FILE* outputStream = stdout;
     if (mSeverity == LogSeverity::Warning || mSeverity == LogSeverity::Error) {
         outputStream = stderr;
@@ -88,8 +102,9 @@ LogMessage::~LogMessage() {
     // Note: we use fprintf because <iostream> includes static initializers.
     fprintf(outputStream, "%s: %s\n", severityName, fullMessage.c_str());
     fflush(outputStream);
-#endif  // defined(DAWN_PLATFORM_ANDROID)
+#endif  // DAWN_PLATFORM_IS(ANDROID)
 }
+#endif  // defined(DAWN_DISABLE_LOGGING)
 
 LogMessage DebugLog() {
     return LogMessage(LogSeverity::Debug);

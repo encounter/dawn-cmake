@@ -28,8 +28,8 @@ namespace dawn::wire::client {
 class Adapter final : public ObjectBase {
   public:
     using ObjectBase::ObjectBase;
+    ~Adapter() override;
 
-    ~Adapter();
     void CancelCallbacksForDisconnect() override;
 
     bool GetLimits(WGPUSupportedLimits* limits) const;

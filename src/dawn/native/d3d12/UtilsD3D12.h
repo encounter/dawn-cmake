@@ -26,7 +26,7 @@
 
 namespace dawn::native::d3d12 {
 
-ResultOrError<std::wstring> ConvertStringToWstring(const char* str);
+ResultOrError<std::wstring> ConvertStringToWstring(std::string_view s);
 
 D3D12_COMPARISON_FUNC ToD3D12ComparisonFunc(wgpu::CompareFunction func);
 
@@ -67,6 +67,8 @@ void RecordBufferTextureCopy(BufferTextureCopyDirection direction,
                              const Extent3D& copySize);
 
 void SetDebugName(Device* device, ID3D12Object* object, const char* prefix, std::string label = "");
+
+uint64_t MakeDXCVersion(uint64_t majorVersion, uint64_t minorVersion);
 
 }  // namespace dawn::native::d3d12
 

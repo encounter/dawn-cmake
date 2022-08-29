@@ -19,6 +19,7 @@
 #include <string>
 
 #include "src/tint/ast/attribute.h"
+#include "src/tint/ast/expression.h"
 
 namespace tint::ast {
 
@@ -27,9 +28,13 @@ class StructMemberAlignAttribute final : public Castable<StructMemberAlignAttrib
   public:
     /// constructor
     /// @param pid the identifier of the program that owns this node
+    /// @param nid the unique node identifier
     /// @param src the source of this node
-    /// @param align the align value
-    StructMemberAlignAttribute(ProgramID pid, const Source& src, uint32_t align);
+    /// @param align the align value expression
+    StructMemberAlignAttribute(ProgramID pid,
+                               NodeID nid,
+                               const Source& src,
+                               const ast::Expression* align);
     ~StructMemberAlignAttribute() override;
 
     /// @returns the WGSL name for the attribute
@@ -41,8 +46,8 @@ class StructMemberAlignAttribute final : public Castable<StructMemberAlignAttrib
     /// @return the newly cloned node
     const StructMemberAlignAttribute* Clone(CloneContext* ctx) const override;
 
-    /// The align value
-    const uint32_t align;
+    /// The align value expression
+    const ast::Expression* const align;
 };
 
 }  // namespace tint::ast

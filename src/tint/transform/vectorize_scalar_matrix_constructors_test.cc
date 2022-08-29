@@ -31,7 +31,7 @@ TEST_F(VectorizeScalarMatrixConstructorsTest, ShouldRunEmptyModule) {
     EXPECT_FALSE(ShouldRun<VectorizeScalarMatrixConstructors>(src));
 }
 
-TEST_P(VectorizeScalarMatrixConstructorsTest, Basic) {
+TEST_P(VectorizeScalarMatrixConstructorsTest, MultipleScalars) {
     uint32_t cols = GetParam().first;
     uint32_t rows = GetParam().second;
     std::string mat_type = "mat" + std::to_string(cols) + "x" + std::to_string(rows) + "<f32>";
@@ -57,8 +57,51 @@ TEST_P(VectorizeScalarMatrixConstructorsTest, Basic) {
     }
 
     std::string tmpl = R"(
-@stage(fragment)
+@fragment
 fn main() {
+  let m = ${matrix}(${values});
+}
+)";
+    tmpl = utils::ReplaceAll(tmpl, "${matrix}", mat_type);
+    auto src = utils::ReplaceAll(tmpl, "${values}", scalar_values);
+    auto expect = utils::ReplaceAll(tmpl, "${values}", vector_values);
+
+    EXPECT_TRUE(ShouldRun<VectorizeScalarMatrixConstructors>(src));
+
+    auto got = Run<VectorizeScalarMatrixConstructors>(src);
+
+    EXPECT_EQ(expect, str(got));
+}
+
+TEST_P(VectorizeScalarMatrixConstructorsTest, MultipleScalarsReference) {
+    uint32_t cols = GetParam().first;
+    uint32_t rows = GetParam().second;
+    std::string mat_type = "mat" + std::to_string(cols) + "x" + std::to_string(rows) + "<f32>";
+    std::string vec_type = "vec" + std::to_string(rows) + "<f32>";
+    std::string scalar_values;
+    std::string vector_values;
+    for (uint32_t c = 0; c < cols; c++) {
+        if (c > 0) {
+            vector_values += ", ";
+            scalar_values += ", ";
+        }
+        vector_values += vec_type + "(";
+        for (uint32_t r = 0; r < rows; r++) {
+            if (r > 0) {
+                scalar_values += ", ";
+                vector_values += ", ";
+            }
+            auto value = "v[" + std::to_string((c * rows + r) % 4) + "]";
+            scalar_values += value;
+            vector_values += value;
+        }
+        vector_values += ")";
+    }
+
+    std::string tmpl = R"(
+@fragment
+fn main() {
+  let v = vec4<f32>(1.0, 2.0, 3.0, 8.0);
   let m = ${matrix}(${values});
 }
 )";
@@ -87,7 +130,7 @@ TEST_P(VectorizeScalarMatrixConstructorsTest, NonScalarConstructors) {
     }
 
     std::string tmpl = R"(
-@stage(fragment)
+@fragment
 fn main() {
   let m = ${matrix}(${columns});
 }

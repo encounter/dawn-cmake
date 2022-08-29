@@ -28,7 +28,8 @@ namespace {
 // each mipmap of the texture is having a different color
 // so we can check if the sampler anisotropic filtering is fetching
 // from the correct miplevel
-const std::array<RGBA8, 3> colors = {RGBA8::kRed, RGBA8::kGreen, RGBA8::kBlue};
+const std::array<utils::RGBA8, 3> colors = {utils::RGBA8::kRed, utils::RGBA8::kGreen,
+                                            utils::RGBA8::kBlue};
 }  // namespace
 
 class SamplerFilterAnisotropicTest : public DawnTest {
@@ -54,7 +55,7 @@ class SamplerFilterAnisotropicTest : public DawnTest {
                 @builtin(position) position : vec4<f32>,
             }
 
-            @stage(vertex)
+            @vertex
             fn main(input : VertexIn) -> VertexOut {
                 var output : VertexOut;
                 output.uv = input.uv;
@@ -71,7 +72,7 @@ class SamplerFilterAnisotropicTest : public DawnTest {
                 @builtin(position) fragCoord : vec4<f32>,
             }
 
-            @stage(fragment)
+            @fragment
             fn main(input : FragmentIn) -> @location(0) vec4<f32> {
                 return textureSample(texture0, sampler0, input.uv);
             })");
@@ -111,7 +112,7 @@ class SamplerFilterAnisotropicTest : public DawnTest {
         descriptor.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
         wgpu::Texture texture = device.CreateTexture(&descriptor);
 
-        const uint32_t rowPixels = kTextureBytesPerRowAlignment / sizeof(RGBA8);
+        const uint32_t rowPixels = kTextureBytesPerRowAlignment / sizeof(utils::RGBA8);
 
         wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
 
@@ -120,11 +121,12 @@ class SamplerFilterAnisotropicTest : public DawnTest {
             const uint32_t texWidth = textureWidthLevel0 >> level;
             const uint32_t texHeight = textureHeightLevel0 >> level;
 
-            const RGBA8 color = colors[level];
+            const utils::RGBA8 color = colors[level];
 
-            std::vector<RGBA8> data(rowPixels * texHeight, color);
-            wgpu::Buffer stagingBuffer = utils::CreateBufferFromData(
-                device, data.data(), data.size() * sizeof(RGBA8), wgpu::BufferUsage::CopySrc);
+            std::vector<utils::RGBA8> data(rowPixels * texHeight, color);
+            wgpu::Buffer stagingBuffer =
+                utils::CreateBufferFromData(device, data.data(), data.size() * sizeof(utils::RGBA8),
+                                            wgpu::BufferUsage::CopySrc);
             wgpu::ImageCopyBuffer imageCopyBuffer =
                 utils::CreateImageCopyBuffer(stagingBuffer, 0, kTextureBytesPerRowAlignment);
             wgpu::ImageCopyTexture imageCopyTexture =

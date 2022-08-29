@@ -273,7 +273,7 @@ class VertexFormatTest : public DawnTest {
                 @builtin(position) position : vec4<f32>,
             }
 
-            @stage(vertex)
+            @vertex
             fn main(input : VertexIn) -> VertexOut {
                 var pos = array<vec2<f32>, 3>(
                     vec2<f32>(-1.0, -1.0),
@@ -362,7 +362,7 @@ class VertexFormatTest : public DawnTest {
 
         wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, vs.str().c_str());
         wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
-                @stage(fragment)
+                @fragment
                 fn main(@location(0) color : vec4<f32>) -> @location(0) vec4<f32> {
                     return color;
                 })");
@@ -405,7 +405,7 @@ class VertexFormatTest : public DawnTest {
         wgpu::CommandBuffer commands = encoder.Finish();
         queue.Submit(1, &commands);
 
-        EXPECT_PIXEL_RGBA8_EQ(RGBA8::kGreen, renderPass.color, 0, 0);
+        EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kGreen, renderPass.color, 0, 0);
     }
 };
 

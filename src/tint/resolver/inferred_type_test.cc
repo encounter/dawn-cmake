@@ -75,30 +75,30 @@ Params all_cases[] = {
 
 using ResolverInferredTypeParamTest = ResolverTestWithParam<Params>;
 
-TEST_P(ResolverInferredTypeParamTest, GlobalLet_Pass) {
+TEST_P(ResolverInferredTypeParamTest, GlobalConst_Pass) {
     auto& params = GetParam();
 
     auto* expected_type = params.create_expected_type(*this);
 
-    // let a = <type constructor>;
+    // const a = <type constructor>;
     auto* ctor_expr = params.create_value(*this, 0);
-    auto* var = GlobalConst("a", nullptr, ctor_expr);
-    WrapInFunction();
+    auto* a = GlobalConst("a", ctor_expr);
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
-    EXPECT_EQ(TypeOf(var), expected_type);
+    EXPECT_EQ(TypeOf(a), expected_type);
 }
 
-TEST_P(ResolverInferredTypeParamTest, GlobalVar_Fail) {
+TEST_P(ResolverInferredTypeParamTest, GlobalVar_Pass) {
     auto& params = GetParam();
+
+    auto* expected_type = params.create_expected_type(*this);
 
     // var a = <type constructor>;
     auto* ctor_expr = params.create_value(*this, 0);
-    Global(Source{{12, 34}}, "a", nullptr, ast::StorageClass::kPrivate, ctor_expr);
-    WrapInFunction();
+    auto* var = GlobalVar("a", ast::StorageClass::kPrivate, ctor_expr);
 
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 error: global var declaration must specify a type");
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
+    EXPECT_EQ(TypeOf(var)->UnwrapRef(), expected_type);
 }
 
 TEST_P(ResolverInferredTypeParamTest, LocalLet_Pass) {
@@ -108,7 +108,7 @@ TEST_P(ResolverInferredTypeParamTest, LocalLet_Pass) {
 
     // let a = <type constructor>;
     auto* ctor_expr = params.create_value(*this, 0);
-    auto* var = Let("a", nullptr, ctor_expr);
+    auto* var = Let("a", ctor_expr);
     WrapInFunction(var);
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
@@ -122,7 +122,7 @@ TEST_P(ResolverInferredTypeParamTest, LocalVar_Pass) {
 
     // var a = <type constructor>;
     auto* ctor_expr = params.create_value(*this, 0);
-    auto* var = Var("a", nullptr, ast::StorageClass::kFunction, ctor_expr);
+    auto* var = Var("a", ast::StorageClass::kFunction, ctor_expr);
     WrapInFunction(var);
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
@@ -136,7 +136,7 @@ TEST_F(ResolverInferredTypeTest, InferArray_Pass) {
     auto* expected_type = create<sem::Array>(create<sem::U32>(), 10u, 4u, 4u * 10u, 4u, 4u);
 
     auto* ctor_expr = Construct(type);
-    auto* var = Var("a", nullptr, ast::StorageClass::kFunction, ctor_expr);
+    auto* var = Var("a", ast::StorageClass::kFunction, ctor_expr);
     WrapInFunction(var);
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
@@ -145,7 +145,7 @@ TEST_F(ResolverInferredTypeTest, InferArray_Pass) {
 
 TEST_F(ResolverInferredTypeTest, InferStruct_Pass) {
     auto* member = Member("x", ty.i32());
-    auto* str = Structure("S", {member});
+    auto* str = Structure("S", utils::Vector{member});
 
     auto* expected_type =
         create<sem::Struct>(str, str->name,
@@ -155,7 +155,7 @@ TEST_F(ResolverInferredTypeTest, InferStruct_Pass) {
 
     auto* ctor_expr = Construct(ty.Of(str));
 
-    auto* var = Var("a", nullptr, ast::StorageClass::kFunction, ctor_expr);
+    auto* var = Var("a", ast::StorageClass::kFunction, ctor_expr);
     WrapInFunction(var);
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();

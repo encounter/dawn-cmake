@@ -23,6 +23,7 @@ ShaderModule::~ShaderModule() {
 }
 
 void ShaderModule::GetCompilationInfo(WGPUCompilationInfoCallback callback, void* userdata) {
+    Client* client = GetClient();
     if (client->IsDisconnected()) {
         callback(WGPUCompilationInfoRequestStatus_DeviceLost, nullptr, userdata);
         return;
@@ -31,7 +32,7 @@ void ShaderModule::GetCompilationInfo(WGPUCompilationInfoCallback callback, void
     uint64_t serial = mCompilationInfoRequests.Add({callback, userdata});
 
     ShaderModuleGetCompilationInfoCmd cmd;
-    cmd.shaderModuleId = this->id;
+    cmd.shaderModuleId = GetWireId();
     cmd.requestSerial = serial;
 
     client->SerializeCommand(cmd);

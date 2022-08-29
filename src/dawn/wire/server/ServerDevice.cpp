@@ -19,27 +19,13 @@ namespace dawn::wire::server {
 namespace {
 
 template <ObjectType objectType, typename Pipeline>
-void HandleCreateRenderPipelineAsyncCallbackResult(KnownObjects<Pipeline>* knownObjects,
-                                                   WGPUCreatePipelineAsyncStatus status,
-                                                   Pipeline pipeline,
-                                                   CreatePipelineAsyncUserData* data) {
-    // May be null if the device was destroyed. Device destruction destroys child
-    // objects on the wire.
-    auto* pipelineObject = knownObjects->Get(data->pipelineObjectID, AllocationState::Reserved);
-    // Should be impossible to fail. ObjectIds can't be freed by a destroy command until
-    // they move from Reserved to Allocated, or if they are destroyed here.
-    ASSERT(pipelineObject != nullptr);
-
+void HandleCreatePipelineAsyncCallback(KnownObjects<Pipeline>* knownObjects,
+                                       WGPUCreatePipelineAsyncStatus status,
+                                       Pipeline pipeline,
+                                       CreatePipelineAsyncUserData* data) {
     if (status == WGPUCreatePipelineAsyncStatus_Success) {
-        // Assign the handle and allocated status if the pipeline is created successfully.
-        pipelineObject->state = AllocationState::Allocated;
-        pipelineObject->handle = pipeline;
-
-        // This should be impossible to fail. It would require a command to be sent that
-        // creates a duplicate ObjectId, which would fail validation.
-        bool success =
-            TrackDeviceChild(pipelineObject->deviceInfo, objectType, data->pipelineObjectID);
-        ASSERT(success);
+        auto* pipelineObject = knownObjects->FillReservation(data->pipelineObjectID, pipeline);
+        ASSERT(pipelineObject != nullptr);
     } else {
         // Otherwise, free the ObjectId which will make it unusable.
         knownObjects->Free(data->pipelineObjectID);
@@ -119,7 +105,6 @@ bool Server::DoDeviceCreateComputePipelineAsync(ObjectId deviceId,
     }
 
     resultData->generation = pipelineObjectHandle.generation;
-    resultData->deviceInfo = device->info.get();
 
     auto userdata = MakeUserdata<CreatePipelineAsyncUserData>();
     userdata->device = ObjectHandle{deviceId, device->generation};
@@ -136,8 +121,8 @@ void Server::OnCreateComputePipelineAsyncCallback(CreatePipelineAsyncUserData* d
                                                   WGPUCreatePipelineAsyncStatus status,
                                                   WGPUComputePipeline pipeline,
                                                   const char* message) {
-    HandleCreateRenderPipelineAsyncCallbackResult<ObjectType::ComputePipeline>(
-        &ComputePipelineObjects(), status, pipeline, data);
+    HandleCreatePipelineAsyncCallback<ObjectType::ComputePipeline>(&ComputePipelineObjects(),
+                                                                   status, pipeline, data);
 
     ReturnDeviceCreateComputePipelineAsyncCallbackCmd cmd;
     cmd.device = data->device;
@@ -164,7 +149,6 @@ bool Server::DoDeviceCreateRenderPipelineAsync(ObjectId deviceId,
     }
 
     resultData->generation = pipelineObjectHandle.generation;
-    resultData->deviceInfo = device->info.get();
 
     auto userdata = MakeUserdata<CreatePipelineAsyncUserData>();
     userdata->device = ObjectHandle{deviceId, device->generation};
@@ -181,8 +165,8 @@ void Server::OnCreateRenderPipelineAsyncCallback(CreatePipelineAsyncUserData* da
                                                  WGPUCreatePipelineAsyncStatus status,
                                                  WGPURenderPipeline pipeline,
                                                  const char* message) {
-    HandleCreateRenderPipelineAsyncCallbackResult<ObjectType::RenderPipeline>(
-        &RenderPipelineObjects(), status, pipeline, data);
+    HandleCreatePipelineAsyncCallback<ObjectType::RenderPipeline>(&RenderPipelineObjects(), status,
+                                                                  pipeline, data);
 
     ReturnDeviceCreateRenderPipelineAsyncCallbackCmd cmd;
     cmd.device = data->device;

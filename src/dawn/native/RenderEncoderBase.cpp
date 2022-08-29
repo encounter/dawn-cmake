@@ -75,6 +75,11 @@ bool RenderEncoderBase::IsStencilReadOnly() const {
     return mStencilReadOnly;
 }
 
+uint64_t RenderEncoderBase::GetDrawCount() const {
+    ASSERT(!IsError());
+    return mDrawCount;
+}
+
 Ref<AttachmentState> RenderEncoderBase::AcquireAttachmentState() {
     return std::move(mAttachmentState);
 }
@@ -104,6 +109,8 @@ void RenderEncoderBase::APIDraw(uint32_t vertexCount,
             draw->firstVertex = firstVertex;
             draw->firstInstance = firstInstance;
 
+            mDrawCount++;
+
             return {};
         },
         "encoding %s.Draw(%u, %u, %u, %u).", this, vertexCount, instanceCount, firstVertex,
@@ -129,10 +136,7 @@ void RenderEncoderBase::APIDrawIndexed(uint32_t indexCount,
 
                 DAWN_TRY(mCommandBufferState.ValidateIndexBufferInRange(indexCount, firstIndex));
 
-                // Although we don't know actual vertex access range in CPU, we still call the
-                // ValidateBufferInRangeForVertexBuffer in order to deal with those vertex step
-                // mode vertex buffer with an array stride of zero.
-                DAWN_TRY(mCommandBufferState.ValidateBufferInRangeForVertexBuffer(0, 0));
+                // DrawIndexed only validate instance step mode vertex buffer
                 DAWN_TRY(mCommandBufferState.ValidateBufferInRangeForInstanceBuffer(instanceCount,
                                                                                     firstInstance));
             }
@@ -143,6 +147,8 @@ void RenderEncoderBase::APIDrawIndexed(uint32_t indexCount,
             draw->firstIndex = firstIndex;
             draw->baseVertex = baseVertex;
             draw->firstInstance = firstInstance;
+
+            mDrawCount++;
 
             return {};
         },
@@ -193,6 +199,8 @@ void RenderEncoderBase::APIDrawIndirect(BufferBase* indirectBuffer, uint64_t ind
             // validation, but it will unnecessarily transition to indirectBuffer usage in the
             // backend.
             mUsageTracker.BufferUsedAs(indirectBuffer, wgpu::BufferUsage::Indirect);
+
+            mDrawCount++;
 
             return {};
         },
@@ -245,6 +253,8 @@ void RenderEncoderBase::APIDrawIndexedIndirect(BufferBase* indirectBuffer,
             // validation, but it will unecessarily transition to indirectBuffer usage in the
             // backend.
             mUsageTracker.BufferUsedAs(indirectBuffer, wgpu::BufferUsage::Indirect);
+
+            mDrawCount++;
 
             return {};
         },

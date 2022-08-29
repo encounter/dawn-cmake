@@ -26,7 +26,7 @@ namespace dawn::wire::client {
 
 // static
 WGPUBuffer Buffer::Create(Device* device, const WGPUBufferDescriptor* descriptor) {
-    Client* wireClient = device->client;
+    Client* wireClient = device->GetClient();
 
     bool mappable =
         (descriptor->usage & (WGPUBufferUsage_MapRead | WGPUBufferUsage_MapWrite)) != 0 ||
@@ -40,7 +40,7 @@ WGPUBuffer Buffer::Create(Device* device, const WGPUBufferDescriptor* descriptor
     std::unique_ptr<MemoryTransferService::WriteHandle> writeHandle = nullptr;
 
     DeviceCreateBufferCmd cmd;
-    cmd.deviceId = device->id;
+    cmd.deviceId = device->GetWireId();
     cmd.descriptor = descriptor;
     cmd.readHandleCreateInfoLength = 0;
     cmd.readHandleCreateInfo = nullptr;
@@ -54,7 +54,7 @@ WGPUBuffer Buffer::Create(Device* device, const WGPUBufferDescriptor* descriptor
                 wireClient->GetMemoryTransferService()->CreateReadHandle(descriptor->size));
             if (readHandle == nullptr) {
                 device->InjectError(WGPUErrorType_OutOfMemory, "Failed to create buffer mapping");
-                return device->CreateErrorBuffer();
+                return CreateError(device, descriptor);
             }
             cmd.readHandleCreateInfoLength = readHandle->SerializeCreateSize();
         }
@@ -65,7 +65,7 @@ WGPUBuffer Buffer::Create(Device* device, const WGPUBufferDescriptor* descriptor
                 wireClient->GetMemoryTransferService()->CreateWriteHandle(descriptor->size));
             if (writeHandle == nullptr) {
                 device->InjectError(WGPUErrorType_OutOfMemory, "Failed to create buffer mapping");
-                return device->CreateErrorBuffer();
+                return CreateError(device, descriptor);
             }
             cmd.writeHandleCreateInfoLength = writeHandle->SerializeCreateSize();
         }
@@ -74,11 +74,7 @@ WGPUBuffer Buffer::Create(Device* device, const WGPUBufferDescriptor* descriptor
     // Create the buffer and send the creation command.
     // This must happen after any potential device->CreateErrorBuffer()
     // as server expects allocating ids to be monotonically increasing
-    auto* bufferObjectAndSerial = wireClient->BufferAllocator().New(wireClient);
-    Buffer* buffer = bufferObjectAndSerial->object.get();
-    buffer->mDevice = device;
-    buffer->mDeviceIsAlive = device->GetAliveWeakPtr();
-    buffer->mSize = descriptor->size;
+    Buffer* buffer = wireClient->Make<Buffer>(device, descriptor);
     buffer->mDestructWriteHandleOnUnmap = false;
 
     if (descriptor->mappedAtCreation) {
@@ -97,7 +93,7 @@ WGPUBuffer Buffer::Create(Device* device, const WGPUBufferDescriptor* descriptor
         buffer->mMappedData = writeHandle->GetData();
     }
 
-    cmd.result = ObjectHandle{buffer->id, bufferObjectAndSerial->generation};
+    cmd.result = buffer->GetWireHandle();
 
     wireClient->SerializeCommand(
         cmd, cmd.readHandleCreateInfoLength + cmd.writeHandleCreateInfoLength,
@@ -124,18 +120,25 @@ WGPUBuffer Buffer::Create(Device* device, const WGPUBufferDescriptor* descriptor
 }
 
 // static
-WGPUBuffer Buffer::CreateError(Device* device) {
-    auto* allocation = device->client->BufferAllocator().New(device->client);
-    allocation->object->mDevice = device;
-    allocation->object->mDeviceIsAlive = device->GetAliveWeakPtr();
+WGPUBuffer Buffer::CreateError(Device* device, const WGPUBufferDescriptor* descriptor) {
+    Client* client = device->GetClient();
+    Buffer* buffer = client->Make<Buffer>(device, descriptor);
 
     DeviceCreateErrorBufferCmd cmd;
     cmd.self = ToAPI(device);
-    cmd.result = ObjectHandle{allocation->object->id, allocation->generation};
-    device->client->SerializeCommand(cmd);
+    cmd.result = buffer->GetWireHandle();
+    client->SerializeCommand(cmd);
 
-    return ToAPI(allocation->object.get());
+    return ToAPI(buffer);
 }
+
+Buffer::Buffer(const ObjectBaseParams& params,
+               Device* device,
+               const WGPUBufferDescriptor* descriptor)
+    : ObjectBase(params),
+      mSize(descriptor->size),
+      mUsage(static_cast<WGPUBufferUsage>(descriptor->usage)),
+      mDeviceIsAlive(device->GetAliveWeakPtr()) {}
 
 Buffer::~Buffer() {
     ClearAllCallbacks(WGPUBufferMapAsyncStatus_DestroyedBeforeCallback);
@@ -159,6 +162,7 @@ void Buffer::MapAsync(WGPUMapModeFlags mode,
                       size_t size,
                       WGPUBufferMapCallback callback,
                       void* userdata) {
+    Client* client = GetClient();
     if (client->IsDisconnected()) {
         return callback(WGPUBufferMapAsyncStatus_DeviceLost, userdata);
     }
@@ -185,7 +189,7 @@ void Buffer::MapAsync(WGPUMapModeFlags mode,
 
     // Serialize the command to send to the server.
     BufferMapAsyncCmd cmd;
-    cmd.bufferId = this->id;
+    cmd.bufferId = GetWireId();
     cmd.requestSerial = serial;
     cmd.mode = mode;
     cmd.offset = offset;
@@ -286,6 +290,7 @@ void Buffer::Unmap() {
     //   - Server -> Client: Result of MapRequest1
     //   - Unmap locally on the client
     //   - Server -> Client: Result of MapRequest2
+    Client* client = GetClient();
 
     // mWriteHandle can still be nullptr if buffer has been destroyed before unmap
     if ((mMapState == MapState::MappedForWrite || mMapState == MapState::MappedAtCreation) &&
@@ -298,7 +303,7 @@ void Buffer::Unmap() {
             mWriteHandle->SizeOfSerializeDataUpdate(mMapOffset, mMapSize);
 
         BufferUpdateMappedDataCmd cmd;
-        cmd.bufferId = id;
+        cmd.bufferId = GetWireId();
         cmd.writeDataUpdateInfoLength = writeDataUpdateInfoLength;
         cmd.writeDataUpdateInfo = nullptr;
         cmd.offset = mMapOffset;
@@ -348,6 +353,8 @@ void Buffer::Unmap() {
 }
 
 void Buffer::Destroy() {
+    Client* client = GetClient();
+
     // Remove the current mapping and destroy Read/WriteHandles.
     FreeMappedData();
 
@@ -361,6 +368,14 @@ void Buffer::Destroy() {
     BufferDestroyCmd cmd;
     cmd.self = ToAPI(this);
     client->SerializeCommand(cmd);
+}
+
+WGPUBufferUsage Buffer::GetUsage() const {
+    return mUsage;
+}
+
+uint64_t Buffer::GetSize() const {
+    return mSize;
 }
 
 bool Buffer::IsMappedForReading() const {

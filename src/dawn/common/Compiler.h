@@ -16,8 +16,7 @@
 #define SRC_DAWN_COMMON_COMPILER_H_
 
 // Defines macros for compiler-specific functionality
-//  - DAWN_COMPILER_[CLANG|GCC|MSVC]: Compiler detection
-//  - DAWN_BREAKPOINT(): Raises an exception and breaks in the debugger
+//  - DAWN_COMPILER_IS(CLANG|GCC|MSVC): Compiler detection
 //  - DAWN_BUILTIN_UNREACHABLE(): Hints the compiler that a code path is unreachable
 //  - DAWN_(UN)?LIKELY(EXPR): Where available, hints the compiler that the expression will be true
 //      (resp. false) to help it generate code that leads to better branch prediction.
@@ -30,16 +29,9 @@
 // Clang and GCC, check for __clang__ too to catch clang-cl masquarading as MSVC
 #if defined(__GNUC__) || defined(__clang__)
 #if defined(__clang__)
-#define DAWN_COMPILER_CLANG
+#define DAWN_COMPILER_IS_CLANG 1
 #else
-#define DAWN_COMPILER_GCC
-#endif
-
-#if defined(__i386__) || defined(__x86_64__)
-#define DAWN_BREAKPOINT() __asm__ __volatile__("int $3\n\t")
-#else
-// TODO(cwallez@chromium.org): Implement breakpoint on all supported architectures
-#define DAWN_BREAKPOINT()
+#define DAWN_COMPILER_IS_GCC 1
 #endif
 
 #define DAWN_BUILTIN_UNREACHABLE() __builtin_unreachable()
@@ -58,10 +50,7 @@
 
 // MSVC
 #elif defined(_MSC_VER)
-#define DAWN_COMPILER_MSVC
-
-extern void __cdecl __debugbreak(void);
-#define DAWN_BREAKPOINT() __debugbreak()
+#define DAWN_COMPILER_IS_MSVC 1
 
 #define DAWN_BUILTIN_UNREACHABLE() __assume(false)
 
@@ -74,6 +63,23 @@ extern void __cdecl __debugbreak(void);
 #else
 #error "Unsupported compiler"
 #endif
+
+// This section defines other compiler macros to 0 to avoid undefined macro usage error.
+#if !defined(DAWN_COMPILER_IS_CLANG)
+#define DAWN_COMPILER_IS_CLANG 0
+#endif
+#if !defined(DAWN_COMPILER_IS_GCC)
+#define DAWN_COMPILER_IS_GCC 0
+#endif
+#if !defined(DAWN_COMPILER_IS_MSVC)
+#define DAWN_COMPILER_IS_MSVC 0
+#endif
+
+// Use #if DAWN_COMPILER_IS(XXX) for compiler specific code.
+// Do not use #ifdef or the naked macro DAWN_COMPILER_IS_XXX.
+// This can help avoid common mistakes like not including "Compiler.h" and falling into unwanted
+// code block as usage of undefined macro "function" will be blocked by the compiler.
+#define DAWN_COMPILER_IS(X) (1 == DAWN_COMPILER_IS_##X)
 
 // It seems that (void) EXPR works on all compilers to silence the unused variable warning.
 #define DAWN_UNUSED(EXPR) (void)EXPR

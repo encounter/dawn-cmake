@@ -55,8 +55,7 @@ struct CallbackUserdata {
     std::weak_ptr<bool> const serverIsAlive;
 
     CallbackUserdata() = delete;
-    CallbackUserdata(Server* server, const std::shared_ptr<bool>& serverIsAlive)
-        : server(server), serverIsAlive(serverIsAlive) {}
+    CallbackUserdata(Server* server, const std::shared_ptr<bool>& serverIsAlive);
 };
 
 template <auto F>
@@ -171,6 +170,7 @@ class Server : public ServerBase {
     bool InjectInstance(WGPUInstance instance, uint32_t id, uint32_t generation);
 
     WGPUDevice GetDevice(uint32_t id, uint32_t generation);
+    bool IsDeviceKnown(WGPUDevice device) const;
 
     template <typename T,
               typename Enable = std::enable_if<std::is_base_of<CallbackUserdata, T>::value>>
@@ -233,9 +233,6 @@ class Server : public ServerBase {
 
     std::shared_ptr<bool> mIsAlive;
 };
-
-bool TrackDeviceChild(DeviceInfo* device, ObjectType type, ObjectId id);
-bool UntrackDeviceChild(DeviceInfo* device, ObjectType type, ObjectId id);
 
 std::unique_ptr<MemoryTransferService> CreateInlineMemoryTransferService();
 

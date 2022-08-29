@@ -98,12 +98,6 @@ class DepthStencilLoadOpTests : public DawnTestWithParams<DepthStencilLoadOpTest
 
     std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
         switch (GetParam().mFormat) {
-            case wgpu::TextureFormat::Depth24UnormStencil8:
-                if (SupportsFeatures({wgpu::FeatureName::Depth24UnormStencil8})) {
-                    mIsFormatSupported = true;
-                    return {wgpu::FeatureName::Depth24UnormStencil8};
-                }
-                return {};
             case wgpu::TextureFormat::Depth32FloatStencil8:
                 if (SupportsFeatures({wgpu::FeatureName::Depth32FloatStencil8})) {
                     mIsFormatSupported = true;
@@ -184,11 +178,6 @@ class DepthStencilLoadOpTests : public DawnTestWithParams<DepthStencilLoadOpTest
 
 // Check that clearing a mip level works at all.
 TEST_P(DepthStencilLoadOpTests, ClearMip0) {
-    // TODO(https://issuetracker.google.com/issues/204919030): SwiftShader does not clear
-    // Depth16Unorm correctly with some values.
-    DAWN_SUPPRESS_TEST_IF(IsVulkan() && IsSwiftshader() &&
-                          GetParam().mFormat == wgpu::TextureFormat::Depth16Unorm);
-
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
     encoder.BeginRenderPass(&renderPassDescriptors[0]).End();
     wgpu::CommandBuffer commandBuffer = encoder.Finish();
@@ -220,11 +209,6 @@ TEST_P(DepthStencilLoadOpTests, ClearBothMip0Then1) {
     // TODO(crbug.com/dawn/838): Sampling from the non-zero mip does not work.
     DAWN_SUPPRESS_TEST_IF(IsMetal() && IsIntel() && GetParam().mCheck == Check::SampleDepth);
 
-    // TODO(https://issuetracker.google.com/issues/204919030): SwiftShader does not clear
-    // Depth16Unorm correctly with some values.
-    DAWN_SUPPRESS_TEST_IF(IsVulkan() && IsSwiftshader() &&
-                          GetParam().mFormat == wgpu::TextureFormat::Depth16Unorm);
-
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
     encoder.BeginRenderPass(&renderPassDescriptors[0]).End();
     encoder.BeginRenderPass(&renderPassDescriptors[1]).End();
@@ -240,11 +224,6 @@ TEST_P(DepthStencilLoadOpTests, ClearBothMip1Then0) {
     // TODO(crbug.com/dawn/838): Sampling from the non-zero mip does not work.
     DAWN_SUPPRESS_TEST_IF(IsMetal() && IsIntel() && GetParam().mCheck == Check::SampleDepth);
 
-    // TODO(https://issuetracker.google.com/issues/204919030): SwiftShader does not clear
-    // Depth16Unorm correctly with some values.
-    DAWN_SUPPRESS_TEST_IF(IsVulkan() && IsSwiftshader() &&
-                          GetParam().mFormat == wgpu::TextureFormat::Depth16Unorm);
-
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
     encoder.BeginRenderPass(&renderPassDescriptors[1]).End();
     encoder.BeginRenderPass(&renderPassDescriptors[0]).End();
@@ -257,7 +236,7 @@ TEST_P(DepthStencilLoadOpTests, ClearBothMip1Then0) {
 
 namespace {
 
-auto GenerateParams() {
+auto GenerateParam() {
     auto params1 = MakeParamGenerator<DepthStencilLoadOpTestParams>(
         {D3D12Backend(), D3D12Backend({}, {"use_d3d12_render_pass"}), MetalBackend(),
          OpenGLBackend(), OpenGLESBackend(), VulkanBackend()},
@@ -267,8 +246,7 @@ auto GenerateParams() {
     auto params2 = MakeParamGenerator<DepthStencilLoadOpTestParams>(
         {D3D12Backend(), D3D12Backend({}, {"use_d3d12_render_pass"}), MetalBackend(),
          OpenGLBackend(), OpenGLESBackend(), VulkanBackend()},
-        {wgpu::TextureFormat::Depth24PlusStencil8, wgpu::TextureFormat::Depth24UnormStencil8,
-         wgpu::TextureFormat::Depth32FloatStencil8},
+        {wgpu::TextureFormat::Depth24PlusStencil8, wgpu::TextureFormat::Depth32FloatStencil8},
         {Check::CopyStencil, Check::StencilTest, Check::DepthTest, Check::SampleDepth});
 
     std::vector<DepthStencilLoadOpTestParams> allParams;
@@ -280,8 +258,169 @@ auto GenerateParams() {
 
 INSTANTIATE_TEST_SUITE_P(,
                          DepthStencilLoadOpTests,
-                         ::testing::ValuesIn(GenerateParams()),
+                         ::testing::ValuesIn(GenerateParam()),
                          DawnTestBase::PrintToStringParamName("DepthStencilLoadOpTests"));
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(DepthStencilLoadOpTests);
+
+class StencilClearValueOverflowTest : public DepthStencilLoadOpTests {};
+
+// Test when stencilClearValue overflows uint8_t (>255), only the last 8 bits will be applied as the
+// stencil clear value in encoder.BeginRenderPass() (currently Dawn only supports 8-bit stencil
+// format).
+TEST_P(StencilClearValueOverflowTest, StencilClearValueOverFlowUint8) {
+    constexpr uint32_t kOverflowedStencilValue = kStencilValues[0] + 0x100;
+    renderPassDescriptors[0].cDepthStencilAttachmentInfo.stencilClearValue =
+        kOverflowedStencilValue;
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    encoder.BeginRenderPass(&renderPassDescriptors[0]).End();
+    wgpu::CommandBuffer commandBuffer = encoder.Finish();
+    queue.Submit(1, &commandBuffer);
+
+    CheckMipLevel(0u);
+}
+
+// Test when stencilClearValue overflows uint16_t(>65535), only the last 8 bits will be applied as
+// the stencil clear value in encoder.BeginRenderPass() (currently Dawn only supports 8-bit stencil
+// format).
+TEST_P(StencilClearValueOverflowTest, StencilClearValueOverFlowUint16) {
+    constexpr uint32_t kOverflowedStencilValue = kStencilValues[0] + 0x10000;
+    renderPassDescriptors[0].cDepthStencilAttachmentInfo.stencilClearValue =
+        kOverflowedStencilValue;
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    encoder.BeginRenderPass(&renderPassDescriptors[0]).End();
+    wgpu::CommandBuffer commandBuffer = encoder.Finish();
+    queue.Submit(1, &commandBuffer);
+
+    CheckMipLevel(0u);
+}
+
+DAWN_INSTANTIATE_TEST_P(StencilClearValueOverflowTest,
+                        {D3D12Backend(), D3D12Backend({}, {"use_d3d12_render_pass"}),
+                         MetalBackend(), OpenGLBackend(), OpenGLESBackend(), VulkanBackend()},
+                        {wgpu::TextureFormat::Depth24PlusStencil8,
+                         wgpu::TextureFormat::Depth32FloatStencil8, wgpu::TextureFormat::Stencil8},
+                        {Check::CopyStencil, Check::StencilTest});
+
+// Regression tests to reproduce a flaky failure when running whole WebGPU CTS on Intel Gen12 GPUs.
+// See crbug.com/dawn/1487 for more details.
+using SupportsTextureBinding = bool;
+DAWN_TEST_PARAM_STRUCT(DepthTextureClearTwiceTestParams, Format, SupportsTextureBinding);
+
+class DepthTextureClearTwiceTest : public DawnTestWithParams<DepthTextureClearTwiceTestParams> {
+  public:
+    void RecordClearDepthAspectAtLevel(wgpu::CommandEncoder encoder,
+                                       wgpu::Texture depthTexture,
+                                       uint32_t level,
+                                       float clearValue) {
+        wgpu::TextureViewDescriptor viewDescriptor = {};
+        viewDescriptor.baseArrayLayer = 0;
+        viewDescriptor.arrayLayerCount = 1;
+        viewDescriptor.baseMipLevel = level;
+        viewDescriptor.mipLevelCount = 1;
+        wgpu::TextureView view = depthTexture.CreateView(&viewDescriptor);
+
+        wgpu::RenderPassDescriptor renderPassDescriptor = {};
+        renderPassDescriptor.colorAttachmentCount = 0;
+
+        wgpu::RenderPassDepthStencilAttachment depthStencilAttachment = {};
+        depthStencilAttachment.view = view;
+        depthStencilAttachment.depthClearValue = clearValue;
+        depthStencilAttachment.depthLoadOp = wgpu::LoadOp::Clear;
+        depthStencilAttachment.depthStoreOp = wgpu::StoreOp::Store;
+
+        if (!utils::IsDepthOnlyFormat(GetParam().mFormat)) {
+            depthStencilAttachment.stencilLoadOp = wgpu::LoadOp::Load;
+            depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Store;
+        }
+
+        renderPassDescriptor.depthStencilAttachment = &depthStencilAttachment;
+        wgpu::RenderPassEncoder renderPass = encoder.BeginRenderPass(&renderPassDescriptor);
+        renderPass.End();
+    }
+
+  protected:
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        switch (GetParam().mFormat) {
+            case wgpu::TextureFormat::Depth32FloatStencil8:
+                if (SupportsFeatures({wgpu::FeatureName::Depth32FloatStencil8})) {
+                    mIsFormatSupported = true;
+                    return {wgpu::FeatureName::Depth32FloatStencil8};
+                }
+                return {};
+            default:
+                mIsFormatSupported = true;
+                return {};
+        }
+    }
+
+    bool mIsFormatSupported = false;
+};
+
+TEST_P(DepthTextureClearTwiceTest, ClearDepthAspectTwice) {
+    DAWN_SUPPRESS_TEST_IF(!mIsFormatSupported);
+
+    constexpr uint32_t kSize = 64;
+    constexpr uint32_t kLevelCount = 5;
+
+    wgpu::TextureFormat depthFormat = GetParam().mFormat;
+
+    wgpu::TextureDescriptor descriptor;
+    descriptor.size = {kSize, kSize};
+    descriptor.format = depthFormat;
+    descriptor.mipLevelCount = kLevelCount;
+
+    // The toggle "d3d12_force_initialize_copyable_depth_stencil_texture_on_creation" is not related
+    // to this test as we don't specify wgpu::TextureUsage::CopyDst in the test.
+    descriptor.usage = wgpu::TextureUsage::RenderAttachment;
+    if (GetParam().mSupportsTextureBinding) {
+        descriptor.usage |= wgpu::TextureUsage::TextureBinding;
+    }
+    wgpu::Texture depthTexture = device.CreateTexture(&descriptor);
+
+    // First, clear all the subresources to 0.
+    {
+        constexpr float kClearValue = 0.f;
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        for (uint32_t level = 0; level < kLevelCount; ++level) {
+            RecordClearDepthAspectAtLevel(encoder, depthTexture, level, kClearValue);
+        }
+        wgpu::CommandBuffer commandBuffer = encoder.Finish();
+        queue.Submit(1, &commandBuffer);
+    }
+
+    // Then, clear several mipmap levels to 0.8.
+    {
+        constexpr float kClearValue = 0.8f;
+        constexpr std::array<uint32_t, 2> kLevelsToSet = {2u, 4u};
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        for (uint32_t level : kLevelsToSet) {
+            RecordClearDepthAspectAtLevel(encoder, depthTexture, level, kClearValue);
+        }
+        wgpu::CommandBuffer commandBuffer = encoder.Finish();
+        queue.Submit(1, &commandBuffer);
+    }
+
+    // Check if the data in remaining mipmap levels is still 0.
+    {
+        constexpr std::array<uint32_t, 3> kLevelsToTest = {0, 1u, 3u};
+        for (uint32_t level : kLevelsToTest) {
+            uint32_t sizeAtLevel = kSize >> level;
+            std::vector<float> expectedValue(sizeAtLevel * sizeAtLevel, 0.f);
+            ExpectAttachmentDepthTestData(depthTexture, GetParam().mFormat, sizeAtLevel,
+                                          sizeAtLevel, 0, level, expectedValue);
+        }
+    }
+}
+
+DAWN_INSTANTIATE_TEST_P(DepthTextureClearTwiceTest,
+                        {D3D12Backend(), MetalBackend(), OpenGLBackend(), OpenGLESBackend(),
+                         VulkanBackend()},
+                        {wgpu::TextureFormat::Depth16Unorm, wgpu::TextureFormat::Depth24Plus,
+                         wgpu::TextureFormat::Depth32Float,
+                         wgpu::TextureFormat::Depth32FloatStencil8,
+                         wgpu::TextureFormat::Depth24PlusStencil8},
+                        {true, false});
 
 }  // namespace

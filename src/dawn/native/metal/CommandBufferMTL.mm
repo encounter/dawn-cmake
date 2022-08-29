@@ -577,6 +577,11 @@ Ref<CommandBuffer> CommandBuffer::Create(CommandEncoder* encoder,
     return AcquireRef(new CommandBuffer(encoder, descriptor));
 }
 
+CommandBuffer::CommandBuffer(CommandEncoder* enc, const CommandBufferDescriptor* desc)
+    : CommandBufferBase(enc, desc) {}
+
+CommandBuffer::~CommandBuffer() = default;
+
 MaybeError CommandBuffer::FillCommands(CommandRecordingContext* commandContext) {
     size_t nextComputePassNumber = 0;
     size_t nextRenderPassNumber = 0;
@@ -605,7 +610,12 @@ MaybeError CommandBuffer::FillCommands(CommandRecordingContext* commandContext) 
     while (mCommands.NextCommandId(&type)) {
         switch (type) {
             case Command::BeginComputePass: {
-                mCommands.NextCommand<BeginComputePassCmd>();
+                BeginComputePassCmd* cmd = mCommands.NextCommand<BeginComputePassCmd>();
+
+                if (cmd->beginTimestamp.querySet.Get() != nullptr ||
+                    cmd->endTimestamp.querySet.Get() != nullptr) {
+                    return DAWN_UNIMPLEMENTED_ERROR("timestampWrites unimplemented.");
+                }
 
                 for (const SyncScopeResourceUsage& scope :
                      GetResourceUsages().computePasses[nextComputePassNumber].dispatchUsages) {
@@ -621,6 +631,11 @@ MaybeError CommandBuffer::FillCommands(CommandRecordingContext* commandContext) 
 
             case Command::BeginRenderPass: {
                 BeginRenderPassCmd* cmd = mCommands.NextCommand<BeginRenderPassCmd>();
+
+                if (cmd->beginTimestamp.querySet.Get() != nullptr ||
+                    cmd->endTimestamp.querySet.Get() != nullptr) {
+                    return DAWN_UNIMPLEMENTED_ERROR("timestampWrites unimplemented.");
+                }
 
                 LazyClearSyncScope(GetResourceUsages().renderPasses[nextRenderPassNumber],
                                    commandContext);
@@ -1237,7 +1252,7 @@ MaybeError CommandBuffer::EncodeRenderPass(id<MTLRenderCommandEncoder> encoder) 
                            slopeScale:newPipeline->GetDepthBiasSlopeScale()
                                 clamp:newPipeline->GetDepthBiasClamp()];
                 if (@available(macOS 10.11, iOS 11.0, *)) {
-                    MTLDepthClipMode clipMode = newPipeline->ShouldClampDepth()
+                    MTLDepthClipMode clipMode = newPipeline->HasUnclippedDepth()
                                                     ? MTLDepthClipModeClamp
                                                     : MTLDepthClipModeClip;
                     [encoder setDepthClipMode:clipMode];

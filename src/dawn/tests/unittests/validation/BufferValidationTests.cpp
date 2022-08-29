@@ -15,6 +15,7 @@
 #include <limits>
 #include <memory>
 
+#include "dawn/common/Platform.h"
 #include "dawn/tests/unittests/validation/ValidationTest.h"
 #include "gmock/gmock.h"
 
@@ -802,12 +803,6 @@ TEST_F(BufferValidationTest, GetMappedRange_ValidBufferStateCases) {
 
 // Test valid cases to call GetMappedRange on an error buffer.
 TEST_F(BufferValidationTest, GetMappedRange_OnErrorBuffer) {
-    wgpu::BufferDescriptor desc;
-    desc.size = 4;
-    desc.usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::MapRead;
-
-    uint64_t kStupidLarge = uint64_t(1) << uint64_t(63);
-
     // GetMappedRange after mappedAtCreation a zero-sized buffer returns a non-nullptr.
     // This is to check we don't do a malloc(0).
     {
@@ -828,17 +823,23 @@ TEST_F(BufferValidationTest, GetMappedRange_OnErrorBuffer) {
         ASSERT_NE(buffer.GetConstMappedRange(), nullptr);
         ASSERT_EQ(buffer.GetConstMappedRange(), buffer.GetMappedRange());
     }
+}
+
+// Test valid cases to call GetMappedRange on an error buffer that's also OOM.
+TEST_F(BufferValidationTest, GetMappedRange_OnErrorBuffer_OOM) {
+    // TODO(crbug.com/dawn/1506): new (std::nothrow) crashes on OOM on Mac ARM64 because libunwind
+    // doesn't see the previous catchall try-catch.
+    DAWN_SKIP_TEST_IF(DAWN_PLATFORM_IS(MACOS) && DAWN_PLATFORM_IS(ARM64));
+
+    uint64_t kStupidLarge = uint64_t(1) << uint64_t(63);
+
+    wgpu::Buffer buffer;
+    ASSERT_DEVICE_ERROR(buffer = BufferMappedAtCreation(
+                            kStupidLarge, wgpu::BufferUsage::Storage | wgpu::BufferUsage::MapRead));
 
     // GetMappedRange after mappedAtCreation OOM case returns nullptr.
-    {
-        wgpu::Buffer buffer;
-        ASSERT_DEVICE_ERROR(
-            buffer = BufferMappedAtCreation(
-                kStupidLarge, wgpu::BufferUsage::Storage | wgpu::BufferUsage::MapRead));
-
-        ASSERT_EQ(buffer.GetConstMappedRange(), nullptr);
-        ASSERT_EQ(buffer.GetConstMappedRange(), buffer.GetMappedRange());
-    }
+    ASSERT_EQ(buffer.GetConstMappedRange(), nullptr);
+    ASSERT_EQ(buffer.GetConstMappedRange(), buffer.GetMappedRange());
 }
 
 // Test validation of the GetMappedRange parameters
@@ -939,4 +940,75 @@ TEST_F(BufferValidationTest, GetMappedRange_OffsetSizeOOB) {
         EXPECT_EQ(buffer.GetMappedRange(0, 12), nullptr);
         EXPECT_EQ(buffer.GetMappedRange(0, 0), nullptr);
     }
+}
+
+// Test that the buffer creation parameters are correctly reflected for succesfully created buffers.
+TEST_F(BufferValidationTest, CreationParameterReflectionForValidBuffer) {
+    // Test reflection on two succesfully created but different buffers. The reflected data should
+    // be different!
+    {
+        wgpu::BufferDescriptor desc;
+        desc.size = 16;
+        desc.usage = wgpu::BufferUsage::Uniform;
+        wgpu::Buffer buf = device.CreateBuffer(&desc);
+
+        EXPECT_EQ(wgpu::BufferUsage::Uniform, buf.GetUsage());
+        EXPECT_EQ(16u, buf.GetSize());
+    }
+    {
+        wgpu::BufferDescriptor desc;
+        desc.size = 32;
+        desc.usage = wgpu::BufferUsage::Storage;
+        wgpu::Buffer buf = device.CreateBuffer(&desc);
+
+        EXPECT_EQ(wgpu::BufferUsage::Storage, buf.GetUsage());
+        EXPECT_EQ(32u, buf.GetSize());
+    }
+}
+
+// Test that the buffer creation parameters are correctly reflected for buffers invalid because of
+// validation errors.
+TEST_F(BufferValidationTest, CreationParameterReflectionForErrorBuffer) {
+    wgpu::BufferDescriptor desc;
+    desc.usage = wgpu::BufferUsage::Uniform;
+    desc.size = 19;
+    desc.mappedAtCreation = true;
+
+    // Error! MappedAtCreation requires size % 4 == 0.
+    wgpu::Buffer buf;
+    ASSERT_DEVICE_ERROR(buf = device.CreateBuffer(&desc));
+
+    // Reflection data is still exactly what was in the descriptor.
+    EXPECT_EQ(wgpu::BufferUsage::Uniform, buf.GetUsage());
+    EXPECT_EQ(19u, buf.GetSize());
+}
+
+// Test that the buffer creation parameters are correctly reflected for buffers invalid because of
+// OOM.
+TEST_F(BufferValidationTest, CreationParameterReflectionForOOMBuffer) {
+    constexpr uint64_t kAmazinglyLargeSize = 0x1234'5678'90AB'CDEF;
+    wgpu::BufferDescriptor desc;
+    desc.usage = wgpu::BufferUsage::Storage;
+    desc.size = kAmazinglyLargeSize;
+
+    // OOM!
+    wgpu::Buffer buf;
+    ASSERT_DEVICE_ERROR(buf = device.CreateBuffer(&desc));
+
+    // Reflection data is still exactly what was in the descriptor.
+    EXPECT_EQ(wgpu::BufferUsage::Storage, buf.GetUsage());
+    EXPECT_EQ(kAmazinglyLargeSize, buf.GetSize());
+}
+
+// Test that buffer reflection doesn't show internal usages
+TEST_F(BufferValidationTest, CreationParameterReflectionNoInternalUsage) {
+    wgpu::BufferDescriptor desc;
+    desc.size = 16;
+    // QueryResolve also adds kInternalStorageBuffer for processing of queries.
+    desc.usage = wgpu::BufferUsage::QueryResolve;
+    wgpu::Buffer buf = device.CreateBuffer(&desc);
+
+    // The reflection shouldn't show kInternalStorageBuffer
+    EXPECT_EQ(wgpu::BufferUsage::QueryResolve, buf.GetUsage());
+    EXPECT_EQ(16u, buf.GetSize());
 }

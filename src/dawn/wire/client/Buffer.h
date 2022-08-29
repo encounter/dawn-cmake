@@ -28,12 +28,11 @@ class Device;
 
 class Buffer final : public ObjectBase {
   public:
-    using ObjectBase::ObjectBase;
-
     static WGPUBuffer Create(Device* device, const WGPUBufferDescriptor* descriptor);
-    static WGPUBuffer CreateError(Device* device);
+    static WGPUBuffer CreateError(Device* device, const WGPUBufferDescriptor* descriptor);
 
-    ~Buffer();
+    Buffer(const ObjectBaseParams& params, Device* device, const WGPUBufferDescriptor* descriptor);
+    ~Buffer() override;
 
     bool OnMapAsyncCallback(uint64_t requestSerial,
                             uint32_t status,
@@ -50,6 +49,10 @@ class Buffer final : public ObjectBase {
 
     void Destroy();
 
+    // Note that these values can be arbitrary since they aren't validated in the wire client.
+    WGPUBufferUsage GetUsage() const;
+    uint64_t GetSize() const;
+
   private:
     void CancelCallbacksForDisconnect() override;
     void ClearAllCallbacks(WGPUBufferMapAsyncStatus status);
@@ -59,8 +62,6 @@ class Buffer final : public ObjectBase {
     bool CheckGetMappedRangeOffsetSize(size_t offset, size_t size) const;
 
     void FreeMappedData();
-
-    Device* mDevice;
 
     enum class MapRequestType { None, Read, Write };
 
@@ -89,6 +90,7 @@ class Buffer final : public ObjectBase {
     };
     RequestTracker<MapRequestData> mRequests;
     uint64_t mSize = 0;
+    WGPUBufferUsage mUsage;
 
     // Only one mapped pointer can be active at a time because Unmap clears all the in-flight
     // requests.

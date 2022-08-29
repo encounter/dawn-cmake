@@ -89,7 +89,7 @@ BackendConnection* Connect(InstanceBase* instance) {
 }
 
 struct CopyFromStagingToBufferOperation : PendingOperation {
-    virtual void Execute() {
+    void Execute() override {
         destination->CopyFromStaging(staging, sourceOffset, destinationOffset, size);
     }
 
@@ -505,5 +505,8 @@ uint64_t Device::GetOptimalBufferToTextureCopyOffsetAlignment() const {
 float Device::GetTimestampPeriodInNS() const {
     return 1.0f;
 }
+
+Texture::Texture(DeviceBase* device, const TextureDescriptor* descriptor, TextureState state)
+    : TextureBase(device, descriptor, state) {}
 
 }  // namespace dawn::native::null

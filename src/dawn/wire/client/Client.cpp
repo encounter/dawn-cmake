@@ -28,7 +28,7 @@ class NoopCommandSerializer final : public CommandSerializer {
         return &gNoopCommandSerializer;
     }
 
-    ~NoopCommandSerializer() = default;
+    ~NoopCommandSerializer() override = default;
 
     size_t GetMaximumAllocationSize() const final { return 0; }
     void* GetCmdSpace(size_t size) final { return nullptr; }
@@ -51,6 +51,19 @@ Client::~Client() {
 }
 
 void Client::DestroyAllObjects() {
+    // Free all devices first since they may hold references to other objects
+    // like the default queue. The Device destructor releases the default queue,
+    // which would be invalid if the queue was already freed.
+    while (!mObjects[ObjectType::Device].empty()) {
+        ObjectBase* object = mObjects[ObjectType::Device].head()->value();
+
+        DestroyObjectCmd cmd;
+        cmd.objectType = ObjectType::Device;
+        cmd.objectId = object->GetWireId();
+        SerializeCommand(cmd);
+        mObjectStores[ObjectType::Device].Free(object);
+    }
+
     for (auto& objectList : mObjects) {
         ObjectType objectType = static_cast<ObjectType>(&objectList - mObjects.data());
         if (objectType == ObjectType::Device) {
@@ -61,81 +74,71 @@ void Client::DestroyAllObjects() {
 
             DestroyObjectCmd cmd;
             cmd.objectType = objectType;
-            cmd.objectId = object->id;
+            cmd.objectId = object->GetWireId();
             SerializeCommand(cmd);
-            FreeObject(objectType, object);
+            mObjectStores[objectType].Free(object);
         }
-    }
-
-    while (!mObjects[ObjectType::Device].empty()) {
-        ObjectBase* object = mObjects[ObjectType::Device].head()->value();
-
-        DestroyObjectCmd cmd;
-        cmd.objectType = ObjectType::Device;
-        cmd.objectId = object->id;
-        SerializeCommand(cmd);
-        FreeObject(ObjectType::Device, object);
     }
 }
 
-ReservedTexture Client::ReserveTexture(WGPUDevice device) {
-    auto* allocation = TextureAllocator().New(this);
+ReservedTexture Client::ReserveTexture(WGPUDevice device, const WGPUTextureDescriptor* descriptor) {
+    Texture* texture = Make<Texture>(descriptor);
 
     ReservedTexture result;
-    result.texture = ToAPI(allocation->object.get());
-    result.id = allocation->object->id;
-    result.generation = allocation->generation;
-    result.deviceId = FromAPI(device)->id;
-    result.deviceGeneration = DeviceAllocator().GetGeneration(FromAPI(device)->id);
+    result.texture = ToAPI(texture);
+    result.id = texture->GetWireId();
+    result.generation = texture->GetWireGeneration();
+    result.deviceId = FromAPI(device)->GetWireId();
+    result.deviceGeneration = FromAPI(device)->GetWireGeneration();
     return result;
 }
 
 ReservedSwapChain Client::ReserveSwapChain(WGPUDevice device) {
-    auto* allocation = SwapChainAllocator().New(this);
+    SwapChain* swapChain = Make<SwapChain>();
 
     ReservedSwapChain result;
-    result.swapchain = ToAPI(allocation->object.get());
-    result.id = allocation->object->id;
-    result.generation = allocation->generation;
-    result.deviceId = FromAPI(device)->id;
-    result.deviceGeneration = DeviceAllocator().GetGeneration(FromAPI(device)->id);
+    result.swapchain = ToAPI(swapChain);
+    result.id = swapChain->GetWireId();
+    result.generation = swapChain->GetWireGeneration();
+    result.deviceId = FromAPI(device)->GetWireId();
+    result.deviceGeneration = FromAPI(device)->GetWireGeneration();
     return result;
 }
 
 ReservedDevice Client::ReserveDevice() {
-    auto* allocation = DeviceAllocator().New(this);
+    Device* device = Make<Device>();
 
     ReservedDevice result;
-    result.device = ToAPI(allocation->object.get());
-    result.id = allocation->object->id;
-    result.generation = allocation->generation;
+    result.device = ToAPI(device);
+    result.id = device->GetWireId();
+    result.generation = device->GetWireGeneration();
     return result;
 }
 
 ReservedInstance Client::ReserveInstance() {
-    auto* allocation = InstanceAllocator().New(this);
+    Instance* instance = Make<Instance>();
 
     ReservedInstance result;
-    result.instance = ToAPI(allocation->object.get());
-    result.id = allocation->object->id;
-    result.generation = allocation->generation;
+    result.instance = ToAPI(instance);
+    result.id = instance->GetWireId();
+    result.generation = instance->GetWireGeneration();
     return result;
 }
 
 void Client::ReclaimTextureReservation(const ReservedTexture& reservation) {
-    TextureAllocator().Free(FromAPI(reservation.texture));
+    Free(FromAPI(reservation.texture));
 }
 
 void Client::ReclaimSwapChainReservation(const ReservedSwapChain& reservation) {
-    SwapChainAllocator().Free(FromAPI(reservation.swapchain));
+    Free(FromAPI(reservation.swapchain));
 }
 
 void Client::ReclaimDeviceReservation(const ReservedDevice& reservation) {
-    DeviceAllocator().Free(FromAPI(reservation.device));
+    Free(FromAPI(reservation.device));
 }
 
 void Client::ReclaimInstanceReservation(const ReservedInstance& reservation) {
-    InstanceAllocator().Free(FromAPI(reservation.instance));
+    Free(FromAPI(reservation.instance));
 }
 
 void Client::Disconnect() {
@@ -160,6 +163,10 @@ void Client::Disconnect() {
 
 bool Client::IsDisconnected() const {
     return mDisconnected;
+}
+
+void Client::Free(ObjectBase* obj, ObjectType type) {
+    mObjectStores[type].Free(obj);
 }
 
 }  // namespace dawn::wire::client

@@ -21,7 +21,7 @@
 
 class OpArrayLengthTest : public DawnTest {
   protected:
-    void SetUp() {
+    void SetUp() override {
         DawnTest::SetUp();
 
         // Create buffers of various size to check the length() implementation
@@ -100,7 +100,7 @@ TEST_P(OpArrayLengthTest, Compute) {
 
     // TODO(crbug.com/dawn/1292): Some Intel drivers don't seem to like the
     // (spurious but harmless) offset=64 that Tint/GLSL produces.
-    DAWN_SUPPRESS_TEST_IF(IsIntel() && IsOpenGL());
+    DAWN_SUPPRESS_TEST_IF(IsIntel() && (IsOpenGL() || IsOpenGLES()));
 
     // Create a buffer to hold the result sizes and create a bindgroup for it.
     wgpu::BufferDescriptor bufferDesc;
@@ -130,7 +130,7 @@ TEST_P(OpArrayLengthTest, Compute) {
         }
         @group(1) @binding(0) var<storage, read_write> result : ResultBuffer;
         )" + mShaderInterface + R"(
-        @stage(compute) @workgroup_size(1) fn main() {
+        @compute @workgroup_size(1) fn main() {
             result.data[0] = arrayLength(&buffer1.data);
             result.data[1] = arrayLength(&buffer2.data);
             result.data[2] = arrayLength(&buffer3.data);
@@ -161,19 +161,19 @@ TEST_P(OpArrayLengthTest, Fragment) {
 
     // TODO(crbug.com/dawn/1292): Some Intel drivers don't seem to like the
     // (spurious but harmless) offset=64 that Tint/GLSL produces.
-    DAWN_SUPPRESS_TEST_IF(IsIntel() && IsOpenGL());
+    DAWN_SUPPRESS_TEST_IF(IsIntel() && (IsOpenGL() || IsOpenGLES()));
 
     utils::BasicRenderPass renderPass = utils::CreateBasicRenderPass(device, 1, 1);
 
     // Create the pipeline that computes the length of the buffers and writes it to the only render
     // pass pixel.
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-        @stage(vertex) fn main() -> @builtin(position) vec4<f32> {
+        @vertex fn main() -> @builtin(position) vec4<f32> {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         })");
 
     wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, (mShaderInterface + R"(
-        @stage(fragment) fn main() -> @location(0) vec4<f32> {
+        @fragment fn main() -> @location(0) vec4<f32> {
             var fragColor : vec4<f32>;
             fragColor.r = f32(arrayLength(&buffer1.data)) / 255.0;
             fragColor.g = f32(arrayLength(&buffer2.data)) / 255.0;
@@ -204,7 +204,8 @@ TEST_P(OpArrayLengthTest, Fragment) {
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    RGBA8 expectedColor = RGBA8(mExpectedLengths[0], mExpectedLengths[1], mExpectedLengths[2], 0);
+    utils::RGBA8 expectedColor =
+        utils::RGBA8(mExpectedLengths[0], mExpectedLengths[1], mExpectedLengths[2], 0);
     EXPECT_PIXEL_RGBA8_EQ(expectedColor, renderPass.color, 0, 0);
 }
 
@@ -229,7 +230,7 @@ TEST_P(OpArrayLengthTest, Vertex) {
             @builtin(position) position : vec4<f32>,
         }
 
-        @stage(vertex) fn main() -> VertexOut {
+        @vertex fn main() -> VertexOut {
             var output : VertexOut;
             output.color.r = f32(arrayLength(&buffer1.data)) / 255.0;
             output.color.g = f32(arrayLength(&buffer2.data)) / 255.0;
@@ -242,7 +243,7 @@ TEST_P(OpArrayLengthTest, Vertex) {
                                                                         .c_str());
 
     wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
-        @stage(fragment)
+        @fragment
         fn main(@location(0) color : vec4<f32>) -> @location(0) vec4<f32> {
             return color;
         })");
@@ -268,7 +269,8 @@ TEST_P(OpArrayLengthTest, Vertex) {
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    RGBA8 expectedColor = RGBA8(mExpectedLengths[0], mExpectedLengths[1], mExpectedLengths[2], 0);
+    utils::RGBA8 expectedColor =
+        utils::RGBA8(mExpectedLengths[0], mExpectedLengths[1], mExpectedLengths[2], 0);
     EXPECT_PIXEL_RGBA8_EQ(expectedColor, renderPass.color, 0, 0);
 }
 

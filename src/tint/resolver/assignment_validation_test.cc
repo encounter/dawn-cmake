@@ -29,12 +29,11 @@ TEST_F(ResolverAssignmentValidationTest, ReadOnlyBuffer) {
     // struct S { m : i32 };
     // @group(0) @binding(0)
     // var<storage,read> a : S;
-    auto* s = Structure("S", {Member("m", ty.i32())});
-    Global(Source{{12, 34}}, "a", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead,
-           ast::AttributeList{
-               create<ast::BindingAttribute>(0),
-               create<ast::GroupAttribute>(0),
-           });
+    auto* s = Structure("S", utils::Vector{
+                                 Member("m", ty.i32()),
+                             });
+    GlobalVar(Source{{12, 34}}, "a", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead,
+              Binding(0), Group(0));
 
     WrapInFunction(Assign(Source{{56, 78}}, MemberAccessor("a", "m"), 1_i));
 
@@ -50,9 +49,9 @@ TEST_F(ResolverAssignmentValidationTest, AssignIncompatibleTypes) {
     //  a = 2.3;
     // }
 
-    auto* var = Var("a", ty.i32(), ast::StorageClass::kNone, Expr(2_i));
+    auto* var = Var("a", ty.i32(), Expr(2_i));
 
-    auto* assign = Assign(Source{{12, 34}}, "a", 2.3f);
+    auto* assign = Assign(Source{{12, 34}}, "a", 2.3_f);
     WrapInFunction(var, assign);
 
     ASSERT_FALSE(r()->Resolve());
@@ -61,14 +60,14 @@ TEST_F(ResolverAssignmentValidationTest, AssignIncompatibleTypes) {
 }
 
 TEST_F(ResolverAssignmentValidationTest, AssignArraysWithDifferentSizeExpressions_Pass) {
-    // let len = 4u;
+    // const len = 4u;
     // {
     //   var a : array<f32, 4u>;
     //   var b : array<f32, len>;
     //   a = b;
     // }
 
-    GlobalConst("len", nullptr, Expr(4_u));
+    GlobalConst("len", Expr(4_u));
 
     auto* a = Var("a", ty.array(ty.f32(), 4_u));
     auto* b = Var("b", ty.array(ty.f32(), "len"));
@@ -80,14 +79,14 @@ TEST_F(ResolverAssignmentValidationTest, AssignArraysWithDifferentSizeExpression
 }
 
 TEST_F(ResolverAssignmentValidationTest, AssignArraysWithDifferentSizeExpressions_Fail) {
-    // let len = 5u;
+    // const len = 5u;
     // {
     //   var a : array<f32, 4u>;
     //   var b : array<f32, len>;
     //   a = b;
     // }
 
-    GlobalConst("len", nullptr, Expr(5_u));
+    GlobalConst("len", Expr(5_u));
 
     auto* a = Var("a", ty.array(ty.f32(), 4_u));
     auto* b = Var("b", ty.array(ty.f32(), "len"));
@@ -105,7 +104,7 @@ TEST_F(ResolverAssignmentValidationTest, AssignCompatibleTypesInBlockStatement_P
     //  var a : i32 = 2i;
     //  a = 2i
     // }
-    auto* var = Var("a", ty.i32(), ast::StorageClass::kNone, Expr(2_i));
+    auto* var = Var("a", ty.i32(), Expr(2_i));
     WrapInFunction(var, Assign("a", 2_i));
 
     ASSERT_TRUE(r()->Resolve()) << r()->error();
@@ -117,8 +116,8 @@ TEST_F(ResolverAssignmentValidationTest, AssignIncompatibleTypesInBlockStatement
     //  a = 2.3;
     // }
 
-    auto* var = Var("a", ty.i32(), ast::StorageClass::kNone, Expr(2_i));
-    WrapInFunction(var, Assign(Source{{12, 34}}, "a", 2.3f));
+    auto* var = Var("a", ty.i32(), Expr(2_i));
+    WrapInFunction(var, Assign(Source{{12, 34}}, "a", 2.3_f));
 
     ASSERT_FALSE(r()->Resolve());
 
@@ -133,8 +132,8 @@ TEST_F(ResolverAssignmentValidationTest, AssignIncompatibleTypesInNestedBlockSta
     //  }
     // }
 
-    auto* var = Var("a", ty.i32(), ast::StorageClass::kNone, Expr(2_i));
-    auto* inner_block = Block(Decl(var), Assign(Source{{12, 34}}, "a", 2.3f));
+    auto* var = Var("a", ty.i32(), Expr(2_i));
+    auto* inner_block = Block(Decl(var), Assign(Source{{12, 34}}, "a", 2.3_f));
     auto* outer_block = Block(inner_block);
     WrapInFunction(outer_block);
 
@@ -147,29 +146,33 @@ TEST_F(ResolverAssignmentValidationTest, AssignToScalar_Fail) {
     // var my_var : i32 = 2i;
     // 1 = my_var;
 
-    auto* var = Var("my_var", ty.i32(), ast::StorageClass::kNone, Expr(2_i));
-    WrapInFunction(var, Assign(Expr(Source{{12, 34}}, 1_i), "my_var"));
+    WrapInFunction(Var("my_var", ty.i32(), Expr(2_i)),  //
+                   Assign(Expr(Source{{12, 34}}, 1_i), "my_var"));
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(), "12:34 error: cannot assign to value of type 'i32'");
 }
 
 TEST_F(ResolverAssignmentValidationTest, AssignCompatibleTypes_Pass) {
-    // var a : i32 = 2i;
-    // a = 2i
-    auto* var = Var("a", ty.i32(), ast::StorageClass::kNone, Expr(2_i));
-    WrapInFunction(var, Assign(Source{{12, 34}}, "a", 2_i));
+    // var a : i32 = 1i;
+    // a = 2i;
+    // a = 3;
+    WrapInFunction(Var("a", ty.i32(), Expr(1_i)),  //
+                   Assign("a", 2_i),               //
+                   Assign("a", 3_a));
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
 }
 
 TEST_F(ResolverAssignmentValidationTest, AssignCompatibleTypesThroughAlias_Pass) {
-    // alias myint = i32;
-    // var a : myint = 2i;
-    // a = 2
-    auto* myint = Alias("myint", ty.i32());
-    auto* var = Var("a", ty.Of(myint), ast::StorageClass::kNone, Expr(2_i));
-    WrapInFunction(var, Assign(Source{{12, 34}}, "a", 2_i));
+    // alias myint = u32;
+    // var a : myint = 1u;
+    // a = 2u;
+    // a = 3;
+    auto* myint = Alias("myint", ty.u32());
+    WrapInFunction(Var("a", ty.Of(myint), Expr(1_u)),  //
+                   Assign("a", 2_u),                   //
+                   Assign("a", 3_a));
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
 }
@@ -178,9 +181,9 @@ TEST_F(ResolverAssignmentValidationTest, AssignCompatibleTypesInferRHSLoad_Pass)
     // var a : i32 = 2i;
     // var b : i32 = 3i;
     // a = b;
-    auto* var_a = Var("a", ty.i32(), ast::StorageClass::kNone, Expr(2_i));
-    auto* var_b = Var("b", ty.i32(), ast::StorageClass::kNone, Expr(3_i));
-    WrapInFunction(var_a, var_b, Assign(Source{{12, 34}}, "a", "b"));
+    WrapInFunction(Var("a", ty.i32(), Expr(2_i)),  //
+                   Var("b", ty.i32(), Expr(3_i)),  //
+                   Assign("a", "b"));
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
 }
@@ -190,14 +193,26 @@ TEST_F(ResolverAssignmentValidationTest, AssignThroughPointer_Pass) {
     // let b : ptr<function,i32> = &a;
     // *b = 2i;
     const auto func = ast::StorageClass::kFunction;
-    auto* var_a = Var("a", ty.i32(), func, Expr(2_i));
-    auto* var_b = Let("b", ty.pointer<i32>(func), AddressOf(Expr("a")));
-    WrapInFunction(var_a, var_b, Assign(Source{{12, 34}}, Deref("b"), 2_i));
+    WrapInFunction(Var("a", ty.i32(), func, Expr(2_i)),                    //
+                   Let("b", ty.pointer<i32>(func), AddressOf(Expr("a"))),  //
+                   Assign(Deref("b"), 2_i));
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
 }
 
-TEST_F(ResolverAssignmentValidationTest, AssignToConstant_Fail) {
+TEST_F(ResolverAssignmentValidationTest, AssignMaterializedThroughPointer_Pass) {
+    // var a : i32;
+    // let b : ptr<function,i32> = &a;
+    // *b = 2;
+    const auto func = ast::StorageClass::kFunction;
+    auto* var_a = Var("a", ty.i32(), func, Expr(2_i));
+    auto* var_b = Let("b", ty.pointer<i32>(func), AddressOf(Expr("a")));
+    WrapInFunction(var_a, var_b, Assign(Deref("b"), 2_a));
+
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
+}
+
+TEST_F(ResolverAssignmentValidationTest, AssignToLet_Fail) {
     // {
     //  let a : i32 = 2i;
     //  a = 2i
@@ -206,7 +221,7 @@ TEST_F(ResolverAssignmentValidationTest, AssignToConstant_Fail) {
     WrapInFunction(var, Assign(Expr(Source{{12, 34}}, "a"), 2_i));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 error: cannot assign to const\nnote: 'a' is declared here:");
+    EXPECT_EQ(r()->error(), "12:34 error: cannot assign to 'let'\nnote: 'a' is declared here:");
 }
 
 TEST_F(ResolverAssignmentValidationTest, AssignNonConstructible_Handle) {
@@ -219,16 +234,8 @@ TEST_F(ResolverAssignmentValidationTest, AssignNonConstructible_Handle) {
                                   ast::Access::kWrite);
     };
 
-    Global("a", make_type(), ast::StorageClass::kNone,
-           ast::AttributeList{
-               create<ast::BindingAttribute>(0),
-               create<ast::GroupAttribute>(0),
-           });
-    Global("b", make_type(), ast::StorageClass::kNone,
-           ast::AttributeList{
-               create<ast::BindingAttribute>(1),
-               create<ast::GroupAttribute>(0),
-           });
+    GlobalVar("a", make_type(), Binding(0), Group(0));
+    GlobalVar("b", make_type(), Binding(1), Group(0));
 
     WrapInFunction(Assign(Source{{56, 78}}, "a", "b"));
 
@@ -241,12 +248,11 @@ TEST_F(ResolverAssignmentValidationTest, AssignNonConstructible_Atomic) {
     // @group(0) @binding(0) var<storage, read_write> v : S;
     // v.a = v.a;
 
-    auto* s = Structure("S", {Member("a", ty.atomic(ty.i32()))});
-    Global(Source{{12, 34}}, "v", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-           ast::AttributeList{
-               create<ast::BindingAttribute>(0),
-               create<ast::GroupAttribute>(0),
-           });
+    auto* s = Structure("S", utils::Vector{
+                                 Member("a", ty.atomic(ty.i32())),
+                             });
+    GlobalVar(Source{{12, 34}}, "v", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite,
+              Binding(0), Group(0));
 
     WrapInFunction(Assign(Source{{56, 78}}, MemberAccessor("v", "a"), MemberAccessor("v", "a")));
 
@@ -259,12 +265,11 @@ TEST_F(ResolverAssignmentValidationTest, AssignNonConstructible_RuntimeArray) {
     // @group(0) @binding(0) var<storage, read_write> v : S;
     // v.a = v.a;
 
-    auto* s = Structure("S", {Member("a", ty.array(ty.f32()))});
-    Global(Source{{12, 34}}, "v", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-           ast::AttributeList{
-               create<ast::BindingAttribute>(0),
-               create<ast::GroupAttribute>(0),
-           });
+    auto* s = Structure("S", utils::Vector{
+                                 Member("a", ty.array(ty.f32())),
+                             });
+    GlobalVar(Source{{12, 34}}, "v", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite,
+              Binding(0), Group(0));
 
     WrapInFunction(Assign(Source{{56, 78}}, MemberAccessor("v", "a"), MemberAccessor("v", "a")));
 
@@ -280,8 +285,10 @@ TEST_F(ResolverAssignmentValidationTest, AssignToPhony_NonConstructibleStruct_Fa
     // fn f() {
     //   _ = s;
     // }
-    auto* s = Structure("S", {Member("arr", ty.array<i32>())});
-    Global("s", ty.Of(s), ast::StorageClass::kStorage, GroupAndBinding(0, 0));
+    auto* s = Structure("S", utils::Vector{
+                                 Member("arr", ty.array<i32>()),
+                             });
+    GlobalVar("s", ty.Of(s), ast::StorageClass::kStorage, Group(0), Binding(0));
 
     WrapInFunction(Assign(Phony(), Expr(Source{{12, 34}}, "s")));
 
@@ -300,8 +307,10 @@ TEST_F(ResolverAssignmentValidationTest, AssignToPhony_DynamicArray_Fail) {
     // fn f() {
     //   _ = s.arr;
     // }
-    auto* s = Structure("S", {Member("arr", ty.array<i32>())});
-    Global("s", ty.Of(s), ast::StorageClass::kStorage, GroupAndBinding(0, 0));
+    auto* s = Structure("S", utils::Vector{
+                                 Member("arr", ty.array<i32>()),
+                             });
+    GlobalVar("s", ty.Of(s), ast::StorageClass::kStorage, Group(0), Binding(0));
 
     WrapInFunction(Assign(Phony(), MemberAccessor(Source{{12, 34}}, "s", "arr")));
 
@@ -328,8 +337,12 @@ TEST_F(ResolverAssignmentValidationTest, AssignToPhony_Pass) {
     // fn f() {
     //   _ = 1i;
     //   _ = 2u;
-    //   _ = 3.0;
-    //   _ = vec2<bool>();
+    //   _ = 3.0f;
+    //   _ = 4;
+    //   _ = 5.0;
+    //   _ = vec2(6);
+    //   _ = vec3(7.0);
+    //   _ = vec4<bool>();
     //   _ = tex;
     //   _ = smp;
     //   _ = &s;
@@ -340,21 +353,28 @@ TEST_F(ResolverAssignmentValidationTest, AssignToPhony_Pass) {
     //   _ = wg;
     //   _ = wg[3i];
     // }
-    auto* S = Structure("S", {
+    auto* S = Structure("S", utils::Vector{
                                  Member("i", ty.i32()),
                                  Member("arr", ty.array<i32>()),
                              });
-    auto* U = Structure("U", {Member("i", ty.i32())});
-    Global("tex", ty.sampled_texture(ast::TextureDimension::k2d, ty.f32()), GroupAndBinding(0, 0));
-    Global("smp", ty.sampler(ast::SamplerKind::kSampler), GroupAndBinding(0, 1));
-    Global("u", ty.Of(U), ast::StorageClass::kUniform, GroupAndBinding(0, 2));
-    Global("s", ty.Of(S), ast::StorageClass::kStorage, GroupAndBinding(0, 3));
-    Global("wg", ty.array<f32, 10>(), ast::StorageClass::kWorkgroup);
+    auto* U = Structure("U", utils::Vector{
+                                 Member("i", ty.i32()),
+                             });
+    GlobalVar("tex", ty.sampled_texture(ast::TextureDimension::k2d, ty.f32()), Group(0),
+              Binding(0));
+    GlobalVar("smp", ty.sampler(ast::SamplerKind::kSampler), Group(0), Binding(1));
+    GlobalVar("u", ty.Of(U), ast::StorageClass::kUniform, Group(0), Binding(2));
+    GlobalVar("s", ty.Of(S), ast::StorageClass::kStorage, Group(0), Binding(3));
+    GlobalVar("wg", ty.array<f32, 10>(), ast::StorageClass::kWorkgroup);
 
     WrapInFunction(Assign(Phony(), 1_i),                                    //
                    Assign(Phony(), 2_u),                                    //
-                   Assign(Phony(), 3.f),                                    //
-                   Assign(Phony(), vec2<bool>()),                           //
+                   Assign(Phony(), 3_f),                                    //
+                   Assign(Phony(), 4_a),                                    //
+                   Assign(Phony(), 5.0_a),                                  //
+                   Assign(Phony(), vec(nullptr, 2u, 6_a)),                  //
+                   Assign(Phony(), vec(nullptr, 3u, 7.0_a)),                //
+                   Assign(Phony(), vec4<bool>()),                           //
                    Assign(Phony(), "tex"),                                  //
                    Assign(Phony(), "smp"),                                  //
                    Assign(Phony(), AddressOf("s")),                         //

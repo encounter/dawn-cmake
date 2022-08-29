@@ -57,7 +57,7 @@ class MultisampledRenderingTest : public DawnTest {
                 @builtin(frag_depth) depth : f32,
             }
 
-            @stage(fragment) fn main() -> FragmentOut {
+            @fragment fn main() -> FragmentOut {
                 var output : FragmentOut;
                 output.color = uBuffer.color;
                 output.depth = uBuffer.depth;
@@ -70,7 +70,7 @@ class MultisampledRenderingTest : public DawnTest {
             }
             @group(0) @binding(0) var<uniform> uBuffer : U;
 
-            @stage(fragment) fn main() -> @location(0) vec4<f32> {
+            @fragment fn main() -> @location(0) vec4<f32> {
                 return uBuffer.color;
             })";
 
@@ -95,7 +95,7 @@ class MultisampledRenderingTest : public DawnTest {
                 @location(1) color1 : vec4<f32>,
             }
 
-            @stage(fragment) fn main() -> FragmentOut {
+            @fragment fn main() -> FragmentOut {
                 var output : FragmentOut;
                 output.color0 = uBuffer.color0;
                 output.color1 = uBuffer.color1;
@@ -189,7 +189,7 @@ class MultisampledRenderingTest : public DawnTest {
         constexpr uint32_t kMiddleX = (kWidth - 1) / 2;
         constexpr uint32_t kMiddleY = (kHeight - 1) / 2;
 
-        RGBA8 expectedColor = ExpectedMSAAColor(inputColor, msaaCoverage);
+        utils::RGBA8 expectedColor = ExpectedMSAAColor(inputColor, msaaCoverage);
         EXPECT_TEXTURE_EQ(&expectedColor, resolveTexture, {kMiddleX, kMiddleY, arrayLayer}, {1, 1},
                           mipmapLevel);
     }
@@ -224,7 +224,7 @@ class MultisampledRenderingTest : public DawnTest {
         // Draw a bottom-right triangle. In standard 4xMSAA pattern, for the pixels on diagonal,
         // only two of the samples will be touched.
         const char* vs = R"(
-            @stage(vertex)
+            @vertex
             fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
                 var pos = array<vec2<f32>, 3>(
                     vec2<f32>(-1.0,  1.0),
@@ -236,7 +236,7 @@ class MultisampledRenderingTest : public DawnTest {
 
         // Draw a bottom-left triangle.
         const char* vsFlipped = R"(
-            @stage(vertex)
+            @vertex
             fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
                 var pos = array<vec2<f32>, 3>(
                     vec2<f32>(-1.0,  1.0),
@@ -274,8 +274,8 @@ class MultisampledRenderingTest : public DawnTest {
         return pipeline;
     }
 
-    RGBA8 ExpectedMSAAColor(const wgpu::Color color, const double msaaCoverage) {
-        RGBA8 result;
+    utils::RGBA8 ExpectedMSAAColor(const wgpu::Color color, const double msaaCoverage) {
+        utils::RGBA8 result;
         result.r = static_cast<uint8_t>(std::min(255.0, 256 * color.r * msaaCoverage));
         result.g = static_cast<uint8_t>(std::min(255.0, 256 * color.g * msaaCoverage));
         result.b = static_cast<uint8_t>(std::min(255.0, 256 * color.b * msaaCoverage));
@@ -629,6 +629,9 @@ TEST_P(MultisampledRenderingTest, ResolveInto2DTextureWithEmptyFinalSampleMask) 
 // Test doing MSAA resolve into multiple resolve targets works correctly with a non-default sample
 // mask.
 TEST_P(MultisampledRenderingTest, ResolveIntoMultipleResolveTargetsWithSampleMask) {
+    // TODO(crbug.com/dawn/1462): Re-enable on Mac Intel 12.4.
+    DAWN_SUPPRESS_TEST_IF(IsMetal() && IsIntel() && IsMacOS(12, 4));
+
     wgpu::TextureView multisampledColorView2 =
         CreateTextureForRenderAttachment(kColorFormat, kSampleCount).CreateView();
     wgpu::Texture resolveTexture2 = CreateTextureForRenderAttachment(kColorFormat, 1);
@@ -753,7 +756,7 @@ TEST_P(MultisampledRenderingTest, ResolveInto2DTextureWithSampleMaskAndShaderOut
             @builtin(sample_mask) sampleMask : u32,
         }
 
-        @stage(fragment) fn main() -> FragmentOut {
+        @fragment fn main() -> FragmentOut {
             var output : FragmentOut;
             output.color = uBuffer.color;
             output.sampleMask = 6u;
@@ -775,7 +778,7 @@ TEST_P(MultisampledRenderingTest, ResolveInto2DTextureWithSampleMaskAndShaderOut
     wgpu::CommandBuffer commandBuffer = commandEncoder.Finish();
     queue.Submit(1, &commandBuffer);
 
-    RGBA8 expectedColor = ExpectedMSAAColor(kGreen, kMSAACoverage);
+    utils::RGBA8 expectedColor = ExpectedMSAAColor(kGreen, kMSAACoverage);
     EXPECT_TEXTURE_EQ(&expectedColor, mResolveTexture, {1, 0}, {1, 1});
 }
 
@@ -785,6 +788,9 @@ TEST_P(MultisampledRenderingTest, ResolveIntoMultipleResolveTargetsWithShaderOut
     // TODO(crbug.com/dawn/673): Work around or enforce via validation that sample variables are not
     // supported on some platforms.
     DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("disable_sample_variables"));
+
+    // TODO(crbug.com/dawn/1462): Re-enable on Mac Intel 12.4.
+    DAWN_SUPPRESS_TEST_IF(IsMetal() && IsIntel() && IsMacOS(12, 4));
 
     wgpu::TextureView multisampledColorView2 =
         CreateTextureForRenderAttachment(kColorFormat, kSampleCount).CreateView();
@@ -808,7 +814,7 @@ TEST_P(MultisampledRenderingTest, ResolveIntoMultipleResolveTargetsWithShaderOut
             @builtin(sample_mask) sampleMask : u32,
         }
 
-        @stage(fragment) fn main() -> FragmentOut {
+        @fragment fn main() -> FragmentOut {
             var output : FragmentOut;
             output.color0 = uBuffer.color0;
             output.color1 = uBuffer.color1;
@@ -881,7 +887,7 @@ TEST_P(MultisampledRenderingTest, ResolveInto2DTextureWithAlphaToCoverage) {
             msaaCoverage = 1.0f;
         }
 
-        RGBA8 expectedColor = ExpectedMSAAColor(kGreen, msaaCoverage);
+        utils::RGBA8 expectedColor = ExpectedMSAAColor(kGreen, msaaCoverage);
         EXPECT_TEXTURE_EQ(&expectedColor, mResolveTexture, {1, 0}, {1, 1});
     }
 }
@@ -933,8 +939,8 @@ TEST_P(MultisampledRenderingTest, ResolveIntoMultipleResolveTargetsWithAlphaToCo
 
         // Alpha to coverage affects both the color outputs, but the mask is computed
         // using only the first one.
-        RGBA8 expectedRed = ExpectedMSAAColor(kRed, kMSAACoverage);
-        RGBA8 expectedGreen = ExpectedMSAAColor(kGreen, kMSAACoverage);
+        utils::RGBA8 expectedRed = ExpectedMSAAColor(kRed, kMSAACoverage);
+        utils::RGBA8 expectedGreen = ExpectedMSAAColor(kGreen, kMSAACoverage);
         EXPECT_TEXTURE_EQ(&expectedRed, mResolveTexture, {1, 0}, {1, 1});
         EXPECT_TEXTURE_EQ(&expectedGreen, resolveTexture2, {1, 0}, {1, 1});
     }
@@ -995,7 +1001,7 @@ TEST_P(MultisampledRenderingTest, MultisampledRenderingWithDepthTestAndAlphaToCo
     constexpr wgpu::Color kHalfGreenHalfRed = {(kGreen.r + kRed.r) / 2.0, (kGreen.g + kRed.g) / 2.0,
                                                (kGreen.b + kRed.b) / 2.0,
                                                (kGreen.a + kRed.a) / 2.0};
-    RGBA8 expectedColor = ExpectedMSAAColor(kHalfGreenHalfRed, 1.0f);
+    utils::RGBA8 expectedColor = ExpectedMSAAColor(kHalfGreenHalfRed, 1.0f);
 
     EXPECT_TEXTURE_EQ(&expectedColor, mResolveTexture, {1, 0}, {1, 1});
 }
@@ -1040,7 +1046,7 @@ TEST_P(MultisampledRenderingTest, ResolveInto2DTextureWithAlphaToCoverageAndSamp
         wgpu::CommandBuffer commandBuffer = commandEncoder.Finish();
         queue.Submit(1, &commandBuffer);
 
-        RGBA8 expectedColor = ExpectedMSAAColor(kGreen, kMSAACoverage * alpha);
+        utils::RGBA8 expectedColor = ExpectedMSAAColor(kGreen, kMSAACoverage * alpha);
         EXPECT_TEXTURE_EQ(&expectedColor, mResolveTexture, {1, 0}, {1, 1});
     }
 }

@@ -20,6 +20,7 @@
 #include <unordered_set>
 
 #include "dawn/common/Log.h"
+#include "dawn/common/Version_autogen.h"
 #include "dawn/native/Adapter.h"
 #include "dawn/native/AsyncTask.h"
 #include "dawn/native/AttachmentState.h"
@@ -170,7 +171,8 @@ ResultOrError<Ref<PipelineLayoutBase>> ValidateLayoutAndGetRenderPipelineDescrip
 // DeviceBase
 
 DeviceBase::DeviceBase(AdapterBase* adapter, const DeviceDescriptor* descriptor)
-    : mInstance(adapter->GetInstance()), mAdapter(adapter), mNextPipelineCompatibilityToken(1) {
+    : mAdapter(adapter), mNextPipelineCompatibilityToken(1) {
+    mAdapter->GetInstance()->IncrementDeviceCountForTesting();
     ASSERT(descriptor != nullptr);
 
     AdapterProperties adapterProperties;
@@ -181,6 +183,8 @@ DeviceBase::DeviceBase(AdapterBase* adapter, const DeviceDescriptor* descriptor)
     if (togglesDesc != nullptr) {
         ApplyToggleOverrides(togglesDesc);
     }
+
+    SetDefaultToggles();
     ApplyFeatures(descriptor);
 
     DawnCacheDeviceDescriptor defaultCacheDesc = {};
@@ -197,9 +201,6 @@ DeviceBase::DeviceBase(AdapterBase* adapter, const DeviceDescriptor* descriptor)
     }
 
     mFormatTable = BuildFormatTable(this);
-    SetDefaultToggles();
-
-    SetWGSLExtensionAllowList();
 
     if (descriptor->label != nullptr && strlen(descriptor->label) != 0) {
         mLabel = descriptor->label;
@@ -208,8 +209,8 @@ DeviceBase::DeviceBase(AdapterBase* adapter, const DeviceDescriptor* descriptor)
     // Record the cache key from the properties. Note that currently, if a new extension
     // descriptor is added (and probably handled here), the cache key recording needs to be
     // updated.
-    mDeviceCacheKey.Record(adapterProperties, mEnabledFeatures.featuresBitSet,
-                           mEnabledToggles.toggleBitset, cacheDesc);
+    StreamIn(&mDeviceCacheKey, kDawnVersion, adapterProperties, mEnabledFeatures.featuresBitSet,
+             mEnabledToggles.toggleBitset, cacheDesc);
 }
 
 DeviceBase::DeviceBase() : mState(State::Alive) {
@@ -220,9 +221,15 @@ DeviceBase::~DeviceBase() {
     // We need to explicitly release the Queue before we complete the destructor so that the
     // Queue does not get destroyed after the Device.
     mQueue = nullptr;
+    // mAdapter is not set for mock test devices.
+    if (mAdapter != nullptr) {
+        mAdapter->GetInstance()->DecrementDeviceCountForTesting();
+    }
 }
 
 MaybeError DeviceBase::Initialize(Ref<QueueBase> defaultQueue) {
+    SetWGSLExtensionAllowList();
+
     mQueue = std::move(defaultQueue);
 
 #if defined(DAWN_ENABLE_ASSERTS)
@@ -268,7 +275,7 @@ MaybeError DeviceBase::Initialize(Ref<QueueBase> defaultQueue) {
     if (IsToggleEnabled(Toggle::UsePlaceholderFragmentInVertexOnlyPipeline)) {
         // The empty fragment shader, used as a work around for vertex-only render pipeline
         constexpr char kEmptyFragmentShader[] = R"(
-                @stage(fragment) fn fs_empty_main() {}
+                @fragment fn fs_empty_main() {}
             )";
         ShaderModuleDescriptor descriptor;
         ShaderModuleWGSLDescriptor wgslDesc;
@@ -280,6 +287,43 @@ MaybeError DeviceBase::Initialize(Ref<QueueBase> defaultQueue) {
     }
 
     return {};
+}
+
+void DeviceBase::WillDropLastExternalRef() {
+    // DeviceBase uses RefCountedWithExternalCount to break refcycles.
+    //
+    // DeviceBase holds multiple Refs to various API objects (pipelines, buffers, etc.) which are
+    // used to implement various device-level facilities. These objects are cached on the device,
+    // so we want to keep them around instead of making transient allocations. However, many of
+    // the objects also hold a Ref<Device> back to their parent device.
+    //
+    // In order to break this cycle and prevent leaks, when the application drops the last external
+    // ref and WillDropLastExternalRef is called, the device clears out any member refs to API
+    // objects that hold back-refs to the device - thus breaking any reference cycles.
+    //
+    // Currently, this is done by calling Destroy on the device to cease all in-flight work and
+    // drop references to internal objects. We may want to lift this in the future, but it would
+    // make things more complex because there might be pending tasks which hold a ref back to the
+    // device - either directly or indirectly. We would need to ensure those tasks don't create new
+    // reference cycles, and we would need to continuously try draining the pending tasks to clear
+    // out all remaining refs.
+    Destroy();
+
+    // Drop te device's reference to the queue. Because the application dropped the last external
+    // references, they can no longer get the queue from APIGetQueue().
+    mQueue = nullptr;
+
+    // Reset callbacks since after this, since after dropping the last external reference, the
+    // application may have freed any device-scope memory needed to run the callback.
+    mUncapturedErrorCallback = [](WGPUErrorType, char const* message, void*) {
+        dawn::WarningLog() << "Uncaptured error after last external device reference dropped.\n"
+                           << message;
+    };
+
+    mDeviceLostCallback = [](WGPUDeviceLostReason, char const* message, void*) {
+        dawn::WarningLog() << "Device lost after last external device reference dropped.\n"
+                           << message;
+    };
 }
 
 void DeviceBase::DestroyObjects() {
@@ -338,6 +382,15 @@ void DeviceBase::Destroy() {
     if (mState == State::Destroyed) {
         return;
     }
+
+    // This function may be called re-entrantly inside APITick(). Tick triggers callbacks
+    // inside which the application may destroy the device. Thus, we should be careful not
+    // to delete objects that are needed inside Tick after callbacks have been called.
+    //  - mCallbackTaskManager is not deleted since we flush the callback queue at the end
+    // of Tick(). Note: that flush should always be emtpy since all callbacks are drained
+    // inside Destroy() so there should be no outstanding tasks holding objects alive.
+    //  - Similiarly, mAsyncTaskManager is not deleted since we use it to return a status
+    // from Tick() whether or not there is any more pending work.
 
     // Skip handling device facilities if they haven't even been created (or failed doing so)
     if (mState != State::BeingCreated) {
@@ -406,9 +459,9 @@ void DeviceBase::Destroy() {
     // implementations of DestroyImpl checks that we are disconnected before doing work.
     mState = State::Disconnected;
 
+    // Note: mQueue is not released here since the application may still get it after calling
+    // Destroy() via APIGetQueue.
     mDynamicUploader = nullptr;
-    mCallbackTaskManager = nullptr;
-    mAsyncTaskManager = nullptr;
     mEmptyBindGroupLayout = nullptr;
     mInternalPipelineStore = nullptr;
     mExternalTexturePlaceholderView = nullptr;
@@ -570,10 +623,32 @@ bool DeviceBase::APIPopErrorScope(wgpu::ErrorCallback callback, void* userdata) 
 }
 
 BlobCache* DeviceBase::GetBlobCache() {
+#if TINT_BUILD_WGSL_WRITER
+    // TODO(crbug.com/dawn/1481): Shader caching currently has a dependency on the WGSL writer to
+    // generate cache keys. We can lift the dependency once we also cache frontend parsing,
+    // transformations, and reflection.
     if (IsToggleEnabled(Toggle::EnableBlobCache)) {
-        return mInstance->GetBlobCache();
+        return mAdapter->GetInstance()->GetBlobCache();
     }
+#endif
     return nullptr;
+}
+
+Blob DeviceBase::LoadCachedBlob(const CacheKey& key) {
+    BlobCache* blobCache = GetBlobCache();
+    if (!blobCache) {
+        return Blob();
+    }
+    return blobCache->Load(key);
+}
+
+void DeviceBase::StoreCachedBlob(const CacheKey& key, const Blob& blob) {
+    if (!blob.Empty()) {
+        BlobCache* blobCache = GetBlobCache();
+        if (blobCache) {
+            blobCache->Store(key, blob);
+        }
+    }
 }
 
 MaybeError DeviceBase::ValidateObject(const ApiObjectBase* object) const {
@@ -621,7 +696,7 @@ std::mutex* DeviceBase::GetObjectListMutex(ObjectType type) {
 }
 
 AdapterBase* DeviceBase::GetAdapter() const {
-    return mAdapter;
+    return mAdapter.Get();
 }
 
 dawn::platform::Platform* DeviceBase::GetPlatform() const {
@@ -1057,7 +1132,7 @@ QuerySetBase* DeviceBase::APICreateQuerySet(const QuerySetDescriptor* descriptor
     Ref<QuerySetBase> result;
     if (ConsumedError(CreateQuerySet(descriptor), &result, "calling %s.CreateQuerySet(%s).", this,
                       descriptor)) {
-        return QuerySetBase::MakeError(this);
+        return QuerySetBase::MakeError(this, descriptor);
     }
     return result.Detach();
 }
@@ -1140,7 +1215,7 @@ TextureBase* DeviceBase::APICreateTexture(const TextureDescriptor* descriptor) {
     Ref<TextureBase> result;
     if (ConsumedError(CreateTexture(descriptor), &result, "calling %s.CreateTexture(%s).", this,
                       descriptor)) {
-        return TextureBase::MakeError(this);
+        return TextureBase::MakeError(this, descriptor);
     }
     return result.Detach();
 }
@@ -1152,10 +1227,21 @@ BufferBase* DeviceBase::APICreateErrorBuffer() {
     return BufferBase::MakeError(this, &desc);
 }
 
+ExternalTextureBase* DeviceBase::APICreateErrorExternalTexture() {
+    return ExternalTextureBase::MakeError(this);
+}
+
+TextureBase* DeviceBase::APICreateErrorTexture(const TextureDescriptor* desc) {
+    return TextureBase::MakeError(this, desc);
+}
+
 // Other Device API methods
 
 // Returns true if future ticking is needed.
 bool DeviceBase::APITick() {
+    // Tick may trigger callbacks which drop a ref to the device itself. Hold a Ref to ourselves
+    // to avoid deleting |this| in the middle of this function call.
+    Ref<DeviceBase> self(this);
     if (IsLost() || ConsumedError(Tick())) {
         return false;
     }
@@ -1198,6 +1284,11 @@ MaybeError DeviceBase::Tick() {
     return {};
 }
 
+AdapterBase* DeviceBase::APIGetAdapter() {
+    mAdapter->Reference();
+    return mAdapter.Get();
+}
+
 QueueBase* DeviceBase::APIGetQueue() {
     // Backends gave the primary queue during initialization.
     ASSERT(mQueue != nullptr);
@@ -1236,9 +1327,12 @@ void DeviceBase::SetWGSLExtensionAllowList() {
     // Set the WGSL extensions allow list based on device's enabled features and other
     // propority. For example:
     //     mWGSLExtensionAllowList.insert("InternalExtensionForTesting");
+    if (IsFeatureEnabled(Feature::ChromiumExperimentalDp4a)) {
+        mWGSLExtensionAllowList.insert("chromium_experimental_dp4a");
+    }
 }
 
-WGSLExtensionsSet DeviceBase::GetWGSLExtensionAllowList() const {
+WGSLExtensionSet DeviceBase::GetWGSLExtensionAllowList() const {
     return mWGSLExtensionAllowList;
 }
 
@@ -1316,17 +1410,18 @@ void DeviceBase::APIInjectError(wgpu::ErrorType type, const char* message) {
 }
 
 QueueBase* DeviceBase::GetQueue() const {
+    ASSERT(mQueue != nullptr);
     return mQueue.Get();
 }
 
 // Implementation details of object creation
 
-ResultOrError<Ref<BindGroupBase>> DeviceBase::CreateBindGroup(
-    const BindGroupDescriptor* descriptor) {
+ResultOrError<Ref<BindGroupBase>> DeviceBase::CreateBindGroup(const BindGroupDescriptor* descriptor,
+                                                              UsageValidationMode mode) {
     DAWN_TRY(ValidateIsAlive());
     if (IsValidationEnabled()) {
-        DAWN_TRY_CONTEXT(ValidateBindGroupDescriptor(this, descriptor), "validating %s against %s",
-                         descriptor, descriptor->layout);
+        DAWN_TRY_CONTEXT(ValidateBindGroupDescriptor(this, descriptor, mode),
+                         "validating %s against %s", descriptor, descriptor->layout);
     }
     return CreateBindGroupImpl(descriptor);
 }
@@ -1492,6 +1587,7 @@ ResultOrError<Ref<PipelineLayoutBase>> DeviceBase::CreatePipelineLayout(
 
 ResultOrError<Ref<ExternalTextureBase>> DeviceBase::CreateExternalTextureImpl(
     const ExternalTextureDescriptor* descriptor) {
+    DAWN_TRY(ValidateIsAlive());
     if (IsValidationEnabled()) {
         DAWN_TRY_CONTEXT(ValidateExternalTextureDescriptor(this, descriptor), "validating %s",
                          descriptor);
@@ -1835,6 +1931,12 @@ bool DeviceBase::MayRequireDuplicationOfIndirectParameters() const {
 bool DeviceBase::ShouldDuplicateParametersForDrawIndirect(
     const RenderPipelineBase* renderPipelineBase) const {
     return false;
+}
+
+uint64_t DeviceBase::GetBufferCopyOffsetAlignmentForDepthStencil() const {
+    // For depth-stencil texture, buffer offset must be a multiple of 4, which is required
+    // by WebGPU and Vulkan SPEC.
+    return 4u;
 }
 
 }  // namespace dawn::native

@@ -18,6 +18,8 @@
 
 #include "dawn/common/Constants.h"
 
+#include "dawn/utils/ComboRenderBundleEncoderDescriptor.h"
+#include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
 namespace {
@@ -544,6 +546,211 @@ TEST_F(RenderPassDescriptorValidationTest, NonMultisampledColorWithResolveTarget
     AssertBeginRenderPassError(&renderPass);
 }
 
+// drawCount must not exceed maxDrawCount
+TEST_F(RenderPassDescriptorValidationTest, MaxDrawCount) {
+    constexpr wgpu::TextureFormat kColorFormat = wgpu::TextureFormat::RGBA8Unorm;
+    constexpr uint64_t kMaxDrawCount = 16;
+
+    wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
+        @vertex fn main() -> @builtin(position) vec4<f32> {
+            return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        })");
+
+    wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
+        @fragment fn main() -> @location(0) vec4<f32> {
+            return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+        })");
+
+    utils::ComboRenderPipelineDescriptor pipelineDescriptor;
+    pipelineDescriptor.vertex.module = vsModule;
+    pipelineDescriptor.cFragment.module = fsModule;
+    wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&pipelineDescriptor);
+
+    wgpu::TextureDescriptor colorTextureDescriptor;
+    colorTextureDescriptor.size = {1, 1};
+    colorTextureDescriptor.format = kColorFormat;
+    colorTextureDescriptor.usage = wgpu::TextureUsage::RenderAttachment;
+    wgpu::Texture colorTexture = device.CreateTexture(&colorTextureDescriptor);
+
+    utils::ComboRenderBundleEncoderDescriptor bundleEncoderDescriptor;
+    bundleEncoderDescriptor.colorFormatsCount = 1;
+    bundleEncoderDescriptor.cColorFormats[0] = kColorFormat;
+
+    wgpu::Buffer indexBuffer =
+        utils::CreateBufferFromData<uint32_t>(device, wgpu::BufferUsage::Index, {0, 1, 2});
+    wgpu::Buffer indirectBuffer =
+        utils::CreateBufferFromData<uint32_t>(device, wgpu::BufferUsage::Indirect, {3, 1, 0, 0});
+    wgpu::Buffer indexedIndirectBuffer =
+        utils::CreateBufferFromData<uint32_t>(device, wgpu::BufferUsage::Indirect, {3, 1, 0, 0, 0});
+
+    wgpu::RenderPassDescriptorMaxDrawCount maxDrawCount;
+    maxDrawCount.maxDrawCount = kMaxDrawCount;
+
+    // Valid. drawCount is less than the default maxDrawCount.
+
+    {
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        utils::ComboRenderPassDescriptor renderPassDescriptor({colorTexture.CreateView()});
+        wgpu::RenderPassEncoder renderPass = encoder.BeginRenderPass(&renderPassDescriptor);
+        renderPass.SetPipeline(pipeline);
+
+        for (uint64_t i = 0; i <= kMaxDrawCount; i++) {
+            renderPass.Draw(3);
+        }
+
+        renderPass.End();
+        encoder.Finish();
+    }
+
+    {
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        utils::ComboRenderPassDescriptor renderPassDescriptor({colorTexture.CreateView()});
+        wgpu::RenderPassEncoder renderPass = encoder.BeginRenderPass(&renderPassDescriptor);
+        renderPass.SetPipeline(pipeline);
+        renderPass.SetIndexBuffer(indexBuffer, wgpu::IndexFormat::Uint32);
+
+        for (uint64_t i = 0; i <= kMaxDrawCount; i++) {
+            renderPass.DrawIndexed(3);
+        }
+
+        renderPass.End();
+        encoder.Finish();
+    }
+
+    {
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        utils::ComboRenderPassDescriptor renderPassDescriptor({colorTexture.CreateView()});
+        wgpu::RenderPassEncoder renderPass = encoder.BeginRenderPass(&renderPassDescriptor);
+        renderPass.SetPipeline(pipeline);
+
+        for (uint64_t i = 0; i <= kMaxDrawCount; i++) {
+            renderPass.DrawIndirect(indirectBuffer, 0);
+        }
+
+        renderPass.End();
+        encoder.Finish();
+    }
+
+    {
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        utils::ComboRenderPassDescriptor renderPassDescriptor({colorTexture.CreateView()});
+        wgpu::RenderPassEncoder renderPass = encoder.BeginRenderPass(&renderPassDescriptor);
+        renderPass.SetPipeline(pipeline);
+        renderPass.SetIndexBuffer(indexBuffer, wgpu::IndexFormat::Uint32);
+
+        for (uint64_t i = 0; i <= kMaxDrawCount; i++) {
+            renderPass.DrawIndexedIndirect(indexedIndirectBuffer, 0);
+        }
+
+        renderPass.End();
+        encoder.Finish();
+    }
+
+    {
+        wgpu::RenderBundleEncoder renderBundleEncoder =
+            device.CreateRenderBundleEncoder(&bundleEncoderDescriptor);
+        renderBundleEncoder.SetPipeline(pipeline);
+
+        for (uint64_t i = 0; i <= kMaxDrawCount; i++) {
+            renderBundleEncoder.Draw(3);
+        }
+
+        wgpu::RenderBundle renderBundle = renderBundleEncoder.Finish();
+
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        utils::ComboRenderPassDescriptor renderPassDescriptor({colorTexture.CreateView()});
+        wgpu::RenderPassEncoder renderPass = encoder.BeginRenderPass(&renderPassDescriptor);
+        renderPass.ExecuteBundles(1, &renderBundle);
+        renderPass.End();
+        encoder.Finish();
+    }
+
+    // Invalid. drawCount counts up with draw calls and
+    // it is greater than maxDrawCount.
+
+    {
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        utils::ComboRenderPassDescriptor renderPassDescriptor({colorTexture.CreateView()});
+        renderPassDescriptor.nextInChain = &maxDrawCount;
+        wgpu::RenderPassEncoder renderPass = encoder.BeginRenderPass(&renderPassDescriptor);
+        renderPass.SetPipeline(pipeline);
+
+        for (uint64_t i = 0; i <= kMaxDrawCount; i++) {
+            renderPass.Draw(3);
+        }
+
+        renderPass.End();
+        ASSERT_DEVICE_ERROR(encoder.Finish());
+    }
+
+    {
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        utils::ComboRenderPassDescriptor renderPassDescriptor({colorTexture.CreateView()});
+        renderPassDescriptor.nextInChain = &maxDrawCount;
+        wgpu::RenderPassEncoder renderPass = encoder.BeginRenderPass(&renderPassDescriptor);
+        renderPass.SetPipeline(pipeline);
+        renderPass.SetIndexBuffer(indexBuffer, wgpu::IndexFormat::Uint32);
+
+        for (uint64_t i = 0; i <= kMaxDrawCount; i++) {
+            renderPass.DrawIndexed(3);
+        }
+
+        renderPass.End();
+        ASSERT_DEVICE_ERROR(encoder.Finish());
+    }
+
+    {
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        utils::ComboRenderPassDescriptor renderPassDescriptor({colorTexture.CreateView()});
+        renderPassDescriptor.nextInChain = &maxDrawCount;
+        wgpu::RenderPassEncoder renderPass = encoder.BeginRenderPass(&renderPassDescriptor);
+        renderPass.SetPipeline(pipeline);
+
+        for (uint64_t i = 0; i <= kMaxDrawCount; i++) {
+            renderPass.DrawIndirect(indirectBuffer, 0);
+        }
+
+        renderPass.End();
+        ASSERT_DEVICE_ERROR(encoder.Finish());
+    }
+
+    {
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        utils::ComboRenderPassDescriptor renderPassDescriptor({colorTexture.CreateView()});
+        renderPassDescriptor.nextInChain = &maxDrawCount;
+        wgpu::RenderPassEncoder renderPass = encoder.BeginRenderPass(&renderPassDescriptor);
+        renderPass.SetPipeline(pipeline);
+        renderPass.SetIndexBuffer(indexBuffer, wgpu::IndexFormat::Uint32);
+
+        for (uint64_t i = 0; i <= kMaxDrawCount; i++) {
+            renderPass.DrawIndexedIndirect(indexedIndirectBuffer, 0);
+        }
+
+        renderPass.End();
+        ASSERT_DEVICE_ERROR(encoder.Finish());
+    }
+
+    {
+        wgpu::RenderBundleEncoder renderBundleEncoder =
+            device.CreateRenderBundleEncoder(&bundleEncoderDescriptor);
+        renderBundleEncoder.SetPipeline(pipeline);
+
+        for (uint64_t i = 0; i <= kMaxDrawCount; i++) {
+            renderBundleEncoder.Draw(3);
+        }
+
+        wgpu::RenderBundle renderBundle = renderBundleEncoder.Finish();
+
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        utils::ComboRenderPassDescriptor renderPassDescriptor({colorTexture.CreateView()});
+        renderPassDescriptor.nextInChain = &maxDrawCount;
+        wgpu::RenderPassEncoder renderPass = encoder.BeginRenderPass(&renderPassDescriptor);
+        renderPass.ExecuteBundles(1, &renderBundle);
+        renderPass.End();
+        ASSERT_DEVICE_ERROR(encoder.Finish());
+    }
+}
+
 class MultisampledRenderPassDescriptorValidationTest : public RenderPassDescriptorValidationTest {
   public:
     utils::ComboRenderPassDescriptor CreateMultisampledRenderPass() {
@@ -720,7 +927,7 @@ TEST_F(MultisampledRenderPassDescriptorValidationTest,
 TEST_F(MultisampledRenderPassDescriptorValidationTest, ResolveTargetFormat) {
     for (wgpu::TextureFormat format : utils::kAllTextureFormats) {
         if (!utils::TextureFormatSupportsMultisampling(format) ||
-            !utils::TextureFormatSupportsRendering(format)) {
+            utils::IsDepthOrStencilFormat(format)) {
             continue;
         }
 
@@ -850,7 +1057,7 @@ TEST_F(RenderPassDescriptorValidationTest, UseNaNOrINFINITYAsColorOrDepthClearVa
         AssertBeginRenderPassError(&renderPass);
     }
 
-    // Tests that INFINITY can be used in depthClearValue.
+    // Tests that INFINITY cannot be used in depthClearValue.
     {
         wgpu::TextureView depth =
             Create2DAttachment(device, 1, 1, wgpu::TextureFormat::Depth24Plus);
@@ -858,11 +1065,64 @@ TEST_F(RenderPassDescriptorValidationTest, UseNaNOrINFINITYAsColorOrDepthClearVa
         renderPass.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Undefined;
         renderPass.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Undefined;
         renderPass.cDepthStencilAttachmentInfo.depthClearValue = INFINITY;
-        AssertBeginRenderPassSuccess(&renderPass);
+        AssertBeginRenderPassError(&renderPass);
     }
 
     // TODO(https://crbug.com/dawn/666): Add a test case for clearStencil for stencilOnly
     // once stencil8 is supported.
+}
+
+// Tests that depth clear values mut be between 0 and 1, inclusive.
+TEST_F(RenderPassDescriptorValidationTest, ValidateDepthClearValueRange) {
+    wgpu::TextureView depth = Create2DAttachment(device, 1, 1, wgpu::TextureFormat::Depth24Plus);
+
+    utils::ComboRenderPassDescriptor renderPass({}, depth);
+    renderPass.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Undefined;
+    renderPass.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Undefined;
+
+    // 0, 1, and any value in between are be valid.
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = 0;
+    AssertBeginRenderPassSuccess(&renderPass);
+
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = 0.1;
+    AssertBeginRenderPassSuccess(&renderPass);
+
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = 0.5;
+    AssertBeginRenderPassSuccess(&renderPass);
+
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = 0.82;
+    AssertBeginRenderPassSuccess(&renderPass);
+
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = 1;
+    AssertBeginRenderPassSuccess(&renderPass);
+
+    // Values less than 0 or greater than 1 are invalid.
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = -1;
+    AssertBeginRenderPassError(&renderPass);
+
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = 2;
+    AssertBeginRenderPassError(&renderPass);
+
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = -0.001;
+    AssertBeginRenderPassError(&renderPass);
+
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = 1.001;
+    AssertBeginRenderPassError(&renderPass);
+
+    // Clear values are not validated if the depthLoadOp is Load.
+    renderPass.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Load;
+
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = -1;
+    AssertBeginRenderPassSuccess(&renderPass);
+
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = 2;
+    AssertBeginRenderPassSuccess(&renderPass);
+
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = -0.001;
+    AssertBeginRenderPassSuccess(&renderPass);
+
+    renderPass.cDepthStencilAttachmentInfo.depthClearValue = 1.001;
+    AssertBeginRenderPassSuccess(&renderPass);
 }
 
 TEST_F(RenderPassDescriptorValidationTest, ValidateDepthStencilReadOnly) {
@@ -1051,6 +1311,7 @@ TEST_F(RenderPassDescriptorValidationTest, ValidateDepthStencilAllAspects) {
     // Using all aspects of a depth+stencil texture is allowed.
     {
         texDesc.format = wgpu::TextureFormat::Depth24PlusStencil8;
+        viewDesc.format = wgpu::TextureFormat::Undefined;
         viewDesc.aspect = wgpu::TextureAspect::All;
 
         wgpu::TextureView view = device.CreateTexture(&texDesc).CreateView(&viewDesc);
@@ -1058,29 +1319,68 @@ TEST_F(RenderPassDescriptorValidationTest, ValidateDepthStencilAllAspects) {
         AssertBeginRenderPassSuccess(&renderPass);
     }
 
-    // Using only depth of a depth+stencil texture is an error.
+    // Using only depth of a depth+stencil texture is an error, case without format
+    // reinterpretation.
     {
         texDesc.format = wgpu::TextureFormat::Depth24PlusStencil8;
+        viewDesc.format = wgpu::TextureFormat::Undefined;
         viewDesc.aspect = wgpu::TextureAspect::DepthOnly;
 
         wgpu::TextureView view = device.CreateTexture(&texDesc).CreateView(&viewDesc);
         utils::ComboRenderPassDescriptor renderPass({}, view);
+        renderPass.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Undefined;
+        renderPass.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Undefined;
+
         AssertBeginRenderPassError(&renderPass);
     }
 
-    // Using only stencil of a depth+stencil texture is an error.
+    // Using only depth of a depth+stencil texture is an error, case with format reinterpretation.
     {
         texDesc.format = wgpu::TextureFormat::Depth24PlusStencil8;
+        viewDesc.format = wgpu::TextureFormat::Depth24Plus;
+        viewDesc.aspect = wgpu::TextureAspect::DepthOnly;
+
+        wgpu::TextureView view = device.CreateTexture(&texDesc).CreateView(&viewDesc);
+        utils::ComboRenderPassDescriptor renderPass({}, view);
+        renderPass.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Undefined;
+        renderPass.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Undefined;
+
+        AssertBeginRenderPassError(&renderPass);
+    }
+
+    // Using only stencil of a depth+stencil texture is an error, case without format
+    // reinterpration.
+    {
+        texDesc.format = wgpu::TextureFormat::Depth24PlusStencil8;
+        viewDesc.format = wgpu::TextureFormat::Undefined;
         viewDesc.aspect = wgpu::TextureAspect::StencilOnly;
 
         wgpu::TextureView view = device.CreateTexture(&texDesc).CreateView(&viewDesc);
         utils::ComboRenderPassDescriptor renderPass({}, view);
+        renderPass.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Undefined;
+        renderPass.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Undefined;
+
+        AssertBeginRenderPassError(&renderPass);
+    }
+
+    // Using only stencil of a depth+stencil texture is an error, case with format reinterpretation.
+    {
+        texDesc.format = wgpu::TextureFormat::Depth24PlusStencil8;
+        viewDesc.format = wgpu::TextureFormat::Stencil8;
+        viewDesc.aspect = wgpu::TextureAspect::StencilOnly;
+
+        wgpu::TextureView view = device.CreateTexture(&texDesc).CreateView(&viewDesc);
+        utils::ComboRenderPassDescriptor renderPass({}, view);
+        renderPass.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Undefined;
+        renderPass.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Undefined;
+
         AssertBeginRenderPassError(&renderPass);
     }
 
     // Using DepthOnly of a depth only texture is allowed.
     {
         texDesc.format = wgpu::TextureFormat::Depth24Plus;
+        viewDesc.format = wgpu::TextureFormat::Undefined;
         viewDesc.aspect = wgpu::TextureAspect::DepthOnly;
 
         wgpu::TextureView view = device.CreateTexture(&texDesc).CreateView(&viewDesc);
@@ -1091,8 +1391,19 @@ TEST_F(RenderPassDescriptorValidationTest, ValidateDepthStencilAllAspects) {
         AssertBeginRenderPassSuccess(&renderPass);
     }
 
-    // TODO(https://crbug.com/dawn/666): Add a test case for stencil-only on stencil8 once this
-    // format is supported.
+    // Using StencilOnly of a stencil only texture is allowed.
+    {
+        texDesc.format = wgpu::TextureFormat::Stencil8;
+        viewDesc.format = wgpu::TextureFormat::Undefined;
+        viewDesc.aspect = wgpu::TextureAspect::StencilOnly;
+
+        wgpu::TextureView view = device.CreateTexture(&texDesc).CreateView(&viewDesc);
+        utils::ComboRenderPassDescriptor renderPass({}, view);
+        renderPass.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Undefined;
+        renderPass.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Undefined;
+
+        AssertBeginRenderPassSuccess(&renderPass);
+    }
 }
 
 // TODO(cwallez@chromium.org): Constraints on attachment aliasing?

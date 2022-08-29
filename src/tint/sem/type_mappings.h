@@ -20,34 +20,36 @@
 // Forward declarations
 namespace tint::ast {
 class Array;
-class CallExpression;
 class Expression;
 class ForLoopStatement;
 class Function;
 class IfStatement;
-class MemberAccessorExpression;
 class Node;
+class Override;
 class Statement;
 class Struct;
 class StructMember;
+class SwitchStatement;
 class Type;
 class TypeDecl;
 class Variable;
+class WhileStatement;
 }  // namespace tint::ast
 namespace tint::sem {
 class Array;
-class Call;
 class Expression;
 class ForLoopStatement;
 class Function;
 class IfStatement;
-class MemberAccessorExpression;
 class Node;
+class GlobalVariable;
 class Statement;
 class Struct;
 class StructMember;
+class SwitchStatement;
 class Type;
 class Variable;
+class WhileStatement;
 }  // namespace tint::sem
 
 namespace tint::sem {
@@ -59,19 +61,20 @@ namespace tint::sem {
 struct TypeMappings {
     //! @cond Doxygen_Suppress
     Array* operator()(ast::Array*);
-    Call* operator()(ast::CallExpression*);
     Expression* operator()(ast::Expression*);
     ForLoopStatement* operator()(ast::ForLoopStatement*);
     Function* operator()(ast::Function*);
     IfStatement* operator()(ast::IfStatement*);
-    MemberAccessorExpression* operator()(ast::MemberAccessorExpression*);
     Node* operator()(ast::Node*);
+    GlobalVariable* operator()(ast::Override*);
     Statement* operator()(ast::Statement*);
     Struct* operator()(ast::Struct*);
     StructMember* operator()(ast::StructMember*);
+    SwitchStatement* operator()(ast::SwitchStatement*);
     Type* operator()(ast::Type*);
     Type* operator()(ast::TypeDecl*);
     Variable* operator()(ast::Variable*);
+    WhileStatement* operator()(ast::WhileStatement*);
     //! @endcond
 };
 

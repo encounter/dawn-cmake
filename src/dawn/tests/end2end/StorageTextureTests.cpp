@@ -142,8 +142,9 @@ class StorageTextureTests : public DawnTest {
             // 8-bit (normalized/non-normalized signed/unsigned integer) 4-component formats
             case wgpu::TextureFormat::RGBA8Unorm:
             case wgpu::TextureFormat::RGBA8Uint: {
-                RGBA8* valuePtr = static_cast<RGBA8*>(pixelValuePtr);
-                *valuePtr = RGBA8(pixelValue, pixelValue * 2, pixelValue * 3, pixelValue * 4);
+                utils::RGBA8* valuePtr = static_cast<utils::RGBA8*>(pixelValuePtr);
+                *valuePtr =
+                    utils::RGBA8(pixelValue, pixelValue * 2, pixelValue * 3, pixelValue * 4);
                 break;
             }
 
@@ -337,7 +338,7 @@ fn IsEqualTo(pixel : vec4<f32>, expected : vec4<f32>) -> bool {
 
         std::ostringstream ostream;
         ostream << GetImageDeclaration(format, "write", dimension, 0) << "\n";
-        ostream << "@stage(" << stage << ")" << workgroupSize << "\n";
+        ostream << "@" << stage << workgroupSize << "\n";
         ostream << "fn main() ";
         if (isFragment) {
             ostream << "-> @location(0) vec4<f32> ";
@@ -488,7 +489,7 @@ fn IsEqualTo(pixel : vec4<f32>, expected : vec4<f32>) -> bool {
         queue.Submit(1, &commandBuffer);
 
         // Check if the contents in the output texture are all as expected (green).
-        EXPECT_PIXEL_RGBA8_EQ(RGBA8::kGreen, outputTexture, 0, 0)
+        EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kGreen, outputTexture, 0, 0)
             << "\nVertex Shader:\n"
             << vertexShader << "\n\nFragment Shader:\n"
             << fragmentShader;
@@ -648,7 +649,7 @@ fn IsEqualTo(pixel : vec4<f32>, expected : vec4<f32>) -> bool {
 
     const char* kSimpleVertexShader = R"(
 ;
-@stage(vertex) fn main() -> @builtin(position) vec4<f32> {
+@vertex fn main() -> @builtin(position) vec4<f32> {
   return vec4<f32>(0.0, 0.0, 0.0, 1.0);
 })";
 
@@ -695,6 +696,9 @@ TEST_P(StorageTextureTests, WriteonlyStorageTextureInFragmentShader) {
     // TODO(crbug.com/dawn/672): Investigate why this test fails on Linux
     // NVidia OpenGLES drivers.
     DAWN_SUPPRESS_TEST_IF(IsNvidia() && IsLinux() && IsOpenGLES());
+
+    // TODO(crbug.com/dawn/1503): Investigate the regression in ANGLE that causes the test failure.
+    DAWN_SUPPRESS_TEST_IF(IsANGLE());
 
     for (wgpu::TextureFormat format : utils::kAllTextureFormats) {
         if (!utils::TextureFormatSupportsStorageTexture(format)) {
@@ -799,7 +803,7 @@ TEST_P(StorageTextureTests, SampledAndWriteonlyStorageTexturePingPong) {
     wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
 @group(0) @binding(0) var Src : texture_2d<u32>;
 @group(0) @binding(1) var Dst : texture_storage_2d<r32uint, write>;
-@stage(compute) @workgroup_size(1) fn main() {
+@compute @workgroup_size(1) fn main() {
   var srcValue : vec4<u32> = textureLoad(Src, vec2<i32>(0, 0), 0);
   srcValue.x = srcValue.x + 1u;
   textureStore(Dst, vec2<i32>(0, 0), srcValue);
@@ -898,14 +902,14 @@ fn doTest() -> bool {
     const char* kCommonWriteOnlyZeroInitTestCodeFragment = R"(
 @group(0) @binding(0) var dstImage : texture_storage_2d<r32uint, write>;
 
-@stage(fragment) fn main() -> @location(0) vec4<f32> {
+@fragment fn main() -> @location(0) vec4<f32> {
   textureStore(dstImage, vec2<i32>(0, 0), vec4<u32>(1u, 0u, 0u, 1u));
   return vec4<f32>();
 })";
     const char* kCommonWriteOnlyZeroInitTestCodeCompute = R"(
 @group(0) @binding(0) var dstImage : texture_storage_2d<r32uint, write>;
 
-@stage(compute) @workgroup_size(1) fn main() {
+@compute @workgroup_size(1) fn main() {
   textureStore(dstImage, vec2<i32>(0, 0), vec4<u32>(1u, 0u, 0u, 1u));
 })";
 };
@@ -913,6 +917,9 @@ fn doTest() -> bool {
 // Verify that the texture is correctly cleared to 0 before its first usage as a write-only storage
 // storage texture in a render pass.
 TEST_P(StorageTextureZeroInitTests, WriteonlyStorageTextureClearsToZeroInRenderPass) {
+    // TODO(crbug.com/dawn/1503): Investigate the regression in ANGLE that causes the test failure.
+    DAWN_SUPPRESS_TEST_IF(IsANGLE());
+
     // Prepare the write-only storage texture.
     wgpu::Texture writeonlyStorageTexture = CreateTexture(
         wgpu::TextureFormat::R32Uint,

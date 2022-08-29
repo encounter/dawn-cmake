@@ -23,6 +23,7 @@ default_args = {
   angle_enable_abseil = false
   angle_standalone = false
   angle_build_all = false
+  angle_build_tests = false
   angle_has_rapidjson = false
   angle_use_wayland = false
   angle_vulkan_headers_dir = "//third_party/vulkan-deps/vulkan-headers/src"
@@ -33,8 +34,3 @@ default_args = {
 
   vma_vulkan_headers_dir = "//third_party/vulkan-deps/vulkan-headers/src"
 }
-
-no_check_targets = [
-  # TODO(crbug.com/dawn/1404): Issue with the Absl headers
-  "//src/dawn/tests:dawn_unittests",
-]

@@ -101,6 +101,36 @@ struct TypeInfo {
     /// The type hash code bitwise-or'd with all ancestor's hashcodes.
     const HashCode full_hashcode;
 
+    /// @returns true if `type` derives from the class `TO`
+    /// @param object the object type to test from, which must be, or derive from
+    /// type `FROM`.
+    /// @see CastFlags
+    template <typename TO, typename FROM, int FLAGS = 0>
+    static inline bool Is(const tint::TypeInfo* object) {
+        constexpr const bool downcast = std::is_base_of<FROM, TO>::value;
+        constexpr const bool upcast = std::is_base_of<TO, FROM>::value;
+        constexpr const bool nocast = std::is_same<FROM, TO>::value;
+        constexpr const bool assert_is_castable = (FLAGS & kDontErrorOnImpossibleCast) == 0;
+
+        static_assert(upcast || downcast || nocast || !assert_is_castable, "impossible cast");
+
+        return upcast || nocast || object->Is<TO>();
+    }
+
+    /// @returns true if this type derives from the class `T`
+    template <typename T>
+    inline bool Is() const {
+        auto* type = &Of<std::remove_cv_t<T>>();
+
+        if constexpr (std::is_final_v<T>) {
+            // T is final, so nothing can derive from T.
+            // We do not need to check ancestors, only whether this type is equal to the type T.
+            return type == this;
+        } else {
+            return Is(type);
+        }
+    }
+
     /// @param type the test type info
     /// @returns true if the class with this TypeInfo is of, or derives from the
     /// class with the given TypeInfo.
@@ -112,34 +142,14 @@ struct TypeInfo {
             return false;
         }
 
-        // Walk the base types, starting with this TypeInfo, to see if any of the
-        // pointers match `type`.
+        // Walk the base types, starting with this TypeInfo, to see if any of the pointers match
+        // `type`.
         for (auto* ti = this; ti != nullptr; ti = ti->base) {
             if (ti == type) {
                 return true;
             }
         }
         return false;
-    }
-
-    /// @returns true if `type` derives from the class `TO`
-    /// @param type the object type to test from, which must be, or derive from
-    /// type `FROM`.
-    /// @see CastFlags
-    template <typename TO, typename FROM, int FLAGS = 0>
-    static inline bool Is(const tint::TypeInfo* type) {
-        constexpr const bool downcast = std::is_base_of<FROM, TO>::value;
-        constexpr const bool upcast = std::is_base_of<TO, FROM>::value;
-        constexpr const bool nocast = std::is_same<FROM, TO>::value;
-        constexpr const bool assert_is_castable = (FLAGS & kDontErrorOnImpossibleCast) == 0;
-
-        static_assert(upcast || downcast || nocast || !assert_is_castable, "impossible cast");
-
-        if (upcast || nocast) {
-            return true;
-        }
-
-        return type->Is(&Of<std::remove_cv_t<TO>>());
     }
 
     /// @returns the static TypeInfo for the type T
@@ -149,7 +159,7 @@ struct TypeInfo {
     }
 
     /// @returns a compile-time hashcode for the type `T`.
-    /// @note the returned hashcode will have at most 2 bits set, as the hashes
+    /// @note the returned hashcode will have exactly 2 bits set, as the hashes
     /// are expected to be used in bloom-filters which will quickly saturate when
     /// multiple hashcodes are bitwise-or'd together.
     template <typename T>
@@ -166,7 +176,8 @@ struct TypeInfo {
 #endif
         constexpr uint32_t bit_a = (crc & 63);
         constexpr uint32_t bit_b = ((crc >> 6) & 63);
-        return (static_cast<HashCode>(1) << bit_a) | (static_cast<HashCode>(1) << bit_b);
+        constexpr uint32_t bit_c = (bit_a == bit_b) ? ((bit_a + 1) & 63) : bit_b;
+        return (static_cast<HashCode>(1) << bit_a) | (static_cast<HashCode>(1) << bit_c);
     }
 
     /// @returns the hashcode of the given type, bitwise-or'd with the hashcodes
@@ -212,18 +223,15 @@ struct TypeInfo {
             return false;
         } else if constexpr (kCount == 1) {
             return Is(&Of<std::tuple_element_t<0, TUPLE>>());
-        } else if constexpr (kCount == 2) {
-            return Is(&Of<std::tuple_element_t<0, TUPLE>>()) ||
-                   Is(&Of<std::tuple_element_t<1, TUPLE>>());
-        } else if constexpr (kCount == 3) {
-            return Is(&Of<std::tuple_element_t<0, TUPLE>>()) ||
-                   Is(&Of<std::tuple_element_t<1, TUPLE>>()) ||
-                   Is(&Of<std::tuple_element_t<2, TUPLE>>());
         } else {
-            // Optimization: Compare the object's hashcode to the bitwise-or of all
-            // the tested type's hashcodes. If there's no intersection of bits in
-            // the two masks, then we can guarantee that the type is not in `TO`.
-            if (full_hashcode & TypeInfo::CombinedHashCodeOfTuple<TUPLE>()) {
+            // Optimization: Compare the object's hashcode to the bitwise-or of all the tested
+            // type's hashcodes. If there's no intersection of bits in the two masks, then we can
+            // guarantee that the type is not in `TO`.
+            HashCode mask = full_hashcode & TypeInfo::CombinedHashCodeOfTuple<TUPLE>();
+            // HashCodeOf() ensures that two bits are always set for every hash, so we can quickly
+            // eliminate the bitmask where only one bit is set.
+            HashCode two_bits = mask & (mask - 1);
+            if (two_bits) {
                 // Possibly one of the types in `TUPLE`.
                 // Split the search in two, and scan each block.
                 static constexpr auto kMid = kCount / 2;
@@ -320,10 +328,10 @@ inline const TO* As(const FROM* obj) {
 class CastableBase {
   public:
     /// Copy constructor
-    CastableBase(const CastableBase&) = default;
+    CastableBase(const CastableBase&);
 
     /// Destructor
-    virtual ~CastableBase() = default;
+    virtual ~CastableBase();
 
     /// Copy assignment
     /// @param other the CastableBase to copy
@@ -460,7 +468,7 @@ struct CastableCommonBaseImpl {};
 
 /// Alias to typename CastableCommonBaseImpl<TYPES>::type
 template <typename... TYPES>
-using CastableCommonBase = typename detail::CastableCommonBaseImpl<TYPES...>::type;
+using CastableCommonBase = typename CastableCommonBaseImpl<TYPES...>::type;
 
 /// CastableCommonBaseImpl template specialization for a single type
 template <typename T>
@@ -587,7 +595,7 @@ inline bool NonDefaultCases(T* object,
         // Attempt to dynamically cast the object to the handler type. If that
         // succeeds, call the case handler with the cast object.
         using CaseType = SwitchCaseType<CaseFunc>;
-        if (type->Is(&TypeInfo::Of<CaseType>())) {
+        if (type->Is<CaseType>()) {
             auto* ptr = static_cast<CaseType*>(object);
             if constexpr (kHasReturnType) {
                 new (result) RETURN_TYPE(static_cast<RETURN_TYPE>(std::get<0>(cases)(ptr)));
@@ -599,9 +607,14 @@ inline bool NonDefaultCases(T* object,
         return false;
     } else {
         // Multiple cases.
-        // Check the hashcode bits to see if there's any possibility of a case
-        // matching in these cases. If there isn't, we can skip all these cases.
-        if (type->full_hashcode & TypeInfo::CombinedHashCodeOf<SwitchCaseType<CASES>...>()) {
+        // Check the hashcode bits to see if there's any possibility of a case matching in these
+        // cases. If there isn't, we can skip all these cases.
+        TypeInfo::HashCode mask =
+            type->full_hashcode & TypeInfo::CombinedHashCodeOf<SwitchCaseType<CASES>...>();
+        // HashCodeOf() ensures that two bits are always set for every hash, so we can quickly
+        // eliminate the bitmask where only one bit is set.
+        TypeInfo::HashCode two_bits = mask & (mask - 1);
+        if (two_bits) {
             // There's a possibility. We need to scan further.
             // Split the cases into two, and recurse.
             constexpr size_t kMid = kNumCases / 2;
@@ -626,7 +639,7 @@ inline void SwitchCases(T* object, RETURN_TYPE* result, std::tuple<CASES...>&& c
 
     // Static assertions
     static constexpr bool kDefaultIsOK =
-        kDefaultIndex == -1 || kDefaultIndex == std::tuple_size_v<Cases> - 1;
+        kDefaultIndex == -1 || kDefaultIndex == static_cast<int>(std::tuple_size_v<Cases> - 1);
     static constexpr bool kReturnIsOK =
         kHasDefaultCase || !kHasReturnType || std::is_constructible_v<RETURN_TYPE>;
     static_assert(kDefaultIsOK, "Default case must be last in Switch()");

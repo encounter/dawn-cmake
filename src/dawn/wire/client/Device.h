@@ -32,8 +32,8 @@ class Queue;
 
 class Device final : public ObjectBase {
   public:
-    Device(Client* client, uint32_t refcount, uint32_t id);
-    ~Device();
+    explicit Device(const ObjectBaseParams& params);
+    ~Device() override;
 
     void SetUncapturedErrorCallback(WGPUErrorCallback errorCallback, void* errorUserdata);
     void SetLoggingCallback(WGPULoggingCallback errorCallback, void* errorUserdata);
@@ -50,6 +50,9 @@ class Device final : public ObjectBase {
     void CreateRenderPipelineAsync(WGPURenderPipelineDescriptor const* descriptor,
                                    WGPUCreateRenderPipelineAsyncCallback callback,
                                    void* userdata);
+    WGPUQuerySet CreateQuerySet(const WGPUQuerySetDescriptor* descriptor);
+    WGPUTexture CreateTexture(const WGPUTextureDescriptor* descriptor);
+    WGPUTexture CreateErrorTexture(const WGPUTextureDescriptor* descriptor);
 
     void HandleError(WGPUErrorType errorType, const char* message);
     void HandleLogging(WGPULoggingType loggingType, const char* message);
@@ -68,6 +71,7 @@ class Device final : public ObjectBase {
     void SetLimits(const WGPUSupportedLimits* limits);
     void SetFeatures(const WGPUFeatureName* features, uint32_t featuresCount);
 
+    WGPUAdapter GetAdapter();  // Not implemented in the wire.
     WGPUQueue GetQueue();
 
     void CancelCallbacksForDisconnect() override;

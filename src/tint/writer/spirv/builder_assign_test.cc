@@ -23,9 +23,9 @@ namespace {
 using BuilderTest = TestHelper;
 
 TEST_F(BuilderTest, Assign_Var) {
-    auto* v = Global("var", ty.f32(), ast::StorageClass::kPrivate);
+    auto* v = GlobalVar("var", ty.f32(), ast::StorageClass::kPrivate);
 
-    auto* assign = Assign("var", 1.f);
+    auto* assign = Assign("var", 1_f);
 
     WrapInFunction(assign);
 
@@ -51,9 +51,9 @@ TEST_F(BuilderTest, Assign_Var) {
 }
 
 TEST_F(BuilderTest, Assign_Var_OutsideFunction_IsError) {
-    auto* v = Global("var", ty.f32(), ast::StorageClass::kPrivate);
+    auto* v = GlobalVar("var", ty.f32(), ast::StorageClass::kPrivate);
 
-    auto* assign = Assign("var", Expr(1.f));
+    auto* assign = Assign("var", Expr(1_f));
 
     WrapInFunction(assign);
 
@@ -70,7 +70,7 @@ TEST_F(BuilderTest, Assign_Var_OutsideFunction_IsError) {
 }
 
 TEST_F(BuilderTest, Assign_Var_ZeroConstructor) {
-    auto* v = Global("var", ty.vec3<f32>(), ast::StorageClass::kPrivate);
+    auto* v = GlobalVar("var", ty.vec3<f32>(), ast::StorageClass::kPrivate);
 
     auto* val = vec3<f32>();
     auto* assign = Assign("var", val);
@@ -98,10 +98,10 @@ TEST_F(BuilderTest, Assign_Var_ZeroConstructor) {
 )");
 }
 
-TEST_F(BuilderTest, Assign_Var_Complex_ConstructorWithExtract) {
-    auto* init = vec3<f32>(vec2<f32>(1.f, 2.f), 3.f);
+TEST_F(BuilderTest, Assign_Var_Complex_ConstructorNestedVector) {
+    auto* init = vec3<f32>(vec2<f32>(1_f, 2_f), 3_f);
 
-    auto* v = Global("var", ty.vec3<f32>(), ast::StorageClass::kPrivate);
+    auto* v = GlobalVar("var", ty.vec3<f32>(), ast::StorageClass::kPrivate);
 
     auto* assign = Assign("var", init);
 
@@ -121,24 +121,20 @@ TEST_F(BuilderTest, Assign_Var_Complex_ConstructorWithExtract) {
 %2 = OpTypePointer Private %3
 %5 = OpConstantNull %3
 %1 = OpVariable %2 Private %5
-%6 = OpTypeVector %4 2
-%7 = OpConstant %4 1
-%8 = OpConstant %4 2
-%9 = OpConstantComposite %6 %7 %8
-%12 = OpConstant %4 3
+%6 = OpConstant %4 1
+%7 = OpConstant %4 2
+%8 = OpConstant %4 3
+%9 = OpConstantComposite %3 %6 %7 %8
 )");
     EXPECT_EQ(DumpInstructions(b.functions()[0].instructions()),
-              R"(%10 = OpCompositeExtract %4 %9 0
-%11 = OpCompositeExtract %4 %9 1
-%13 = OpCompositeConstruct %3 %10 %11 %12
-OpStore %1 %13
+              R"(OpStore %1 %9
 )");
 }
 
 TEST_F(BuilderTest, Assign_Var_Complex_Constructor) {
-    auto* init = vec3<f32>(1.f, 2.f, 3.f);
+    auto* init = vec3<f32>(1_f, 2_f, 3_f);
 
-    auto* v = Global("var", ty.vec3<f32>(), ast::StorageClass::kPrivate);
+    auto* v = GlobalVar("var", ty.vec3<f32>(), ast::StorageClass::kPrivate);
 
     auto* assign = Assign("var", init);
 
@@ -176,14 +172,14 @@ TEST_F(BuilderTest, Assign_StructMember) {
     // var ident : my_struct
     // ident.b = 4.0;
 
-    auto* s = Structure("my_struct", {
+    auto* s = Structure("my_struct", utils::Vector{
                                          Member("a", ty.f32()),
                                          Member("b", ty.f32()),
                                      });
 
     auto* v = Var("ident", ty.Of(s));
 
-    auto* assign = Assign(MemberAccessor("ident", "b"), Expr(4.f));
+    auto* assign = Assign(MemberAccessor("ident", "b"), Expr(4_f));
 
     WrapInFunction(v, assign);
 
@@ -213,9 +209,9 @@ OpStore %8 %9
 }
 
 TEST_F(BuilderTest, Assign_Vector) {
-    auto* v = Global("var", ty.vec3<f32>(), ast::StorageClass::kPrivate);
+    auto* v = GlobalVar("var", ty.vec3<f32>(), ast::StorageClass::kPrivate);
 
-    auto* val = vec3<f32>(1.f, 1.f, 3.f);
+    auto* val = vec3<f32>(1_f, 1_f, 3_f);
     auto* assign = Assign("var", val);
 
     WrapInFunction(assign);
@@ -247,9 +243,9 @@ TEST_F(BuilderTest, Assign_Vector) {
 TEST_F(BuilderTest, Assign_Vector_MemberByName) {
     // var.y = 1
 
-    auto* v = Global("var", ty.vec3<f32>(), ast::StorageClass::kPrivate);
+    auto* v = GlobalVar("var", ty.vec3<f32>(), ast::StorageClass::kPrivate);
 
-    auto* assign = Assign(MemberAccessor("var", "y"), Expr(1.f));
+    auto* assign = Assign(MemberAccessor("var", "y"), Expr(1_f));
 
     WrapInFunction(assign);
 
@@ -282,9 +278,9 @@ OpStore %9 %10
 TEST_F(BuilderTest, Assign_Vector_MemberByIndex) {
     // var[1] = 1
 
-    auto* v = Global("var", ty.vec3<f32>(), ast::StorageClass::kPrivate);
+    auto* v = GlobalVar("var", ty.vec3<f32>(), ast::StorageClass::kPrivate);
 
-    auto* assign = Assign(IndexAccessor("var", 1_i), Expr(1.f));
+    auto* assign = Assign(IndexAccessor("var", 1_i), Expr(1_f));
 
     WrapInFunction(assign);
 

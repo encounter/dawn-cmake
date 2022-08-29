@@ -20,13 +20,13 @@
 #include "dawn/dawn_proc.h"
 #include "dawn/native/DawnNative.h"
 #include "dawn/tests/DawnTest.h"
-#include "dawn/utils/GLFWUtils.h"
 #include "gtest/gtest.h"
+#include "webgpu/webgpu_glfw.h"
 
 // Include windows.h before GLFW so GLFW's APIENTRY macro doesn't conflict with windows.h's.
-#if defined(DAWN_PLATFORM_WINDOWS)
+#if DAWN_PLATFORM_IS(WINDOWS)
 #include "dawn/common/windows_with_undefs.h"
-#endif  // defined(DAWN_PLATFORM_WINDOWS)
+#endif  // DAWN_PLATFORM_IS(WINDOWS)
 
 #include "GLFW/glfw3.h"
 
@@ -63,13 +63,12 @@ class WindowSurfaceInstanceTests : public testing::Test {
     }
 
     void AssertSurfaceCreation(const wgpu::SurfaceDescriptor* descriptor, bool succeeds) {
-        ASSERT_EQ(mInstance.CreateSurface(descriptor).Get() != nullptr, succeeds);
+        wgpu::Surface surface = mInstance.CreateSurface(descriptor);
+        ASSERT_EQ(dawn::native::CheckIsErrorForTesting(surface.Get()), !succeeds);
     }
 
     GLFWwindow* CreateWindow() {
-        // The WindowSurfaceInstance tests don't create devices so we don't need to call
-        // SetupGLFWWindowHintsForBackend. Set GLFW_NO_API anyway to avoid GLFW bringing up a GL
-        // context that we won't use.
+        // Set GLFW_NO_API to avoid GLFW bringing up a GL context that we won't use.
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         mWindow = glfwCreateWindow(400, 400, "WindowSurfaceInstanceTests window", nullptr, nullptr);
         return mWindow;
@@ -85,7 +84,7 @@ class WindowSurfaceInstanceTests : public testing::Test {
 TEST_F(WindowSurfaceInstanceTests, ControlCase) {
     GLFWwindow* window = CreateWindow();
     std::unique_ptr<wgpu::ChainedStruct> chainedDescriptor =
-        utils::SetupWindowAndGetSurfaceDescriptor(window);
+        wgpu::glfw::SetupWindowAndGetSurfaceDescriptor(window);
 
     wgpu::SurfaceDescriptor descriptor;
     descriptor.nextInChain = chainedDescriptor.get();
@@ -127,9 +126,9 @@ TEST_F(WindowSurfaceInstanceTests, HTMLCanvasDescriptor) {
 TEST_F(WindowSurfaceInstanceTests, TwoChainedDescriptors) {
     GLFWwindow* window = CreateWindow();
     std::unique_ptr<wgpu::ChainedStruct> chainedDescriptor1 =
-        utils::SetupWindowAndGetSurfaceDescriptor(window);
+        wgpu::glfw::SetupWindowAndGetSurfaceDescriptor(window);
     std::unique_ptr<wgpu::ChainedStruct> chainedDescriptor2 =
-        utils::SetupWindowAndGetSurfaceDescriptor(window);
+        wgpu::glfw::SetupWindowAndGetSurfaceDescriptor(window);
 
     wgpu::SurfaceDescriptor descriptor;
     descriptor.nextInChain = chainedDescriptor1.get();
@@ -138,13 +137,13 @@ TEST_F(WindowSurfaceInstanceTests, TwoChainedDescriptors) {
     AssertSurfaceCreation(&descriptor, false);
 }
 
-#if defined(DAWN_PLATFORM_WINDOWS)
+#if DAWN_PLATFORM_IS(WINDOWS)
 
 // Tests that GLFWUtils returns a descriptor of HWND type
 TEST_F(WindowSurfaceInstanceTests, CorrectSTypeHWND) {
     GLFWwindow* window = CreateWindow();
     std::unique_ptr<wgpu::ChainedStruct> chainedDescriptor =
-        utils::SetupWindowAndGetSurfaceDescriptor(window);
+        wgpu::glfw::SetupWindowAndGetSurfaceDescriptor(window);
     ASSERT_EQ(chainedDescriptor->sType, wgpu::SType::SurfaceDescriptorFromWindowsHWND);
 }
 
@@ -159,7 +158,7 @@ TEST_F(WindowSurfaceInstanceTests, InvalidHWND) {
     AssertSurfaceCreation(&descriptor, false);
 }
 
-#else  // defined(DAWN_PLATFORM_WINDOWS)
+#else  // DAWN_PLATFORM_IS(WINDOWS)
 
 // Test using HWND when it is not supported
 TEST_F(WindowSurfaceInstanceTests, HWNDSurfacesAreInvalid) {
@@ -172,7 +171,7 @@ TEST_F(WindowSurfaceInstanceTests, HWNDSurfacesAreInvalid) {
     AssertSurfaceCreation(&descriptor, false);
 }
 
-#endif  // defined(DAWN_PLATFORM_WINDOWS)
+#endif  // DAWN_PLATFORM_IS(WINDOWS)
 
 #if defined(DAWN_USE_X11)
 
@@ -180,7 +179,7 @@ TEST_F(WindowSurfaceInstanceTests, HWNDSurfacesAreInvalid) {
 TEST_F(WindowSurfaceInstanceTests, CorrectSTypeXlib) {
     GLFWwindow* window = CreateWindow();
     std::unique_ptr<wgpu::ChainedStruct> chainedDescriptor =
-        utils::SetupWindowAndGetSurfaceDescriptor(window);
+        wgpu::glfw::SetupWindowAndGetSurfaceDescriptor(window);
     ASSERT_EQ(chainedDescriptor->sType, wgpu::SType::SurfaceDescriptorFromXlibWindow);
 }
 
@@ -220,7 +219,7 @@ TEST_F(WindowSurfaceInstanceTests, XlibSurfacesAreInvalid) {
 TEST_F(WindowSurfaceInstanceTests, CorrectSTypeMetal) {
     GLFWwindow* window = CreateWindow();
     std::unique_ptr<wgpu::ChainedStruct> chainedDescriptor =
-        utils::SetupWindowAndGetSurfaceDescriptor(window);
+        wgpu::glfw::SetupWindowAndGetSurfaceDescriptor(window);
     ASSERT_EQ(chainedDescriptor->sType, wgpu::SType::SurfaceDescriptorFromMetalLayer);
 }
 

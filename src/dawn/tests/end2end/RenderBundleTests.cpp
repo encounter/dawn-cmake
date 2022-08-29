@@ -19,7 +19,7 @@
 #include "dawn/utils/WGPUHelpers.h"
 
 constexpr uint32_t kRTSize = 4;
-const RGBA8 kColors[2] = {RGBA8::kGreen, RGBA8::kBlue};
+const utils::RGBA8 kColors[2] = {utils::RGBA8::kGreen, utils::RGBA8::kBlue};
 
 // RenderBundleTest tests simple usage of RenderBundles to draw. The implementaiton
 // of RenderBundle is shared significantly with render pass execution which is
@@ -32,7 +32,7 @@ class RenderBundleTest : public DawnTest {
         renderPass = utils::CreateBasicRenderPass(device, kRTSize, kRTSize);
 
         wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-            @stage(vertex)
+            @vertex
             fn main(@location(0) pos : vec4<f32>) -> @builtin(position) vec4<f32> {
                 return pos;
             })");
@@ -43,7 +43,7 @@ class RenderBundleTest : public DawnTest {
             }
             @group(0) @binding(0) var<uniform> fragmentUniformBuffer : Ubo;
 
-            @stage(fragment) fn main() -> @location(0) vec4<f32> {
+            @fragment fn main() -> @location(0) vec4<f32> {
                 return fragmentUniformBuffer.color;
             })");
 

@@ -50,24 +50,32 @@ using ResolverValidationTest = ResolverTest;
 
 class FakeStmt final : public Castable<FakeStmt, ast::Statement> {
   public:
-    FakeStmt(ProgramID pid, Source src) : Base(pid, src) {}
+    FakeStmt(ProgramID pid, ast::NodeID nid, Source src) : Base(pid, nid, src) {}
     FakeStmt* Clone(CloneContext*) const override { return nullptr; }
 };
 
 class FakeExpr final : public Castable<FakeExpr, ast::Expression> {
   public:
-    FakeExpr(ProgramID pid, Source src) : Base(pid, src) {}
+    FakeExpr(ProgramID pid, ast::NodeID nid, Source src) : Base(pid, nid, src) {}
     FakeExpr* Clone(CloneContext*) const override { return nullptr; }
 };
 
 TEST_F(ResolverValidationTest, WorkgroupMemoryUsedInVertexStage) {
-    Global(Source{{1, 2}}, "wg", ty.vec4<f32>(), ast::StorageClass::kWorkgroup);
-    Global("dst", ty.vec4<f32>(), ast::StorageClass::kPrivate);
+    GlobalVar(Source{{1, 2}}, "wg", ty.vec4<f32>(), ast::StorageClass::kWorkgroup);
+    GlobalVar("dst", ty.vec4<f32>(), ast::StorageClass::kPrivate);
     auto* stmt = Assign(Expr("dst"), Expr(Source{{3, 4}}, "wg"));
 
-    Func(Source{{9, 10}}, "f0", ast::VariableList{}, ty.vec4<f32>(), {stmt, Return(Expr("dst"))},
-         ast::AttributeList{Stage(ast::PipelineStage::kVertex)},
-         ast::AttributeList{Builtin(ast::Builtin::kPosition)});
+    Func(Source{{9, 10}}, "f0", utils::Empty, ty.vec4<f32>(),
+         utils::Vector{
+             stmt,
+             Return(Expr("dst")),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kVertex),
+         },
+         utils::Vector{
+             Builtin(ast::BuiltinValue::kPosition),
+         });
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
@@ -80,19 +88,24 @@ TEST_F(ResolverValidationTest, WorkgroupMemoryUsedInFragmentStage) {
     // var<workgroup> dst : vec4<f32>;
     // fn f2(){ dst = wg; }
     // fn f1() { f2(); }
-    // @stage(fragment)
+    // @fragment
     // fn f0() {
     //  f1();
     //}
 
-    Global(Source{{1, 2}}, "wg", ty.vec4<f32>(), ast::StorageClass::kWorkgroup);
-    Global("dst", ty.vec4<f32>(), ast::StorageClass::kPrivate);
+    GlobalVar(Source{{1, 2}}, "wg", ty.vec4<f32>(), ast::StorageClass::kWorkgroup);
+    GlobalVar("dst", ty.vec4<f32>(), ast::StorageClass::kPrivate);
     auto* stmt = Assign(Expr("dst"), Expr(Source{{3, 4}}, "wg"));
 
-    Func(Source{{5, 6}}, "f2", {}, ty.void_(), {stmt});
-    Func(Source{{7, 8}}, "f1", {}, ty.void_(), {CallStmt(Call("f2"))});
-    Func(Source{{9, 10}}, "f0", {}, ty.void_(), {CallStmt(Call("f1"))},
-         ast::AttributeList{Stage(ast::PipelineStage::kFragment)});
+    Func(Source{{5, 6}}, "f2", utils::Empty, ty.void_(), utils::Vector{stmt});
+    Func(Source{{7, 8}}, "f1", utils::Empty, ty.void_(),
+         utils::Vector{
+             CallStmt(Call("f2")),
+         });
+    Func(Source{{9, 10}}, "f0", utils::Empty, ty.void_(), utils::Vector{CallStmt(Call("f1"))},
+         utils::Vector{
+             Stage(ast::PipelineStage::kFragment),
+         });
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
@@ -116,7 +129,7 @@ TEST_F(ResolverValidationTest, UnhandledStmt) {
 TEST_F(ResolverValidationTest, Stmt_If_NonBool) {
     // if (1.23f) {}
 
-    WrapInFunction(If(Expr(Source{{12, 34}}, 1.23f), Block()));
+    WrapInFunction(If(Expr(Source{{12, 34}}, 1.23_f), Block()));
 
     EXPECT_FALSE(r()->Resolve());
 
@@ -126,7 +139,7 @@ TEST_F(ResolverValidationTest, Stmt_If_NonBool) {
 TEST_F(ResolverValidationTest, Stmt_ElseIf_NonBool) {
     // else if (1.23f) {}
 
-    WrapInFunction(If(Expr(true), Block(), Else(If(Expr(Source{{12, 34}}, 1.23f), Block()))));
+    WrapInFunction(If(Expr(true), Block(), Else(If(Expr(Source{{12, 34}}, 1.23_f), Block()))));
 
     EXPECT_FALSE(r()->Resolve());
 
@@ -145,7 +158,7 @@ TEST_F(ResolverValidationTest, Expr_ErrUnknownExprType) {
 }
 
 TEST_F(ResolverValidationTest, Expr_DontCall_Function) {
-    Func("func", {}, ty.void_(), {}, {});
+    Func("func", utils::Empty, ty.void_(), utils::Empty, {});
     WrapInFunction(Expr(Source{{{3, 3}, {3, 8}}}, "func"));
 
     EXPECT_FALSE(r()->Resolve());
@@ -213,11 +226,11 @@ TEST_F(ResolverValidationTest, UsingUndefinedVariableGlobalVariable_Pass) {
     //   return;
     // }
 
-    Global("global_var", ty.f32(), ast::StorageClass::kPrivate, Expr(2.1f));
+    GlobalVar("global_var", ty.f32(), ast::StorageClass::kPrivate, Expr(2.1_f));
 
-    Func("my_func", ast::VariableList{}, ty.void_(),
-         {
-             Assign(Expr(Source{{12, 34}}, "global_var"), 3.14f),
+    Func("my_func", utils::Empty, ty.void_(),
+         utils::Vector{
+             Assign(Expr(Source{{12, 34}}, "global_var"), 3.14_f),
              Return(),
          });
 
@@ -229,14 +242,14 @@ TEST_F(ResolverValidationTest, UsingUndefinedVariableInnerScope_Fail) {
     //   if (true) { var a : f32 = 2.0; }
     //   a = 3.14;
     // }
-    auto* var = Var("a", ty.f32(), ast::StorageClass::kNone, Expr(2.0f));
+    auto* var = Var("a", ty.f32(), Expr(2_f));
 
     auto* cond = Expr(true);
     auto* body = Block(Decl(var));
 
     SetSource(Source{{12, 34}});
     auto* lhs = Expr(Source{{12, 34}}, "a");
-    auto* rhs = Expr(3.14f);
+    auto* rhs = Expr(3.14_f);
 
     auto* outer_body = Block(If(cond, body), Assign(lhs, rhs));
 
@@ -251,10 +264,10 @@ TEST_F(ResolverValidationTest, UsingUndefinedVariableOuterScope_Pass) {
     //   var a : f32 = 2.0;
     //   if (true) { a = 3.14; }
     // }
-    auto* var = Var("a", ty.f32(), ast::StorageClass::kNone, Expr(2.0f));
+    auto* var = Var("a", ty.f32(), Expr(2_f));
 
     auto* lhs = Expr(Source{{12, 34}}, "a");
-    auto* rhs = Expr(3.14f);
+    auto* rhs = Expr(3.14_f);
 
     auto* cond = Expr(true);
     auto* body = Block(Assign(lhs, rhs));
@@ -271,11 +284,11 @@ TEST_F(ResolverValidationTest, UsingUndefinedVariableDifferentScope_Fail) {
     //  { var a : f32 = 2.0; }
     //  { a = 3.14; }
     // }
-    auto* var = Var("a", ty.f32(), ast::StorageClass::kNone, Expr(2.0f));
+    auto* var = Var("a", ty.f32(), Expr(2_f));
     auto* first_body = Block(Decl(var));
 
     auto* lhs = Expr(Source{{12, 34}}, "a");
-    auto* rhs = Expr(3.14f);
+    auto* rhs = Expr(3.14_f);
     auto* second_body = Block(Assign(lhs, rhs));
 
     auto* outer_body = Block(first_body, second_body);
@@ -289,32 +302,34 @@ TEST_F(ResolverValidationTest, UsingUndefinedVariableDifferentScope_Fail) {
 TEST_F(ResolverValidationTest, StorageClass_FunctionVariableWorkgroupClass) {
     auto* var = Var("var", ty.i32(), ast::StorageClass::kWorkgroup);
 
-    auto* stmt = Decl(var);
-    Func("func", ast::VariableList{}, ty.void_(), {stmt}, ast::AttributeList{});
+    Func("func", utils::Empty, ty.void_(),
+         utils::Vector{
+             Decl(var),
+         });
 
     EXPECT_FALSE(r()->Resolve());
 
-    EXPECT_EQ(r()->error(), "error: function variable has a non-function storage class");
+    EXPECT_EQ(r()->error(),
+              "error: function-scope 'var' declaration must use 'function' storage class");
 }
 
 TEST_F(ResolverValidationTest, StorageClass_FunctionVariableI32) {
     auto* var = Var("s", ty.i32(), ast::StorageClass::kPrivate);
 
-    auto* stmt = Decl(var);
-    Func("func", ast::VariableList{}, ty.void_(), {stmt}, ast::AttributeList{});
+    Func("func", utils::Empty, ty.void_(),
+         utils::Vector{
+             Decl(var),
+         });
 
     EXPECT_FALSE(r()->Resolve());
 
-    EXPECT_EQ(r()->error(), "error: function variable has a non-function storage class");
+    EXPECT_EQ(r()->error(),
+              "error: function-scope 'var' declaration must use 'function' storage class");
 }
 
 TEST_F(ResolverValidationTest, StorageClass_SamplerExplicitStorageClass) {
     auto* t = ty.sampler(ast::SamplerKind::kSampler);
-    Global(Source{{12, 34}}, "var", t, ast::StorageClass::kHandle,
-           ast::AttributeList{
-               create<ast::BindingAttribute>(0),
-               create<ast::GroupAttribute>(0),
-           });
+    GlobalVar(Source{{12, 34}}, "var", t, ast::StorageClass::kHandle, Binding(0), Group(0));
 
     EXPECT_FALSE(r()->Resolve());
 
@@ -324,11 +339,7 @@ TEST_F(ResolverValidationTest, StorageClass_SamplerExplicitStorageClass) {
 
 TEST_F(ResolverValidationTest, StorageClass_TextureExplicitStorageClass) {
     auto* t = ty.sampled_texture(ast::TextureDimension::k1d, ty.f32());
-    Global(Source{{12, 34}}, "var", t, ast::StorageClass::kHandle,
-           ast::AttributeList{
-               create<ast::BindingAttribute>(0),
-               create<ast::GroupAttribute>(0),
-           });
+    GlobalVar(Source{{12, 34}}, "var", t, ast::StorageClass::kHandle, Binding(0), Group(0));
 
     EXPECT_FALSE(r()->Resolve()) << r()->error();
 
@@ -337,7 +348,7 @@ TEST_F(ResolverValidationTest, StorageClass_TextureExplicitStorageClass) {
 }
 
 TEST_F(ResolverValidationTest, Expr_MemberAccessor_VectorSwizzle_BadChar) {
-    Global("my_vec", ty.vec3<f32>(), ast::StorageClass::kPrivate);
+    GlobalVar("my_vec", ty.vec3<f32>(), ast::StorageClass::kPrivate);
 
     auto* ident = Expr(Source{{{3, 3}, {3, 7}}}, "xyqz");
 
@@ -349,7 +360,7 @@ TEST_F(ResolverValidationTest, Expr_MemberAccessor_VectorSwizzle_BadChar) {
 }
 
 TEST_F(ResolverValidationTest, Expr_MemberAccessor_VectorSwizzle_MixedChars) {
-    Global("my_vec", ty.vec4<f32>(), ast::StorageClass::kPrivate);
+    GlobalVar("my_vec", ty.vec4<f32>(), ast::StorageClass::kPrivate);
 
     auto* ident = Expr(Source{{{3, 3}, {3, 7}}}, "rgyw");
 
@@ -362,7 +373,7 @@ TEST_F(ResolverValidationTest, Expr_MemberAccessor_VectorSwizzle_MixedChars) {
 }
 
 TEST_F(ResolverValidationTest, Expr_MemberAccessor_VectorSwizzle_BadLength) {
-    Global("my_vec", ty.vec3<f32>(), ast::StorageClass::kPrivate);
+    GlobalVar("my_vec", ty.vec3<f32>(), ast::StorageClass::kPrivate);
 
     auto* ident = Expr(Source{{{3, 3}, {3, 8}}}, "zzzzz");
     auto* mem = MemberAccessor("my_vec", ident);
@@ -373,7 +384,7 @@ TEST_F(ResolverValidationTest, Expr_MemberAccessor_VectorSwizzle_BadLength) {
 }
 
 TEST_F(ResolverValidationTest, Expr_MemberAccessor_VectorSwizzle_BadIndex) {
-    Global("my_vec", ty.vec2<f32>(), ast::StorageClass::kPrivate);
+    GlobalVar("my_vec", ty.vec2<f32>(), ast::StorageClass::kPrivate);
 
     auto* ident = Expr(Source{{3, 3}}, "z");
     auto* mem = MemberAccessor("my_vec", ident);
@@ -411,7 +422,11 @@ TEST_F(ResolverValidationTest, EXpr_MemberAccessor_FuncGoodParent) {
     auto* z = Expr(Source{{{3, 3}, {3, 8}}}, "z");
     auto* accessor_expr = MemberAccessor(star_p, z);
     auto* x = Var("x", ty.f32(), accessor_expr);
-    Func("func", {p}, ty.f32(), {Decl(x), Return(x)});
+    Func("func", utils::Vector{p}, ty.f32(),
+         utils::Vector{
+             Decl(x),
+             Return(x),
+         });
     EXPECT_TRUE(r()->Resolve()) << r()->error();
 }
 
@@ -425,7 +440,11 @@ TEST_F(ResolverValidationTest, EXpr_MemberAccessor_FuncBadParent) {
     auto* accessor_expr = MemberAccessor(p, z);
     auto* star_p = Deref(accessor_expr);
     auto* x = Var("x", ty.f32(), star_p);
-    Func("func", {p}, ty.f32(), {Decl(x), Return(x)});
+    Func("func", utils::Vector{p}, ty.f32(),
+         utils::Vector{
+             Decl(x),
+             Return(x),
+         });
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
@@ -445,7 +464,7 @@ TEST_F(ResolverValidationTest,
     // }
 
     auto error_loc = Source{{12, 34}};
-    auto* body = Block(Continue(), Decl(error_loc, Var("z", ty.i32(), ast::StorageClass::kNone)));
+    auto* body = Block(Continue(), Decl(error_loc, Var("z", ty.i32())));
     auto* continuing = Block(Assign(Expr("z"), 2_i));
     auto* loop_stmt = Loop(body, continuing);
     WrapInFunction(loop_stmt);
@@ -470,9 +489,8 @@ TEST_F(ResolverValidationTest, Stmt_Loop_ContinueInLoopBodyAfterDecl_UsageInCont
     //     }
     // }
 
-    auto* body =
-        Block(If(false, Block(Break())),  //
-              Decl(Var("z", ty.i32(), ast::StorageClass::kNone)), Block(Block(Block(Continue()))));
+    auto* body = Block(If(false, Block(Break())),  //
+                       Decl(Var("z", ty.i32())), Block(Block(Block(Continue()))));
     auto* continuing = Block(Assign(Expr("z"), 2_i));
     auto* loop_stmt = Loop(body, continuing);
     WrapInFunction(loop_stmt);
@@ -494,8 +512,8 @@ TEST_F(ResolverValidationTest, Stmt_Loop_ContinueInLoopBodySubscopeBeforeDecl_Us
     auto cont_loc = Source{{12, 34}};
     auto decl_loc = Source{{56, 78}};
     auto ref_loc = Source{{90, 12}};
-    auto* body = Block(If(Expr(true), Block(Continue(cont_loc))),
-                       Decl(Var(decl_loc, "z", ty.i32(), ast::StorageClass::kNone)));
+    auto* body =
+        Block(If(Expr(true), Block(Continue(cont_loc))), Decl(Var(decl_loc, "z", ty.i32())));
     auto* continuing = Block(Assign(Expr(ref_loc, "z"), 2_i));
     auto* loop_stmt = Loop(body, continuing);
     WrapInFunction(loop_stmt);
@@ -524,8 +542,8 @@ TEST_F(ResolverValidationTest,
     auto cont_loc = Source{{12, 34}};
     auto decl_loc = Source{{56, 78}};
     auto ref_loc = Source{{90, 12}};
-    auto* body = Block(If(Expr(true), Block(Continue(cont_loc))),
-                       Decl(Var(decl_loc, "z", ty.i32(), ast::StorageClass::kNone)));
+    auto* body =
+        Block(If(Expr(true), Block(Continue(cont_loc))), Decl(Var(decl_loc, "z", ty.i32())));
 
     auto* continuing = Block(If(Expr(true), Block(Assign(Expr(ref_loc, "z"), 2_i))));
     auto* loop_stmt = Loop(body, continuing);
@@ -555,8 +573,8 @@ TEST_F(ResolverValidationTest, Stmt_Loop_ContinueInLoopBodySubscopeBeforeDecl_Us
     auto cont_loc = Source{{12, 34}};
     auto decl_loc = Source{{56, 78}};
     auto ref_loc = Source{{90, 12}};
-    auto* body = Block(If(Expr(true), Block(Continue(cont_loc))),
-                       Decl(Var(decl_loc, "z", ty.i32(), ast::StorageClass::kNone)));
+    auto* body =
+        Block(If(Expr(true), Block(Continue(cont_loc))), Decl(Var(decl_loc, "z", ty.i32())));
     auto* compare =
         create<ast::BinaryExpression>(ast::BinaryOp::kLessThan, Expr(ref_loc, "z"), Expr(2_i));
     auto* continuing = Block(If(compare, Block()));
@@ -587,8 +605,8 @@ TEST_F(ResolverValidationTest,
     auto cont_loc = Source{{12, 34}};
     auto decl_loc = Source{{56, 78}};
     auto ref_loc = Source{{90, 12}};
-    auto* body = Block(If(Expr(true), Block(Continue(cont_loc))),
-                       Decl(Var(decl_loc, "z", ty.i32(), ast::StorageClass::kNone)));
+    auto* body =
+        Block(If(Expr(true), Block(Continue(cont_loc))), Decl(Var(decl_loc, "z", ty.i32())));
 
     auto* continuing = Block(Loop(Block(Assign(Expr(ref_loc, "z"), 2_i))));
     auto* loop_stmt = Loop(body, continuing);
@@ -617,8 +635,8 @@ TEST_F(ResolverValidationTest, Stmt_Loop_ContinueInNestedLoopBodyBeforeDecl_Usag
     auto* inner_loop = Loop(Block(    //
         If(true, Block(Continue())),  //
         Break()));
-    auto* body = Block(inner_loop,                                          //
-                       Decl(Var("z", ty.i32(), ast::StorageClass::kNone)),  //
+    auto* body = Block(inner_loop,                //
+                       Decl(Var("z", ty.i32())),  //
                        Break());
     auto* continuing = Block(Assign("z", 2_i));
     auto* loop_stmt = Loop(body, continuing);
@@ -645,8 +663,8 @@ TEST_F(ResolverValidationTest,
 
     auto* inner_loop = Loop(Block(If(true, Block(Continue())),  //
                                   Break()));
-    auto* body = Block(inner_loop,                                          //
-                       Decl(Var("z", ty.i32(), ast::StorageClass::kNone)),  //
+    auto* body = Block(inner_loop,                //
+                       Decl(Var("z", ty.i32())),  //
                        Break());
     auto* continuing = Block(If(Expr(true), Block(Assign("z", 2_i))));
     auto* loop_stmt = Loop(body, continuing);
@@ -673,8 +691,8 @@ TEST_F(ResolverValidationTest, Stmt_Loop_ContinueInNestedLoopBodyBeforeDecl_Usag
 
     auto* inner_loop = Loop(Block(If(true, Block(Continue())),  //
                                   Break()));
-    auto* body = Block(inner_loop,                                          //
-                       Decl(Var("z", ty.i32(), ast::StorageClass::kNone)),  //
+    auto* body = Block(inner_loop,                //
+                       Decl(Var("z", ty.i32())),  //
                        Break());
     auto* continuing = Block(Loop(Block(Assign("z", 2_i),  //
                                         Break())));
@@ -695,9 +713,8 @@ TEST_F(ResolverTest, Stmt_Loop_ContinueInLoopBodyAfterDecl_UsageInContinuing) {
     // }
 
     auto error_loc = Source{{12, 34}};
-    auto* body =
-        Block(Decl(Var("z", ty.i32(), ast::StorageClass::kNone)), If(true, Block(Continue())),  //
-              Break());
+    auto* body = Block(Decl(Var("z", ty.i32())), If(true, Block(Continue())),  //
+                       Break());
     auto* continuing = Block(Assign(Expr(error_loc, "z"), 2_i));
     auto* loop_stmt = Loop(body, continuing);
     WrapInFunction(loop_stmt);
@@ -792,8 +809,14 @@ TEST_F(ResolverTest, Stmt_Loop_DiscardInContinuing_Indirect_ViaCall) {
     //   }
     // }
 
-    Func("MayDiscard", {}, ty.void_(), {If(true, Block(Discard()))});
-    Func("SomeFunc", {}, ty.void_(), {CallStmt(Call("MayDiscard"))});
+    Func("MayDiscard", utils::Empty, ty.void_(),
+         utils::Vector{
+             If(true, Block(Discard())),
+         });
+    Func("SomeFunc", utils::Empty, ty.void_(),
+         utils::Vector{
+             CallStmt(Call("MayDiscard")),
+         });
 
     WrapInFunction(Loop(         // outer loop
         Block(),                 //   outer loop block
@@ -912,8 +935,14 @@ TEST_F(ResolverTest, Stmt_ForLoop_DiscardInContinuing_Indirect_ViaCall) {
     //   break;
     // }
 
-    Func("MayDiscard", {}, ty.void_(), {If(true, Block(Discard()))});
-    Func("F", {}, ty.void_(), {CallStmt(Call("MayDiscard"))});
+    Func("MayDiscard", utils::Empty, ty.void_(),
+         utils::Vector{
+             If(true, Block(Discard())),
+         });
+    Func("F", utils::Empty, ty.void_(),
+         utils::Vector{
+             CallStmt(Call("MayDiscard")),
+         });
 
     WrapInFunction(For(nullptr, nullptr,
                        Loop(Source{{56, 78}},                               //
@@ -966,10 +995,30 @@ TEST_F(ResolverTest, Stmt_ForLoop_CondIsNotBool) {
     // for (; 1.0f; ) {
     // }
 
-    WrapInFunction(For(nullptr, Expr(Source{{12, 34}}, 1.0f), nullptr, Block()));
+    WrapInFunction(For(nullptr, Expr(Source{{12, 34}}, 1_f), nullptr, Block()));
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(), "12:34 error: for-loop condition must be bool, got f32");
+}
+
+TEST_F(ResolverTest, Stmt_While_CondIsBoolRef) {
+    // var cond : bool = false;
+    // while (cond) {
+    // }
+
+    auto* cond = Var("cond", ty.bool_(), Expr(false));
+    WrapInFunction(Decl(cond), While("cond", Block()));
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
+}
+
+TEST_F(ResolverTest, Stmt_While_CondIsNotBool) {
+    // while (1.0f) {
+    // }
+
+    WrapInFunction(While(Expr(Source{{12, 34}}, 1_f), Block()));
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(), "12:34 error: while condition must be bool, got f32");
 }
 
 TEST_F(ResolverValidationTest, Stmt_ContinueInLoop) {
@@ -1157,30 +1206,40 @@ TEST_F(ResolverValidationTest, Stmt_BreakNotInLoopOrSwitch) {
 }
 
 TEST_F(ResolverValidationTest, StructMemberDuplicateName) {
-    Structure("S",
-              {Member(Source{{12, 34}}, "a", ty.i32()), Member(Source{{56, 78}}, "a", ty.i32())});
+    Structure("S", utils::Vector{
+                       Member(Source{{12, 34}}, "a", ty.i32()),
+                       Member(Source{{56, 78}}, "a", ty.i32()),
+                   });
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
               "56:78 error: redefinition of 'a'\n12:34 note: previous definition "
               "is here");
 }
 TEST_F(ResolverValidationTest, StructMemberDuplicateNameDifferentTypes) {
-    Structure("S", {Member(Source{{12, 34}}, "a", ty.bool_()),
-                    Member(Source{{12, 34}}, "a", ty.vec3<f32>())});
+    Structure("S", utils::Vector{
+                       Member(Source{{12, 34}}, "a", ty.bool_()),
+                       Member(Source{{12, 34}}, "a", ty.vec3<f32>()),
+                   });
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
               "12:34 error: redefinition of 'a'\n12:34 note: previous definition "
               "is here");
 }
 TEST_F(ResolverValidationTest, StructMemberDuplicateNamePass) {
-    Structure("S", {Member("a", ty.i32()), Member("b", ty.f32())});
-    Structure("S1", {Member("a", ty.i32()), Member("b", ty.f32())});
+    Structure("S", utils::Vector{
+                       Member("a", ty.i32()),
+                       Member("b", ty.f32()),
+                   });
+    Structure("S1", utils::Vector{
+                        Member("a", ty.i32()),
+                        Member("b", ty.f32()),
+                    });
     EXPECT_TRUE(r()->Resolve());
 }
 
 TEST_F(ResolverValidationTest, NonPOTStructMemberAlignAttribute) {
-    Structure("S", {
-                       Member("a", ty.f32(), {MemberAlign(Source{{12, 34}}, 3)}),
+    Structure("S", utils::Vector{
+                       Member("a", ty.f32(), utils::Vector{MemberAlign(Source{{12, 34}}, 3_u)}),
                    });
 
     EXPECT_FALSE(r()->Resolve());
@@ -1188,8 +1247,8 @@ TEST_F(ResolverValidationTest, NonPOTStructMemberAlignAttribute) {
 }
 
 TEST_F(ResolverValidationTest, ZeroStructMemberAlignAttribute) {
-    Structure("S", {
-                       Member("a", ty.f32(), {MemberAlign(Source{{12, 34}}, 0)}),
+    Structure("S", utils::Vector{
+                       Member("a", ty.f32(), utils::Vector{MemberAlign(Source{{12, 34}}, 0_u)}),
                    });
 
     EXPECT_FALSE(r()->Resolve());
@@ -1197,8 +1256,8 @@ TEST_F(ResolverValidationTest, ZeroStructMemberAlignAttribute) {
 }
 
 TEST_F(ResolverValidationTest, ZeroStructMemberSizeAttribute) {
-    Structure("S", {
-                       Member("a", ty.f32(), {MemberSize(Source{{12, 34}}, 0)}),
+    Structure("S", utils::Vector{
+                       Member("a", ty.f32(), utils::Vector{MemberSize(Source{{12, 34}}, 0)}),
                    });
 
     EXPECT_FALSE(r()->Resolve());
@@ -1206,8 +1265,9 @@ TEST_F(ResolverValidationTest, ZeroStructMemberSizeAttribute) {
 }
 
 TEST_F(ResolverValidationTest, OffsetAndSizeAttribute) {
-    Structure("S", {
-                       Member(Source{{12, 34}}, "a", ty.f32(), {MemberOffset(0), MemberSize(4)}),
+    Structure("S", utils::Vector{
+                       Member(Source{{12, 34}}, "a", ty.f32(),
+                              utils::Vector{MemberOffset(0), MemberSize(4)}),
                    });
 
     EXPECT_FALSE(r()->Resolve());
@@ -1217,8 +1277,9 @@ TEST_F(ResolverValidationTest, OffsetAndSizeAttribute) {
 }
 
 TEST_F(ResolverValidationTest, OffsetAndAlignAttribute) {
-    Structure("S", {
-                       Member(Source{{12, 34}}, "a", ty.f32(), {MemberOffset(0), MemberAlign(4)}),
+    Structure("S", utils::Vector{
+                       Member(Source{{12, 34}}, "a", ty.f32(),
+                              utils::Vector{MemberOffset(0), MemberAlign(4_u)}),
                    });
 
     EXPECT_FALSE(r()->Resolve());
@@ -1228,9 +1289,9 @@ TEST_F(ResolverValidationTest, OffsetAndAlignAttribute) {
 }
 
 TEST_F(ResolverValidationTest, OffsetAndAlignAndSizeAttribute) {
-    Structure("S", {
+    Structure("S", utils::Vector{
                        Member(Source{{12, 34}}, "a", ty.f32(),
-                              {MemberOffset(0), MemberAlign(4), MemberSize(4)}),
+                              utils::Vector{MemberOffset(0), MemberAlign(4_u), MemberSize(4)}),
                    });
 
     EXPECT_FALSE(r()->Resolve());

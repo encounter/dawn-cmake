@@ -66,8 +66,8 @@ TEST_F(GlslGeneratorImplTest_Loop, Emit_LoopWithContinuing) {
 TEST_F(GlslGeneratorImplTest_Loop, Emit_LoopNestedWithContinuing) {
     Func("a_statement", {}, ty.void_(), {});
 
-    Global("lhs", ty.f32(), ast::StorageClass::kPrivate);
-    Global("rhs", ty.f32(), ast::StorageClass::kPrivate);
+    GlobalVar("lhs", ty.f32(), ast::StorageClass::kPrivate);
+    GlobalVar("rhs", ty.f32(), ast::StorageClass::kPrivate);
 
     auto* body = Block(create<ast::DiscardStatement>());
     auto* continuing = Block(CallStmt(Call("a_statement")));
@@ -112,10 +112,10 @@ TEST_F(GlslGeneratorImplTest_Loop, Emit_LoopWithVarUsedInContinuing) {
     //   }
     // }
 
-    Global("rhs", ty.f32(), ast::StorageClass::kPrivate);
+    GlobalVar("rhs", ty.f32(), ast::StorageClass::kPrivate);
 
-    auto* body = Block(Decl(Var("lhs", ty.f32(), Expr(2.4f))),  //
-                       Decl(Var("other", ty.f32())),            //
+    auto* body = Block(Decl(Var("lhs", ty.f32(), Expr(2.4_f))),  //
+                       Decl(Var("other", ty.f32())),             //
                        Break());
     auto* continuing = Block(Assign("lhs", "rhs"));
     auto* outer = Loop(body, continuing);
@@ -188,7 +188,7 @@ TEST_F(GlslGeneratorImplTest_Loop, Emit_ForLoopWithMultiStmtInit) {
 
     auto* multi_stmt =
         create<ast::BinaryExpression>(ast::BinaryOp::kLogicalAnd, Expr(true), Expr(false));
-    auto* f = For(Decl(Var("b", nullptr, multi_stmt)), nullptr, nullptr, Block(Return()));
+    auto* f = For(Decl(Var("b", multi_stmt)), nullptr, nullptr, Block(Return()));
     WrapInFunction(f);
 
     GeneratorImpl& gen = Build();
@@ -348,9 +348,8 @@ TEST_F(GlslGeneratorImplTest_Loop, Emit_ForLoopWithMultiStmtInitCondCont) {
     auto* multi_stmt_c =
         create<ast::BinaryExpression>(ast::BinaryOp::kLogicalAnd, Expr(true), Expr(false));
 
-    auto* f =
-        For(Decl(Var("i", nullptr, multi_stmt_a)), multi_stmt_b, Assign("i", multi_stmt_c),  //
-            Block(Return()));
+    auto* f = For(Decl(Var("i", multi_stmt_a)), multi_stmt_b, Assign("i", multi_stmt_c),  //
+                  Block(Return()));
     WrapInFunction(f);
 
     GeneratorImpl& gen = Build();
@@ -377,6 +376,72 @@ TEST_F(GlslGeneratorImplTest_Loop, Emit_ForLoopWithMultiStmtInitCondCont) {
       }
       i = (tint_tmp_2);
     }
+  }
+)");
+}
+
+TEST_F(GlslGeneratorImplTest_Loop, Emit_While) {
+    // while(true) {
+    //   return;
+    // }
+
+    auto* f = While(Expr(true), Block(Return()));
+    WrapInFunction(f);
+
+    GeneratorImpl& gen = Build();
+
+    gen.increment_indent();
+
+    ASSERT_TRUE(gen.EmitStatement(f)) << gen.error();
+    EXPECT_EQ(gen.result(), R"(  while(true) {
+    return;
+  }
+)");
+}
+
+TEST_F(GlslGeneratorImplTest_Loop, Emit_While_WithContinue) {
+    // while(true) {
+    //   continue;
+    // }
+
+    auto* f = While(Expr(true), Block(Continue()));
+    WrapInFunction(f);
+
+    GeneratorImpl& gen = Build();
+
+    gen.increment_indent();
+
+    ASSERT_TRUE(gen.EmitStatement(f)) << gen.error();
+    EXPECT_EQ(gen.result(), R"(  while(true) {
+    continue;
+  }
+)");
+}
+
+TEST_F(GlslGeneratorImplTest_Loop, Emit_WhileWithMultiStmtCond) {
+    // while(true && false) {
+    //   return;
+    // }
+
+    Func("a_statement", {}, ty.void_(), {});
+
+    auto* multi_stmt =
+        create<ast::BinaryExpression>(ast::BinaryOp::kLogicalAnd, Expr(true), Expr(false));
+    auto* f = While(multi_stmt, Block(CallStmt(Call("a_statement"))));
+    WrapInFunction(f);
+
+    GeneratorImpl& gen = Build();
+
+    gen.increment_indent();
+
+    ASSERT_TRUE(gen.EmitStatement(f)) << gen.error();
+    EXPECT_EQ(gen.result(), R"(  while (true) {
+    bool tint_tmp = true;
+    if (tint_tmp) {
+      tint_tmp = false;
+    }
+    if (!((tint_tmp))) { break; }
+    a_statement();
   }
 )");
 }

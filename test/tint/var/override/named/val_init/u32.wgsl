@@ -1,6 +1,9 @@
+// flags: --overrides o=0
 override o : u32 = 1u;
 
-@stage(compute) @workgroup_size(1)
+@compute @workgroup_size(1)
 fn main() {
-    _ = o;
+    if o == 2 {
+        _ = o;
+    }
 }

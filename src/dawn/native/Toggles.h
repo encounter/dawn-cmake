@@ -59,7 +59,6 @@ enum class Toggle {
     EmitHLSLDebugSymbols,
     DisallowSpirv,
     DumpShaders,
-    DEPRECATED_DumpTranslatedShaders,  // Use DumpShaders
     ForceWGSLStep,
     DisableWorkgroupInit,
     DisableSymbolRenaming,
@@ -72,6 +71,12 @@ enum class Toggle {
     D3D12SplitBufferTextureCopyForRowsPerImagePaddings,
     MetalRenderR8RG8UnormSmallMipToTempTexture,
     EnableBlobCache,
+    D3D12ForceClearCopyableDepthStencilTextureOnCreation,
+    D3D12DontSetClearValueOnDepthTextureCreation,
+    D3D12AlwaysUseTypelessFormatsForCastableTexture,
+    D3D12AllocateExtraMemoryFor2DArrayTexture,
+    D3D12UseTempBufferInDepthStencilTextureAndBufferCopyWithNonZeroBufferOffset,
+    ApplyClearBigIntegerColorValueWithDraw,
 
     EnumCount,
     InvalidEnum = EnumCount,
@@ -91,6 +96,9 @@ const char* ToggleEnumToName(Toggle toggle);
 
 class TogglesInfo {
   public:
+    TogglesInfo();
+    ~TogglesInfo();
+
     // Used to query the details of a toggle. Return nullptr if toggleName is not a valid name
     // of a toggle supported in Dawn.
     const ToggleInfo* GetToggleInfo(const char* toggleName);

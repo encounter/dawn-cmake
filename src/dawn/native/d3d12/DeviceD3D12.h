@@ -16,6 +16,7 @@
 #define SRC_DAWN_NATIVE_D3D12_DEVICED3D12_H_
 
 #include <memory>
+#include <vector>
 
 #include "dawn/common/SerialQueue.h"
 #include "dawn/native/Device.h"
@@ -27,6 +28,8 @@
 namespace dawn::native::d3d12 {
 
 class CommandAllocatorManager;
+struct ExternalImageDescriptorDXGISharedHandle;
+class ExternalImageDXGIImpl;
 class PlatformFunctions;
 class ResidencyManager;
 class ResourceAllocatorManager;
@@ -128,9 +131,15 @@ class Device final : public DeviceBase {
 
     StagingDescriptorAllocator* GetDepthStencilViewAllocator() const;
 
+    std::unique_ptr<ExternalImageDXGIImpl> CreateExternalImageDXGIImpl(
+        const ExternalImageDescriptorDXGISharedHandle* descriptor);
+
     Ref<TextureBase> CreateD3D12ExternalTexture(const TextureDescriptor* descriptor,
                                                 ComPtr<ID3D12Resource> d3d12Texture,
+                                                ComPtr<ID3D12Fence> d3d12Fence,
                                                 Ref<D3D11on12ResourceCacheEntry> d3d11on12Resource,
+                                                uint64_t fenceWaitValue,
+                                                uint64_t fenceSignalValue,
                                                 bool isSwapChainTexture,
                                                 bool isInitialized);
 
@@ -150,6 +159,10 @@ class Device final : public DeviceBase {
 
     bool ShouldDuplicateParametersForDrawIndirect(
         const RenderPipelineBase* renderPipelineBase) const override;
+
+    bool IsFeatureEnabled(Feature feature) const override;
+
+    uint64_t GetBufferCopyOffsetAlignmentForDepthStencil() const override;
 
     // Dawn APIs
     void SetLabelImpl() override;
@@ -263,6 +276,9 @@ class Device final : public DeviceBase {
 
     // The number of nanoseconds required for a timestamp query to be incremented by 1
     float mTimestampPeriod = 1.0f;
+
+    // List of external image resources opened using this device.
+    LinkedList<ExternalImageDXGIImpl> mExternalImageList;
 };
 
 }  // namespace dawn::native::d3d12

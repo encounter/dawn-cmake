@@ -45,7 +45,7 @@ struct RCTestDerived : public RCTest {
 // Test that RCs start with one ref, and removing it destroys the object.
 TEST(RefCounted, StartsWithOneRef) {
     bool deleted = false;
-    auto test = new RCTest(&deleted);
+    auto* test = new RCTest(&deleted);
 
     test->Release();
     EXPECT_TRUE(deleted);
@@ -54,7 +54,7 @@ TEST(RefCounted, StartsWithOneRef) {
 // Test adding refs keep the RC alive.
 TEST(RefCounted, AddingRefKeepsAlive) {
     bool deleted = false;
-    auto test = new RCTest(&deleted);
+    auto* test = new RCTest(&deleted);
 
     test->Reference();
     test->Release();
@@ -186,7 +186,6 @@ TEST(Ref, MoveConstructor) {
     original->Release();
     EXPECT_EQ(original->GetRefCountForTesting(), 1u);
 
-    EXPECT_EQ(source.Get(), nullptr);
     EXPECT_EQ(destination.Get(), original);
     EXPECT_FALSE(deleted);
 
@@ -209,7 +208,6 @@ TEST(Ref, MoveAssignment) {
     destination = std::move(source);
     EXPECT_EQ(original->GetRefCountForTesting(), 1u);
 
-    EXPECT_EQ(source.Get(), nullptr);
     EXPECT_EQ(destination.Get(), original);
     EXPECT_FALSE(deleted);
 
@@ -234,7 +232,6 @@ TEST(Ref, MoveAssignmentSameObject) {
 
     referenceToSource = std::move(source);
 
-    EXPECT_EQ(source.Get(), original);
     EXPECT_EQ(original->GetRefCountForTesting(), 1u);
     EXPECT_FALSE(deleted);
 
@@ -356,7 +353,6 @@ TEST(Ref, MoveConstructorDerived) {
     original->Release();
     EXPECT_EQ(original->GetRefCountForTesting(), 1u);
 
-    EXPECT_EQ(source.Get(), nullptr);
     EXPECT_EQ(destination.Get(), original);
     EXPECT_FALSE(deleted);
 
@@ -380,7 +376,6 @@ TEST(Ref, MoveAssignmentDerived) {
 
     EXPECT_EQ(original->GetRefCountForTesting(), 1u);
 
-    EXPECT_EQ(source.Get(), nullptr);
     EXPECT_EQ(destination.Get(), original);
     EXPECT_FALSE(deleted);
 

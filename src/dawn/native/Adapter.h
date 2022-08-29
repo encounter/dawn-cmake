@@ -33,7 +33,7 @@ class DeviceBase;
 class AdapterBase : public RefCounted {
   public:
     AdapterBase(InstanceBase* instance, wgpu::BackendType backend);
-    virtual ~AdapterBase() = default;
+    ~AdapterBase() override;
 
     MaybeError Initialize();
 
@@ -57,7 +57,6 @@ class AdapterBase : public RefCounted {
     FeaturesSet GetSupportedFeatures() const;
     bool SupportsAllRequiredFeatures(
         const ityp::span<size_t, const wgpu::FeatureName>& features) const;
-    WGPUDeviceProperties GetAdapterProperties() const;
 
     bool GetLimits(SupportedLimits* limits) const;
 
@@ -67,6 +66,8 @@ class AdapterBase : public RefCounted {
 
   protected:
     uint32_t mVendorId = 0xFFFFFFFF;
+    std::string mVendorName;
+    std::string mArchitectureName;
     uint32_t mDeviceId = 0xFFFFFFFF;
     std::string mName;
     wgpu::AdapterType mAdapterType = wgpu::AdapterType::Unknown;
@@ -84,10 +85,12 @@ class AdapterBase : public RefCounted {
     // Check base WebGPU limits and populate supported limits.
     virtual MaybeError InitializeSupportedLimitsImpl(CombinedLimits* limits) = 0;
 
+    virtual void InitializeVendorArchitectureImpl();
+
     ResultOrError<Ref<DeviceBase>> CreateDeviceInternal(const DeviceDescriptor* descriptor);
 
     virtual MaybeError ResetInternalDeviceForTestingImpl();
-    InstanceBase* mInstance = nullptr;
+    Ref<InstanceBase> mInstance;
     wgpu::BackendType mBackend;
     CombinedLimits mLimits;
     bool mUseTieredLimits = false;

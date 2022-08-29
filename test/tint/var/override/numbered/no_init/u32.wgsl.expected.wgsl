@@ -1,6 +1,8 @@
-@id(1234) override o : u32;
+const o : u32 = 0u;
 
-@stage(compute) @workgroup_size(1)
+@compute @workgroup_size(1)
 fn main() {
-  _ = o;
+  if ((o == 1)) {
+    _ = o;
+  }
 }

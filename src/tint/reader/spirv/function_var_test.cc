@@ -184,7 +184,7 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_ScalarInitializers) {
 var b : bool = false;
 var c : i32 = -1i;
 var d : u32 = 1u;
-var e : f32 = 1.5;
+var e : f32 = 1.5f;
 )"));
 }
 
@@ -212,7 +212,7 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_ScalarNullInitializers) {
     EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr(R"(var a : bool = false;
 var b : i32 = 0i;
 var c : u32 = 0u;
-var d : f32 = 0.0;
+var d : f32 = 0.0f;
 )"));
 }
 
@@ -234,7 +234,7 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_VectorInitializer) {
 
     auto ast_body = fe.ast_body();
     EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr("var x_200 : vec2<f32> = vec2<f32>(1.5, 2.0);"));
+                HasSubstr("var x_200 : vec2<f32> = vec2<f32>(1.5f, 2.0f);"));
 }
 
 TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_MatrixInitializer) {
@@ -261,9 +261,9 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_MatrixInitializer) {
     auto ast_body = fe.ast_body();
     EXPECT_THAT(test::ToString(p->program(), ast_body),
                 HasSubstr("var x_200 : mat3x2<f32> = mat3x2<f32>("
-                          "vec2<f32>(1.5, 2.0), "
-                          "vec2<f32>(2.0, 3.0), "
-                          "vec2<f32>(3.0, 4.0));"));
+                          "vec2<f32>(1.5f, 2.0f), "
+                          "vec2<f32>(2.0f, 3.0f), "
+                          "vec2<f32>(3.0f, 4.0f));"));
 }
 
 TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_ArrayInitializer) {
@@ -382,7 +382,7 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_StructInitializer) {
 
     auto ast_body = fe.ast_body();
     EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr("var x_200 : S = S(1u, 1.5, array<u32, 2u>(1u, 2u));"));
+                HasSubstr("var x_200 : S = S(1u, 1.5f, array<u32, 2u>(1u, 2u));"));
 }
 
 TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_StructInitializer_Null) {
@@ -404,7 +404,7 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_StructInitializer_Null) {
 
     auto ast_body = fe.ast_body();
     EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr("var x_200 : S = S(0u, 0.0, array<u32, 2u>());"));
+                HasSubstr("var x_200 : S = S(0u, 0.0f, array<u32, 2u>());"));
 }
 
 TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_Decorate_RelaxedPrecision) {
@@ -1416,65 +1416,6 @@ let x_101 : bool = x_101_phi;
 return;
 )";
     EXPECT_EQ(expect, got);
-}
-
-TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_ValueFromBlockNotInBlockOrderIgnored) {
-    // From crbug.com/tint/804
-    const auto assembly = Preamble() + R"(
-     %float_42 = OpConstant %float 42.0
-     %cond = OpUndef %bool
-
-     %100 = OpFunction %void None %voidfn
-     %10 = OpLabel
-     OpBranch %30
-
-     ; unreachable
-     %20 = OpLabel
-     %499 = OpFAdd %float %float_42 %float_42
-     %500 = OpFAdd %float %499 %float_42
-     OpBranch %25
-
-     %25 = OpLabel
-     OpBranch %80
-
-
-     %30 = OpLabel
-     OpLoopMerge %90 %80 None
-     OpBranchConditional %cond %90 %40
-
-     %40 = OpLabel
-     OpBranch %90
-
-     %80 = OpLabel ; unreachable continue target
-                ; but "dominated" by %20 and %25
-     %81 = OpPhi %float %500 %25
-     OpBranch %30 ; backedge
-
-     %90 = OpLabel
-     OpReturn
-     OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModule()) << p->error() << assembly;
-    auto fe = p->function_emitter(100);
-    EXPECT_TRUE(fe.EmitBody()) << p->error();
-
-    const auto* expected = R"(loop {
-  if (false) {
-    break;
-  }
-  break;
-
-  continuing {
-    var x_81_phi_1 : f32;
-    let x_81 : f32 = x_81_phi_1;
-  }
-}
-return;
-)";
-    auto ast_body = fe.ast_body();
-    const auto got = test::ToString(p->program(), ast_body);
-    EXPECT_EQ(got, expected);
 }
 
 TEST_F(SpvParserFunctionVarTest, EmitStatement_Hoist_CompositeInsert) {

@@ -62,26 +62,26 @@ TEST_F(DecomposeStridedMatrixTest, ReadUniformMatrix) {
     // };
     // @group(0) @binding(0) var<uniform> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let x : mat2x2<f32> = s.m;
     // }
     ProgramBuilder b;
     auto* S = b.Structure(
-        "S", {
+        "S", utils::Vector{
                  b.Member("m", b.ty.mat2x2<f32>(),
-                          {
-                              b.create<ast::StructMemberOffsetAttribute>(16),
-                              b.create<ast::StrideAttribute>(32),
+                          utils::Vector{
+                              b.create<ast::StructMemberOffsetAttribute>(16u),
+                              b.create<ast::StrideAttribute>(32u),
                               b.Disable(ast::DisabledValidation::kIgnoreStrideAttribute),
                           }),
              });
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kUniform, b.GroupAndBinding(0, 0));
-    b.Func("f", {}, b.ty.void_(),
-           {
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kUniform, b.Group(0), b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Decl(b.Let("x", b.ty.mat2x2<f32>(), b.MemberAccessor("s", "m"))),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -99,7 +99,7 @@ fn arr_to_mat2x2_stride_32(arr : @stride(32) array<vec2<f32>, 2u>) -> mat2x2<f32
   return mat2x2<f32>(arr[0u], arr[1u]);
 }
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let x : mat2x2<f32> = arr_to_mat2x2_stride_32(s.m);
 }
@@ -118,27 +118,27 @@ TEST_F(DecomposeStridedMatrixTest, ReadUniformColumn) {
     // };
     // @group(0) @binding(0) var<uniform> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let x : vec2<f32> = s.m[1];
     // }
     ProgramBuilder b;
     auto* S = b.Structure(
-        "S", {
+        "S", utils::Vector{
                  b.Member("m", b.ty.mat2x2<f32>(),
-                          {
-                              b.create<ast::StructMemberOffsetAttribute>(16),
-                              b.create<ast::StrideAttribute>(32),
+                          utils::Vector{
+                              b.create<ast::StructMemberOffsetAttribute>(16u),
+                              b.create<ast::StrideAttribute>(32u),
                               b.Disable(ast::DisabledValidation::kIgnoreStrideAttribute),
                           }),
              });
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kUniform, b.GroupAndBinding(0, 0));
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kUniform, b.Group(0), b.Binding(0));
     b.Func(
-        "f", {}, b.ty.void_(),
-        {
+        "f", utils::Empty, b.ty.void_(),
+        utils::Vector{
             b.Decl(b.Let("x", b.ty.vec2<f32>(), b.IndexAccessor(b.MemberAccessor("s", "m"), 1_i))),
         },
-        {
+        utils::Vector{
             b.Stage(ast::PipelineStage::kCompute),
             b.WorkgroupSize(1_i),
         });
@@ -152,7 +152,7 @@ struct S {
 
 @group(0) @binding(0) var<uniform> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let x : vec2<f32> = s.m[1i];
 }
@@ -171,26 +171,26 @@ TEST_F(DecomposeStridedMatrixTest, ReadUniformMatrix_DefaultStride) {
     // };
     // @group(0) @binding(0) var<uniform> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let x : mat2x2<f32> = s.m;
     // }
     ProgramBuilder b;
     auto* S = b.Structure(
-        "S", {
+        "S", utils::Vector{
                  b.Member("m", b.ty.mat2x2<f32>(),
-                          {
-                              b.create<ast::StructMemberOffsetAttribute>(16),
-                              b.create<ast::StrideAttribute>(8),
+                          utils::Vector{
+                              b.create<ast::StructMemberOffsetAttribute>(16u),
+                              b.create<ast::StrideAttribute>(8u),
                               b.Disable(ast::DisabledValidation::kIgnoreStrideAttribute),
                           }),
              });
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kUniform, b.GroupAndBinding(0, 0));
-    b.Func("f", {}, b.ty.void_(),
-           {
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kUniform, b.Group(0), b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Decl(b.Let("x", b.ty.mat2x2<f32>(), b.MemberAccessor("s", "m"))),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -205,7 +205,7 @@ struct S {
 
 @group(0) @binding(0) var<uniform> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let x : mat2x2<f32> = s.m;
 }
@@ -224,27 +224,27 @@ TEST_F(DecomposeStridedMatrixTest, ReadStorageMatrix) {
     // };
     // @group(0) @binding(0) var<storage, read_write> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let x : mat2x2<f32> = s.m;
     // }
     ProgramBuilder b;
     auto* S = b.Structure(
-        "S", {
+        "S", utils::Vector{
                  b.Member("m", b.ty.mat2x2<f32>(),
-                          {
-                              b.create<ast::StructMemberOffsetAttribute>(8),
-                              b.create<ast::StrideAttribute>(32),
+                          utils::Vector{
+                              b.create<ast::StructMemberOffsetAttribute>(8u),
+                              b.create<ast::StrideAttribute>(32u),
                               b.Disable(ast::DisabledValidation::kIgnoreStrideAttribute),
                           }),
              });
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-             b.GroupAndBinding(0, 0));
-    b.Func("f", {}, b.ty.void_(),
-           {
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite, b.Group(0),
+                b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Decl(b.Let("x", b.ty.mat2x2<f32>(), b.MemberAccessor("s", "m"))),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -262,7 +262,7 @@ fn arr_to_mat2x2_stride_32(arr : @stride(32) array<vec2<f32>, 2u>) -> mat2x2<f32
   return mat2x2<f32>(arr[0u], arr[1u]);
 }
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let x : mat2x2<f32> = arr_to_mat2x2_stride_32(s.m);
 }
@@ -281,28 +281,28 @@ TEST_F(DecomposeStridedMatrixTest, ReadStorageColumn) {
     // };
     // @group(0) @binding(0) var<storage, read_write> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let x : vec2<f32> = s.m[1];
     // }
     ProgramBuilder b;
     auto* S = b.Structure(
-        "S", {
+        "S", utils::Vector{
                  b.Member("m", b.ty.mat2x2<f32>(),
-                          {
-                              b.create<ast::StructMemberOffsetAttribute>(16),
-                              b.create<ast::StrideAttribute>(32),
+                          utils::Vector{
+                              b.create<ast::StructMemberOffsetAttribute>(16u),
+                              b.create<ast::StrideAttribute>(32u),
                               b.Disable(ast::DisabledValidation::kIgnoreStrideAttribute),
                           }),
              });
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-             b.GroupAndBinding(0, 0));
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite, b.Group(0),
+                b.Binding(0));
     b.Func(
-        "f", {}, b.ty.void_(),
-        {
+        "f", utils::Empty, b.ty.void_(),
+        utils::Vector{
             b.Decl(b.Let("x", b.ty.vec2<f32>(), b.IndexAccessor(b.MemberAccessor("s", "m"), 1_i))),
         },
-        {
+        utils::Vector{
             b.Stage(ast::PipelineStage::kCompute),
             b.WorkgroupSize(1_i),
         });
@@ -316,7 +316,7 @@ struct S {
 
 @group(0) @binding(0) var<storage, read_write> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let x : vec2<f32> = s.m[1i];
 }
@@ -335,28 +335,28 @@ TEST_F(DecomposeStridedMatrixTest, WriteStorageMatrix) {
     // };
     // @group(0) @binding(0) var<storage, read_write> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   s.m = mat2x2<f32>(vec2<f32>(1.0, 2.0), vec2<f32>(3.0, 4.0));
     // }
     ProgramBuilder b;
     auto* S = b.Structure(
-        "S", {
+        "S", utils::Vector{
                  b.Member("m", b.ty.mat2x2<f32>(),
-                          {
-                              b.create<ast::StructMemberOffsetAttribute>(8),
-                              b.create<ast::StrideAttribute>(32),
+                          utils::Vector{
+                              b.create<ast::StructMemberOffsetAttribute>(8u),
+                              b.create<ast::StrideAttribute>(32u),
                               b.Disable(ast::DisabledValidation::kIgnoreStrideAttribute),
                           }),
              });
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-             b.GroupAndBinding(0, 0));
-    b.Func("f", {}, b.ty.void_(),
-           {
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite, b.Group(0),
+                b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Assign(b.MemberAccessor("s", "m"),
-                        b.mat2x2<f32>(b.vec2<f32>(1.0f, 2.0f), b.vec2<f32>(3.0f, 4.0f))),
+                        b.mat2x2<f32>(b.vec2<f32>(1_f, 2_f), b.vec2<f32>(3_f, 4_f))),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -374,9 +374,9 @@ fn mat2x2_stride_32_to_arr(m : mat2x2<f32>) -> @stride(32) array<vec2<f32>, 2u> 
   return @stride(32) array<vec2<f32>, 2u>(m[0u], m[1u]);
 }
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
-  s.m = mat2x2_stride_32_to_arr(mat2x2<f32>(vec2<f32>(1.0, 2.0), vec2<f32>(3.0, 4.0)));
+  s.m = mat2x2_stride_32_to_arr(mat2x2<f32>(vec2<f32>(1.0f, 2.0f), vec2<f32>(3.0f, 4.0f)));
 }
 )";
 
@@ -393,27 +393,27 @@ TEST_F(DecomposeStridedMatrixTest, WriteStorageColumn) {
     // };
     // @group(0) @binding(0) var<storage, read_write> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   s.m[1] = vec2<f32>(1.0, 2.0);
     // }
     ProgramBuilder b;
     auto* S = b.Structure(
-        "S", {
+        "S", utils::Vector{
                  b.Member("m", b.ty.mat2x2<f32>(),
-                          {
-                              b.create<ast::StructMemberOffsetAttribute>(8),
-                              b.create<ast::StrideAttribute>(32),
+                          utils::Vector{
+                              b.create<ast::StructMemberOffsetAttribute>(8u),
+                              b.create<ast::StrideAttribute>(32u),
                               b.Disable(ast::DisabledValidation::kIgnoreStrideAttribute),
                           }),
              });
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-             b.GroupAndBinding(0, 0));
-    b.Func("f", {}, b.ty.void_(),
-           {
-               b.Assign(b.IndexAccessor(b.MemberAccessor("s", "m"), 1_i), b.vec2<f32>(1.0f, 2.0f)),
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite, b.Group(0),
+                b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
+               b.Assign(b.IndexAccessor(b.MemberAccessor("s", "m"), 1_i), b.vec2<f32>(1_f, 2_f)),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -427,9 +427,9 @@ struct S {
 
 @group(0) @binding(0) var<storage, read_write> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
-  s.m[1i] = vec2<f32>(1.0, 2.0);
+  s.m[1i] = vec2<f32>(1.0f, 2.0f);
 }
 )";
 
@@ -446,7 +446,7 @@ TEST_F(DecomposeStridedMatrixTest, ReadWriteViaPointerLets) {
     // };
     // @group(0) @binding(0) var<storage, read_write> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let a = &s.m;
     //   let b = &*&*(a);
@@ -458,31 +458,30 @@ TEST_F(DecomposeStridedMatrixTest, ReadWriteViaPointerLets) {
     // }
     ProgramBuilder b;
     auto* S = b.Structure(
-        "S", {
+        "S", utils::Vector{
                  b.Member("m", b.ty.mat2x2<f32>(),
-                          {
-                              b.create<ast::StructMemberOffsetAttribute>(8),
-                              b.create<ast::StrideAttribute>(32),
+                          utils::Vector{
+                              b.create<ast::StructMemberOffsetAttribute>(8u),
+                              b.create<ast::StrideAttribute>(32u),
                               b.Disable(ast::DisabledValidation::kIgnoreStrideAttribute),
                           }),
              });
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-             b.GroupAndBinding(0, 0));
-    b.Func(
-        "f", {}, b.ty.void_(),
-        {
-            b.Decl(b.Let("a", nullptr, b.AddressOf(b.MemberAccessor("s", "m")))),
-            b.Decl(b.Let("b", nullptr, b.AddressOf(b.Deref(b.AddressOf(b.Deref("a")))))),
-            b.Decl(b.Let("x", nullptr, b.Deref("b"))),
-            b.Decl(b.Let("y", nullptr, b.IndexAccessor(b.Deref("b"), 1_i))),
-            b.Decl(b.Let("z", nullptr, b.IndexAccessor("x", 1_i))),
-            b.Assign(b.Deref("b"), b.mat2x2<f32>(b.vec2<f32>(1.0f, 2.0f), b.vec2<f32>(3.0f, 4.0f))),
-            b.Assign(b.IndexAccessor(b.Deref("b"), 1_i), b.vec2<f32>(5.0f, 6.0f)),
-        },
-        {
-            b.Stage(ast::PipelineStage::kCompute),
-            b.WorkgroupSize(1_i),
-        });
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite, b.Group(0),
+                b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
+               b.Decl(b.Let("a", b.AddressOf(b.MemberAccessor("s", "m")))),
+               b.Decl(b.Let("b", b.AddressOf(b.Deref(b.AddressOf(b.Deref("a")))))),
+               b.Decl(b.Let("x", b.Deref("b"))),
+               b.Decl(b.Let("y", b.IndexAccessor(b.Deref("b"), 1_i))),
+               b.Decl(b.Let("z", b.IndexAccessor("x", 1_i))),
+               b.Assign(b.Deref("b"), b.mat2x2<f32>(b.vec2<f32>(1_f, 2_f), b.vec2<f32>(3_f, 4_f))),
+               b.Assign(b.IndexAccessor(b.Deref("b"), 1_i), b.vec2<f32>(5_f, 6_f)),
+           },
+           utils::Vector{
+               b.Stage(ast::PipelineStage::kCompute),
+               b.WorkgroupSize(1_i),
+           });
 
     auto* expect = R"(
 struct S {
@@ -501,13 +500,13 @@ fn mat2x2_stride_32_to_arr(m : mat2x2<f32>) -> @stride(32) array<vec2<f32>, 2u> 
   return @stride(32) array<vec2<f32>, 2u>(m[0u], m[1u]);
 }
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let x = arr_to_mat2x2_stride_32(s.m);
   let y = s.m[1i];
   let z = x[1i];
-  s.m = mat2x2_stride_32_to_arr(mat2x2<f32>(vec2<f32>(1.0, 2.0), vec2<f32>(3.0, 4.0)));
-  s.m[1i] = vec2<f32>(5.0, 6.0);
+  s.m = mat2x2_stride_32_to_arr(mat2x2<f32>(vec2<f32>(1.0f, 2.0f), vec2<f32>(3.0f, 4.0f)));
+  s.m[1i] = vec2<f32>(5.0f, 6.0f);
 }
 )";
 
@@ -524,26 +523,26 @@ TEST_F(DecomposeStridedMatrixTest, ReadPrivateMatrix) {
     // };
     // var<private> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let x : mat2x2<f32> = s.m;
     // }
     ProgramBuilder b;
     auto* S = b.Structure(
-        "S", {
+        "S", utils::Vector{
                  b.Member("m", b.ty.mat2x2<f32>(),
-                          {
-                              b.create<ast::StructMemberOffsetAttribute>(8),
-                              b.create<ast::StrideAttribute>(32),
+                          utils::Vector{
+                              b.create<ast::StructMemberOffsetAttribute>(8u),
+                              b.create<ast::StrideAttribute>(32u),
                               b.Disable(ast::DisabledValidation::kIgnoreStrideAttribute),
                           }),
              });
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kPrivate);
-    b.Func("f", {}, b.ty.void_(),
-           {
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kPrivate);
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Decl(b.Let("x", b.ty.mat2x2<f32>(), b.MemberAccessor("s", "m"))),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -558,7 +557,7 @@ struct S {
 
 var<private> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let x : mat2x2<f32> = s.m;
 }
@@ -577,27 +576,27 @@ TEST_F(DecomposeStridedMatrixTest, WritePrivateMatrix) {
     // };
     // var<private> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   s.m = mat2x2<f32>(vec2<f32>(1.0, 2.0), vec2<f32>(3.0, 4.0));
     // }
     ProgramBuilder b;
     auto* S = b.Structure(
-        "S", {
+        "S", utils::Vector{
                  b.Member("m", b.ty.mat2x2<f32>(),
-                          {
-                              b.create<ast::StructMemberOffsetAttribute>(8),
-                              b.create<ast::StrideAttribute>(32),
+                          utils::Vector{
+                              b.create<ast::StructMemberOffsetAttribute>(8u),
+                              b.create<ast::StrideAttribute>(32u),
                               b.Disable(ast::DisabledValidation::kIgnoreStrideAttribute),
                           }),
              });
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kPrivate);
-    b.Func("f", {}, b.ty.void_(),
-           {
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kPrivate);
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Assign(b.MemberAccessor("s", "m"),
-                        b.mat2x2<f32>(b.vec2<f32>(1.0f, 2.0f), b.vec2<f32>(3.0f, 4.0f))),
+                        b.mat2x2<f32>(b.vec2<f32>(1_f, 2_f), b.vec2<f32>(3_f, 4_f))),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -612,9 +611,9 @@ struct S {
 
 var<private> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
-  s.m = mat2x2<f32>(vec2<f32>(1.0, 2.0), vec2<f32>(3.0, 4.0));
+  s.m = mat2x2<f32>(vec2<f32>(1.0f, 2.0f), vec2<f32>(3.0f, 4.0f));
 }
 )";
 

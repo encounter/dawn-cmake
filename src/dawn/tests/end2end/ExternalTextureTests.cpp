@@ -37,10 +37,28 @@ wgpu::Texture Create2DTexture(wgpu::Device device,
 
 class ExternalTextureTests : public DawnTest {
   protected:
+    wgpu::ExternalTextureDescriptor CreateDefaultExternalTextureDescriptor() {
+        wgpu::ExternalTextureDescriptor desc;
+        desc.yuvToRgbConversionMatrix = kYuvToRGBMatrixBT709.data();
+        desc.gamutConversionMatrix = kGamutConversionMatrixBT709ToSrgb.data();
+        desc.srcTransferFunctionParameters = kGammaDecodeBT709.data();
+        desc.dstTransferFunctionParameters = kGammaEncodeSrgb.data();
+
+        return desc;
+    }
+
     static constexpr uint32_t kWidth = 4;
     static constexpr uint32_t kHeight = 4;
     static constexpr wgpu::TextureFormat kFormat = wgpu::TextureFormat::RGBA8Unorm;
     static constexpr wgpu::TextureUsage kSampledUsage = wgpu::TextureUsage::TextureBinding;
+    std::array<float, 12> kYuvToRGBMatrixBT709 = {1.164384f, 0.0f,       1.792741f,  -0.972945f,
+                                                  1.164384f, -0.213249f, -0.532909f, 0.301483f,
+                                                  1.164384f, 2.112402f,  0.0f,       -1.133402f};
+    std::array<float, 9> kGamutConversionMatrixBT709ToSrgb = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+                                                              0.0f, 0.0f, 0.0f, 1.0f};
+    std::array<float, 7> kGammaDecodeBT709 = {2.2, 1.0 / 1.099, 0.099 / 1.099, 1 / 4.5, 0.081,
+                                              0.0, 0.0};
+    std::array<float, 7> kGammaEncodeSrgb = {1 / 2.4, 1.137119, 0.0, 12.92, 0.0031308, -0.055, 0.0};
 };
 }  // anonymous namespace
 
@@ -51,7 +69,7 @@ TEST_P(ExternalTextureTests, CreateExternalTextureSuccess) {
     wgpu::TextureView view = texture.CreateView();
 
     // Create an ExternalTextureDescriptor from the texture view
-    wgpu::ExternalTextureDescriptor externalDesc;
+    wgpu::ExternalTextureDescriptor externalDesc = CreateDefaultExternalTextureDescriptor();
     externalDesc.plane0 = view;
 
     // Import the external texture
@@ -66,7 +84,7 @@ TEST_P(ExternalTextureTests, SampleExternalTexture) {
     DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
 
     const wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-        @stage(vertex) fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
+        @vertex fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
             var positions = array<vec4<f32>, 3>(
                 vec4<f32>(-1.0, 1.0, 0.0, 1.0),
                 vec4<f32>(-1.0, -1.0, 0.0, 1.0),
@@ -79,7 +97,7 @@ TEST_P(ExternalTextureTests, SampleExternalTexture) {
         @group(0) @binding(0) var s : sampler;
         @group(0) @binding(1) var t : texture_external;
 
-        @stage(fragment) fn main(@builtin(position) FragCoord : vec4<f32>)
+        @fragment fn main(@builtin(position) FragCoord : vec4<f32>)
                                  -> @location(0) vec4<f32> {
             return textureSampleLevel(t, s, FragCoord.xy / vec2<f32>(4.0, 4.0));
         })");
@@ -114,7 +132,7 @@ TEST_P(ExternalTextureTests, SampleExternalTexture) {
     wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&descriptor);
 
     // Create an ExternalTextureDescriptor from the texture view
-    wgpu::ExternalTextureDescriptor externalDesc;
+    wgpu::ExternalTextureDescriptor externalDesc = CreateDefaultExternalTextureDescriptor();
     externalDesc.plane0 = externalView;
 
     // Import the external texture
@@ -142,7 +160,7 @@ TEST_P(ExternalTextureTests, SampleExternalTexture) {
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8::kGreen, renderTexture, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kGreen, renderTexture, 0, 0);
 }
 
 TEST_P(ExternalTextureTests, SampleMultiplanarExternalTexture) {
@@ -151,7 +169,7 @@ TEST_P(ExternalTextureTests, SampleMultiplanarExternalTexture) {
     DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
 
     const wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-        @stage(vertex) fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
+        @vertex fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
             var positions = array<vec4<f32>, 3>(
                 vec4<f32>(-1.0, 1.0, 0.0, 1.0),
                 vec4<f32>(-1.0, -1.0, 0.0, 1.0),
@@ -164,7 +182,7 @@ TEST_P(ExternalTextureTests, SampleMultiplanarExternalTexture) {
         @group(0) @binding(0) var s : sampler;
         @group(0) @binding(1) var t : texture_external;
 
-        @stage(fragment) fn main(@builtin(position) FragCoord : vec4<f32>)
+        @fragment fn main(@builtin(position) FragCoord : vec4<f32>)
                                  -> @location(0) vec4<f32> {
             return textureSampleLevel(t, s, FragCoord.xy / vec2<f32>(4.0, 4.0));
         })");
@@ -188,15 +206,15 @@ TEST_P(ExternalTextureTests, SampleMultiplanarExternalTexture) {
         double y;
         double u;
         double v;
-        RGBA8 rgba;
+        utils::RGBA8 rgba;
     };
 
     // Conversion expectations for BT.709 YUV source and sRGB destination.
     std::array<ConversionExpectation, 7> expectations = {
-        {{0.0, .5, .5, RGBA8::kBlack},
-         {0.2126, 0.4172, 1.0, RGBA8::kRed},
-         {0.7152, 0.1402, 0.0175, RGBA8::kGreen},
-         {0.0722, 1.0, 0.4937, RGBA8::kBlue},
+        {{0.0, .5, .5, utils::RGBA8::kBlack},
+         {0.2126, 0.4172, 1.0, utils::RGBA8::kRed},
+         {0.7152, 0.1402, 0.0175, utils::RGBA8::kGreen},
+         {0.0722, 1.0, 0.4937, utils::RGBA8::kBlue},
          {0.6382, 0.3232, 0.6644, {246, 169, 90, 255}},
          {0.5423, 0.5323, 0.4222, {120, 162, 169, 255}},
          {0.2345, 0.4383, 0.6342, {126, 53, 33, 255}}}};
@@ -225,7 +243,7 @@ TEST_P(ExternalTextureTests, SampleMultiplanarExternalTexture) {
         wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&descriptor);
 
         // Create an ExternalTextureDescriptor from the texture views
-        wgpu::ExternalTextureDescriptor externalDesc;
+        wgpu::ExternalTextureDescriptor externalDesc = CreateDefaultExternalTextureDescriptor();
         externalDesc.plane0 = externalViewPlane0;
         externalDesc.plane1 = externalViewPlane1;
 

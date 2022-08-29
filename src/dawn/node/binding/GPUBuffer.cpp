@@ -162,6 +162,23 @@ void GPUBuffer::destroy(Napi::Env) {
     state_ = State::Destroyed;
 }
 
+interop::GPUSize64 GPUBuffer::getSize(Napi::Env) {
+    return buffer_.GetSize();
+}
+
+interop::GPUBufferUsageFlags GPUBuffer::getUsage(Napi::Env env) {
+    interop::GPUBufferUsageFlags result;
+
+    Converter conv(env);
+    if (!conv(result, buffer_.GetUsage())) {
+        Napi::Error::New(env, "Couldn't convert usage to a JavaScript value.")
+            .ThrowAsJavaScriptException();
+        return {0u};  // Doesn't get used.
+    }
+
+    return result;
+}
+
 void GPUBuffer::DetachMappings() {
     for (auto& mapping : mapped_) {
         mapping.buffer.Value().Detach();

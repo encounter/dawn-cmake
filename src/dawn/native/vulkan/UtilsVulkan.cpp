@@ -114,7 +114,8 @@ VkImageAspectFlags VulkanAspectMask(const Aspect& aspects) {
 Extent3D ComputeTextureCopyExtent(const TextureCopy& textureCopy, const Extent3D& copySize) {
     Extent3D validTextureCopyExtent = copySize;
     const TextureBase* texture = textureCopy.texture.Get();
-    Extent3D virtualSizeAtLevel = texture->GetMipLevelVirtualSize(textureCopy.mipLevel);
+    Extent3D virtualSizeAtLevel =
+        texture->GetMipLevelSingleSubresourceVirtualSize(textureCopy.mipLevel);
     ASSERT(textureCopy.origin.x <= virtualSizeAtLevel.width);
     ASSERT(textureCopy.origin.y <= virtualSizeAtLevel.height);
     if (copySize.width > virtualSizeAtLevel.width - textureCopy.origin.x) {
@@ -260,7 +261,7 @@ std::string GetDeviceDebugPrefixFromDebugName(const char* debugName) {
 VkSpecializationInfo* GetVkSpecializationInfo(
     const ProgrammableStage& programmableStage,
     VkSpecializationInfo* specializationInfo,
-    std::vector<OverridableConstantScalar>* specializationDataEntries,
+    std::vector<OverrideScalar>* specializationDataEntries,
     std::vector<VkSpecializationMapEntry>* specializationMapEntries) {
     ASSERT(specializationInfo);
     ASSERT(specializationDataEntries);
@@ -278,26 +279,25 @@ VkSpecializationInfo* GetVkSpecializationInfo(
         double value = pipelineConstant.second;
 
         // This is already validated so `identifier` must exist
-        const auto& moduleConstant = entryPointMetaData.overridableConstants.at(identifier);
+        const auto& moduleConstant = entryPointMetaData.overrides.at(identifier);
 
-        specializationMapEntries->push_back(
-            VkSpecializationMapEntry{moduleConstant.id,
-                                     static_cast<uint32_t>(specializationDataEntries->size() *
-                                                           sizeof(OverridableConstantScalar)),
-                                     sizeof(OverridableConstantScalar)});
+        specializationMapEntries->push_back(VkSpecializationMapEntry{
+            moduleConstant.id,
+            static_cast<uint32_t>(specializationDataEntries->size() * sizeof(OverrideScalar)),
+            sizeof(OverrideScalar)});
 
-        OverridableConstantScalar entry{};
+        OverrideScalar entry{};
         switch (moduleConstant.type) {
-            case EntryPointMetadata::OverridableConstant::Type::Boolean:
+            case EntryPointMetadata::Override::Type::Boolean:
                 entry.b = static_cast<int32_t>(value);
                 break;
-            case EntryPointMetadata::OverridableConstant::Type::Float32:
+            case EntryPointMetadata::Override::Type::Float32:
                 entry.f32 = static_cast<float>(value);
                 break;
-            case EntryPointMetadata::OverridableConstant::Type::Int32:
+            case EntryPointMetadata::Override::Type::Int32:
                 entry.i32 = static_cast<int32_t>(value);
                 break;
-            case EntryPointMetadata::OverridableConstant::Type::Uint32:
+            case EntryPointMetadata::Override::Type::Uint32:
                 entry.u32 = static_cast<uint32_t>(value);
                 break;
             default:
@@ -308,8 +308,7 @@ VkSpecializationInfo* GetVkSpecializationInfo(
 
     specializationInfo->mapEntryCount = static_cast<uint32_t>(specializationMapEntries->size());
     specializationInfo->pMapEntries = specializationMapEntries->data();
-    specializationInfo->dataSize =
-        specializationDataEntries->size() * sizeof(OverridableConstantScalar);
+    specializationInfo->dataSize = specializationDataEntries->size() * sizeof(OverrideScalar);
     specializationInfo->pData = specializationDataEntries->data();
 
     return specializationInfo;

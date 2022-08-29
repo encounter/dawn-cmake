@@ -26,7 +26,7 @@ class ClipSpaceTest : public DawnTest {
         // 1. The depth value of the top-left one is >= 0.5
         // 2. The depth value of the bottom-right one is <= 0.5
         pipelineDescriptor.vertex.module = utils::CreateShaderModule(device, R"(
-            @stage(vertex)
+            @vertex
             fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
                 var pos = array<vec3<f32>, 6>(
                     vec3<f32>(-1.0,  1.0, 1.0),
@@ -39,7 +39,7 @@ class ClipSpaceTest : public DawnTest {
             })");
 
         pipelineDescriptor.cFragment.module = utils::CreateShaderModule(device, R"(
-            @stage(fragment) fn main() -> @location(0) vec4<f32> {
+            @fragment fn main() -> @location(0) vec4<f32> {
                return vec4<f32>(1.0, 0.0, 0.0, 1.0);
             })");
 
@@ -88,8 +88,8 @@ TEST_P(ClipSpaceTest, ClipSpace) {
     wgpu::CommandBuffer commandBuffer = commandEncoder.Finish();
     queue.Submit(1, &commandBuffer);
 
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8::kRed, colorTexture, kSize - 1, kSize - 1);
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8::kGreen, colorTexture, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kRed, colorTexture, kSize - 1, kSize - 1);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kGreen, colorTexture, 0, 0);
 }
 
 DAWN_INSTANTIATE_TEST(ClipSpaceTest,

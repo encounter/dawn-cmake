@@ -104,7 +104,7 @@ class DynamicBufferOffsetTests : public DawnTest {
 
     wgpu::RenderPipeline CreateRenderPipeline(bool isInheritedPipeline = false) {
         wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-            @stage(vertex)
+            @vertex
             fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
                 var pos = array<vec2<f32>, 3>(
                     vec2<f32>(-1.0, 0.0),
@@ -135,7 +135,7 @@ class DynamicBufferOffsetTests : public DawnTest {
 
         fs << "let multipleNumber : u32 = " << multipleNumber << "u;\n";
         fs << R"(
-            @stage(fragment) fn main() -> @location(0) vec4<f32> {
+            @fragment fn main() -> @location(0) vec4<f32> {
                 sBufferNotDynamic.value = uBufferNotDynamic.value.xy;
                 sBuffer.value = vec2<u32>(multipleNumber, multipleNumber) * (uBuffer.value.xy + uBufferNotDynamic.value.xy);
                 return vec4<f32>(f32(uBuffer.value.x) / 255.0, f32(uBuffer.value.y) / 255.0,
@@ -185,7 +185,7 @@ class DynamicBufferOffsetTests : public DawnTest {
 
         cs << "let multipleNumber : u32 = " << multipleNumber << "u;\n";
         cs << R"(
-            @stage(compute) @workgroup_size(1) fn main() {
+            @compute @workgroup_size(1) fn main() {
                 sBufferNotDynamic.value = uBufferNotDynamic.value.xy;
                 sBuffer.value = vec2<u32>(multipleNumber, multipleNumber) * (uBuffer.value.xy + uBufferNotDynamic.value.xy);
             }
@@ -227,7 +227,7 @@ TEST_P(DynamicBufferOffsetTests, BasicRenderPipeline) {
     queue.Submit(1, &commands);
 
     std::vector<uint32_t> expectedData = {2, 4};
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(1, 2, 255, 255), renderPass.color, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(1, 2, 255, 255), renderPass.color, 0, 0);
     EXPECT_BUFFER_U32_RANGE_EQ(expectedData.data(), mStorageBuffers[1], 0, expectedData.size());
 }
 
@@ -249,7 +249,7 @@ TEST_P(DynamicBufferOffsetTests, SetDynamicOffsetsRenderPipeline) {
     queue.Submit(1, &commands);
 
     std::vector<uint32_t> expectedData = {6, 8};
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(5, 6, 255, 255), renderPass.color, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(5, 6, 255, 255), renderPass.color, 0, 0);
     EXPECT_BUFFER_U32_RANGE_EQ(expectedData.data(), mStorageBuffers[1],
                                mMinUniformBufferOffsetAlignment, expectedData.size());
 }
@@ -318,7 +318,7 @@ TEST_P(DynamicBufferOffsetTests, InheritDynamicOffsetsRenderPipeline) {
     queue.Submit(1, &commands);
 
     std::vector<uint32_t> expectedData = {12, 16};
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(5, 6, 255, 255), renderPass.color, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(5, 6, 255, 255), renderPass.color, 0, 0);
     EXPECT_BUFFER_U32_RANGE_EQ(expectedData.data(), mStorageBuffers[1],
                                mMinUniformBufferOffsetAlignment, expectedData.size());
 }
@@ -376,7 +376,7 @@ TEST_P(DynamicBufferOffsetTests, UpdateDynamicOffsetsMultipleTimesRenderPipeline
     queue.Submit(1, &commands);
 
     std::vector<uint32_t> expectedData = {2, 4};
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(1, 2, 255, 255), renderPass.color, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(1, 2, 255, 255), renderPass.color, 0, 0);
     EXPECT_BUFFER_U32_RANGE_EQ(expectedData.data(), mStorageBuffers[1], 0, expectedData.size());
 }
 
@@ -480,7 +480,7 @@ TEST_P(ClampedOOBDynamicBufferOffsetTests, CheckOOBAccess) {
             @group(0) @binding(1) var<storage, read_write> dst : Dst;
         )";
         shader << R"(
-            @stage(compute) @workgroup_size(1) fn main() {
+            @compute @workgroup_size(1) fn main() {
                 for (var i: u32 = 0u; i < kArrayLength; i = i + 1u) {
                     dst.values[i + kWriteOffset] = src.values[i + kReadOffset];
                 }

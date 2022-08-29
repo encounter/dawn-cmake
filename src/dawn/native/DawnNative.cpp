@@ -70,6 +70,12 @@ std::vector<const char*> GetTogglesUsed(WGPUDevice device) {
     return FromAPI(device)->GetTogglesUsed();
 }
 
+// DawnDeviceDescriptor
+
+DawnDeviceDescriptor::DawnDeviceDescriptor() = default;
+
+DawnDeviceDescriptor::~DawnDeviceDescriptor() = default;
+
 // Adapter
 
 Adapter::Adapter() = default;
@@ -117,10 +123,6 @@ WGPUAdapter Adapter::Get() const {
 std::vector<const char*> Adapter::GetSupportedFeatures() const {
     FeaturesSet supportedFeaturesSet = mImpl->GetSupportedFeatures();
     return supportedFeaturesSet.GetEnabledFeatureNames();
-}
-
-WGPUDeviceProperties Adapter::GetAdapterProperties() const {
-    return mImpl->GetAdapterProperties();
 }
 
 bool Adapter::GetLimits(WGPUSupportedLimits* limits) const {
@@ -189,7 +191,7 @@ Instance::Instance(const WGPUInstanceDescriptor* desc)
 
 Instance::~Instance() {
     if (mImpl != nullptr) {
-        mImpl->Release();
+        mImpl->APIRelease();
         mImpl = nullptr;
     }
 }
@@ -238,6 +240,10 @@ void Instance::SetPlatform(dawn::platform::Platform* platform) {
     mImpl->SetPlatform(platform);
 }
 
+uint64_t Instance::GetDeviceCountForTesting() const {
+    return mImpl->GetDeviceCountForTesting();
+}
+
 WGPUInstance Instance::Get() const {
     return ToAPI(mImpl);
 }
@@ -248,6 +254,10 @@ size_t GetLazyClearCountForTesting(WGPUDevice device) {
 
 size_t GetDeprecationWarningCountForTesting(WGPUDevice device) {
     return FromAPI(device)->GetDeprecationWarningCountForTesting();
+}
+
+size_t GetAdapterCountForTesting(WGPUInstance instance) {
+    return FromAPI(instance)->GetAdapters().size();
 }
 
 bool IsTextureSubresourceInitialized(WGPUTexture texture,
@@ -288,6 +298,10 @@ ExternalImageExportInfo::ExternalImageExportInfo(ExternalImageType type) : mType
 
 ExternalImageType ExternalImageExportInfo::GetType() const {
     return mType;
+}
+
+bool CheckIsErrorForTesting(void* objectHandle) {
+    return reinterpret_cast<ErrorMonad*>(objectHandle)->IsError();
 }
 
 const char* GetObjectLabelForTesting(void* objectHandle) {

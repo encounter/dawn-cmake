@@ -63,18 +63,18 @@ class CopyTests {
 
     // TODO(crbug.com/dawn/818): remove this function when all the tests in this file support
     // testing arbitrary formats.
-    static std::vector<RGBA8> GetExpectedTextureDataRGBA8(
+    static std::vector<utils::RGBA8> GetExpectedTextureDataRGBA8(
         const utils::TextureDataCopyLayout& layout) {
-        std::vector<RGBA8> textureData(layout.texelBlockCount);
+        std::vector<utils::RGBA8> textureData(layout.texelBlockCount);
         for (uint32_t layer = 0; layer < layout.mipSize.depthOrArrayLayers; ++layer) {
             const uint32_t texelIndexOffsetPerSlice = layout.texelBlocksPerImage * layer;
             for (uint32_t y = 0; y < layout.mipSize.height; ++y) {
                 for (uint32_t x = 0; x < layout.mipSize.width; ++x) {
                     uint32_t i = x + y * layout.texelBlocksPerRow;
                     textureData[texelIndexOffsetPerSlice + i] =
-                        RGBA8(static_cast<uint8_t>((x + layer * x) % 256),
-                              static_cast<uint8_t>((y + layer * y) % 256),
-                              static_cast<uint8_t>(x / 256), static_cast<uint8_t>(y / 256));
+                        utils::RGBA8(static_cast<uint8_t>((x + layer * x) % 256),
+                                     static_cast<uint8_t>((y + layer * y) % 256),
+                                     static_cast<uint8_t>(x / 256), static_cast<uint8_t>(y / 256));
                 }
             }
         }
@@ -157,7 +157,7 @@ class CopyTests_T2B : public CopyTests, public DawnTest {
                 textureSpec.format, textureSpec.textureSize, textureSpec.copyLevel, dimension);
 
         // Initialize the source texture
-        std::vector<RGBA8> textureArrayData = GetExpectedTextureDataRGBA8(copyLayout);
+        std::vector<utils::RGBA8> textureArrayData = GetExpectedTextureDataRGBA8(copyLayout);
         {
             wgpu::ImageCopyTexture imageCopyTexture =
                 utils::CreateImageCopyTexture(texture, textureSpec.copyLevel, {0, 0, 0});
@@ -203,11 +203,11 @@ class CopyTests_T2B : public CopyTests, public DawnTest {
         const uint32_t texelCountInCopyRegion = utils::GetTexelCountInCopyRegion(
             bufferSpec.bytesPerRow, bufferSpec.rowsPerImage, copySizePerLayer, textureSpec.format);
         const uint32_t maxArrayLayer = textureSpec.copyOrigin.z + copyLayer;
-        std::vector<RGBA8> expected(texelCountInCopyRegion);
+        std::vector<utils::RGBA8> expected(texelCountInCopyRegion);
         for (uint32_t layer = textureSpec.copyOrigin.z; layer < maxArrayLayer; ++layer) {
             // Copy the data used to create the upload buffer in the specified copy region to have
             // the same format as the expected buffer data.
-            std::fill(expected.begin(), expected.end(), RGBA8());
+            std::fill(expected.begin(), expected.end(), utils::RGBA8());
             const uint32_t texelIndexOffset = copyLayout.texelBlocksPerImage * layer;
             const uint32_t expectedTexelArrayDataStartIndex =
                 texelIndexOffset + (textureSpec.copyOrigin.x +
@@ -238,10 +238,11 @@ class CopyTests_T2B : public CopyTests, public DawnTest {
 
 class CopyTests_B2T : public CopyTests, public DawnTest {
   protected:
-    static void FillBufferData(RGBA8* data, size_t count) {
+    static void FillBufferData(utils::RGBA8* data, size_t count) {
         for (size_t i = 0; i < count; ++i) {
-            data[i] = RGBA8(static_cast<uint8_t>(i % 256), static_cast<uint8_t>((i / 256) % 256),
-                            static_cast<uint8_t>((i / 256 / 256) % 256), 255);
+            data[i] =
+                utils::RGBA8(static_cast<uint8_t>(i % 256), static_cast<uint8_t>((i / 256) % 256),
+                             static_cast<uint8_t>((i / 256 / 256) % 256), 255);
         }
     }
 
@@ -253,7 +254,7 @@ class CopyTests_B2T : public CopyTests, public DawnTest {
         ASSERT_EQ(kDefaultFormat, textureSpec.format);
         // Create a buffer of size `size` and populate it with data
         const uint32_t bytesPerTexel = utils::GetTexelBlockSizeInBytes(textureSpec.format);
-        std::vector<RGBA8> bufferData(bufferSpec.size / bytesPerTexel);
+        std::vector<utils::RGBA8> bufferData(bufferSpec.size / bytesPerTexel);
         FillBufferData(bufferData.data(), bufferData.size());
         wgpu::Buffer buffer =
             utils::CreateBufferFromData(device, bufferData.data(), bufferSpec.size,
@@ -301,7 +302,7 @@ class CopyTests_B2T : public CopyTests, public DawnTest {
         for (uint32_t layer = 0; layer < copyLayer; ++layer) {
             // Copy and pack the data used to create the buffer in the specified copy region to have
             // the same format as the expected texture data.
-            std::vector<RGBA8> expected(texelCountPerLayer);
+            std::vector<utils::RGBA8> expected(texelCountPerLayer);
             CopyTextureData(bytesPerTexel, bufferData.data() + bufferOffset / bytesPerTexel,
                             copySize.width, copySize.height, copyDepth, bufferSpec.bytesPerRow,
                             bufferSpec.rowsPerImage, expected.data(),
@@ -1027,9 +1028,6 @@ TEST_P(CopyTests_T2B, CopyOneRowWithDepth32Float) {
     // TODO(crbug.com/dawn/667): Work around the fact that some platforms do not support reading
     // depth.
     DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("disable_depth_read"));
-
-    // TODO(crbug.com/dawn/727): currently this test fails on many D3D12 drivers.
-    DAWN_SUPPRESS_TEST_IF(IsD3D12());
 
     constexpr wgpu::TextureFormat kFormat = wgpu::TextureFormat::Depth32Float;
     constexpr uint32_t kPixelsPerRow = 4u;
@@ -2185,9 +2183,6 @@ TEST_P(CopyTests_T2T, CopyFromNonZeroMipLevelWithTexelBlockSizeLessThan4Bytes) {
     // try bots.
     DAWN_SUPPRESS_TEST_IF(IsVulkan() && IsWindows() && IsIntel());
 
-    // This test also fails on D3D12 on Intel Windows. See http://crbug.com/1312066 for details.
-    DAWN_SUPPRESS_TEST_IF(IsD3D12() && IsWindows() && IsIntel());
-
     constexpr std::array<wgpu::TextureFormat, 11> kFormats = {
         {wgpu::TextureFormat::RG8Sint, wgpu::TextureFormat::RG8Uint, wgpu::TextureFormat::RG8Snorm,
          wgpu::TextureFormat::RG8Unorm, wgpu::TextureFormat::R16Float, wgpu::TextureFormat::R16Sint,
@@ -2235,6 +2230,10 @@ TEST_P(CopyTests_T2T, CopyFromNonZeroMipLevelWithTexelBlockSizeLessThan4Bytes) {
                     DoTest(srcSpec, dstSpec, kUploadSize);
                 }
             }
+
+            // Resolve all the deferred expectations now to avoid allocating too much memory
+            // in mDeferredExpectations.
+            ResolveDeferredExpectationsNow();
         }
     }
 }
@@ -2290,6 +2289,9 @@ TEST_P(CopyTests_T2T, Texture3DSameTextureDifferentMipLevels) {
 
 // Test that copying whole 3D texture to a 2D array in one texture-to-texture-copy works.
 TEST_P(CopyTests_T2T, Texture3DTo2DArrayFull) {
+    // TODO(crbug.com/dawn/1425): Remove this suppression.
+    DAWN_SUPPRESS_TEST_IF(IsANGLE() && IsWindows() && IsIntel());
+
     constexpr uint32_t kWidth = 256;
     constexpr uint32_t kHeight = 128;
     constexpr uint32_t kDepth = 6u;
@@ -2306,6 +2308,9 @@ TEST_P(CopyTests_T2T, Texture3DTo2DArrayFull) {
 TEST_P(CopyTests_T2T, Texture3DAnd2DArraySubRegion) {
     // TODO(crbug.com/dawn/1216): Remove this suppression.
     DAWN_SUPPRESS_TEST_IF(IsD3D12() && IsNvidia());
+
+    // TODO(crbug.com/dawn/1426): Remove this suppression.
+    DAWN_SUPPRESS_TEST_IF(IsANGLE() && IsWindows() && IsIntel());
 
     constexpr uint32_t kWidth = 8;
     constexpr uint32_t kHeight = 4;
@@ -2544,3 +2549,186 @@ DAWN_INSTANTIATE_TEST(ClearBufferTests,
                       OpenGLBackend(),
                       OpenGLESBackend(),
                       VulkanBackend());
+
+// Regression tests to reproduce a flaky failure when running whole WebGPU CTS on Intel GPUs.
+// See crbug.com/dawn/1487 for more details.
+namespace {
+using TextureFormat = wgpu::TextureFormat;
+
+enum class InitializationMethod {
+    CopyBufferToTexture,
+    WriteTexture,
+    CopyTextureToTexture,
+};
+
+std::ostream& operator<<(std::ostream& o, InitializationMethod method) {
+    switch (method) {
+        case InitializationMethod::CopyBufferToTexture:
+            o << "CopyBufferToTexture";
+            break;
+        case InitializationMethod::WriteTexture:
+            o << "WriteTexture";
+            break;
+        case InitializationMethod::CopyTextureToTexture:
+            o << "CopyTextureToTexture";
+            break;
+        default:
+            UNREACHABLE();
+            break;
+    }
+
+    return o;
+}
+
+using AddRenderAttachmentUsage = bool;
+
+DAWN_TEST_PARAM_STRUCT(CopyToDepthStencilTextureAfterDestroyingBigBufferTestsParams,
+                       TextureFormat,
+                       InitializationMethod,
+                       AddRenderAttachmentUsage);
+
+}  // anonymous namespace
+
+class CopyToDepthStencilTextureAfterDestroyingBigBufferTests
+    : public DawnTestWithParams<CopyToDepthStencilTextureAfterDestroyingBigBufferTestsParams> {};
+
+TEST_P(CopyToDepthStencilTextureAfterDestroyingBigBufferTests, DoTest) {
+    // TODO(crbug.com/dawn/1492): Support CopyBufferToTexture() with Depth16Unorm on OpenGL /
+    // OpenGL ES backends.
+    DAWN_SUPPRESS_TEST_IF(GetParam().mTextureFormat == wgpu::TextureFormat::Depth16Unorm &&
+                          (IsOpenGL() || IsOpenGLES()));
+
+    // Copies to stencil textures are unsupported on the OpenGL backend.
+    DAWN_TEST_UNSUPPORTED_IF(GetParam().mTextureFormat == wgpu::TextureFormat::Stencil8 &&
+                             (IsOpenGL() || IsOpenGLES()));
+
+    wgpu::TextureFormat format = GetParam().mTextureFormat;
+
+    const uint32_t texelBlockSize = utils::GetTexelBlockSizeInBytes(format);
+    const uint32_t expectedDataSize = Align(texelBlockSize, 4u);
+
+    // First, create a big buffer and fill some garbage data on DEFAULT heap.
+    constexpr size_t kBigBufferSize = 159740u;
+    constexpr uint8_t kGarbageData = 255u;
+    std::array<uint8_t, kBigBufferSize> garbageData;
+    garbageData.fill(kGarbageData);
+
+    wgpu::Buffer bigBuffer =
+        utils::CreateBufferFromData(device, garbageData.data(), garbageData.size(),
+                                    wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::CopyDst);
+    // Next, destroy the buffer. Its heap is still alive and contains the garbage data.
+    bigBuffer.Destroy();
+
+    // Ensure the underlying ID3D12Resource of bigBuffer is deleted.
+    bool submittedWorkDone = false;
+    queue.OnSubmittedWorkDone(
+        0,
+        [](WGPUQueueWorkDoneStatus status, void* userdata) {
+            EXPECT_EQ(status, WGPUQueueWorkDoneStatus_Success);
+            *static_cast<bool*>(userdata) = true;
+        },
+        &submittedWorkDone);
+    while (!submittedWorkDone) {
+        WaitABit();
+    }
+
+    // Then, create a small texture, which should be allocated on the heap that contains the
+    // garbage data.
+    wgpu::TextureDescriptor textureDescriptor = {};
+    textureDescriptor.format = format;
+    textureDescriptor.size = {1, 1, 1};
+    textureDescriptor.usage = wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst;
+    if (GetParam().mAddRenderAttachmentUsage) {
+        textureDescriptor.usage |= wgpu::TextureUsage::RenderAttachment;
+    }
+    wgpu::Texture texture = device.CreateTexture(&textureDescriptor);
+
+    // Finally, upload valid data into the texture and validate its contents.
+    std::vector<uint8_t> expectedData(expectedDataSize);
+    constexpr uint8_t kBaseValue = 204u;
+    for (uint32_t i = 0; i < texelBlockSize; ++i) {
+        expectedData[i] = static_cast<uint8_t>(i + kBaseValue);
+    }
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::Extent3D copySize = {1, 1, 1};
+
+    auto EncodeUploadDataToTexture = [this, copySize](wgpu::CommandEncoder encoder,
+                                                      wgpu::Texture destinationTexture,
+                                                      const std::vector<uint8_t>& expectedData) {
+        wgpu::BufferDescriptor bufferDescriptor = {};
+        bufferDescriptor.size = expectedData.size();
+        bufferDescriptor.usage = wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::MapWrite;
+        wgpu::Buffer uploadBuffer = device.CreateBuffer(&bufferDescriptor);
+        bool done = false;
+        uploadBuffer.MapAsync(
+            wgpu::MapMode::Write, 0, static_cast<uint32_t>(expectedData.size()),
+            [](WGPUBufferMapAsyncStatus status, void* userdata) {
+                ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
+                *static_cast<bool*>(userdata) = true;
+            },
+            &done);
+        while (!done) {
+            WaitABit();
+        }
+
+        uint8_t* uploadData = static_cast<uint8_t*>(uploadBuffer.GetMappedRange());
+        memcpy(uploadData, expectedData.data(), expectedData.size());
+        uploadBuffer.Unmap();
+
+        wgpu::ImageCopyBuffer imageCopyBuffer = utils::CreateImageCopyBuffer(uploadBuffer);
+        wgpu::ImageCopyTexture imageCopyTexture = utils::CreateImageCopyTexture(destinationTexture);
+        encoder.CopyBufferToTexture(&imageCopyBuffer, &imageCopyTexture, &copySize);
+    };
+
+    switch (GetParam().mInitializationMethod) {
+        case InitializationMethod::CopyBufferToTexture: {
+            EncodeUploadDataToTexture(encoder, texture, expectedData);
+            break;
+        }
+        case InitializationMethod::WriteTexture: {
+            wgpu::ImageCopyTexture imageCopyTexture = utils::CreateImageCopyTexture(texture);
+            wgpu::TextureDataLayout layout;
+            queue.WriteTexture(&imageCopyTexture, expectedData.data(), texelBlockSize, &layout,
+                               &copySize);
+            break;
+        }
+        case InitializationMethod::CopyTextureToTexture: {
+            wgpu::Texture stagingTexture = device.CreateTexture(&textureDescriptor);
+            EncodeUploadDataToTexture(encoder, stagingTexture, expectedData);
+
+            wgpu::ImageCopyTexture imageCopyStagingTexture =
+                utils::CreateImageCopyTexture(stagingTexture);
+            wgpu::ImageCopyTexture imageCopyTexture = utils::CreateImageCopyTexture(texture);
+            encoder.CopyTextureToTexture(&imageCopyStagingTexture, &imageCopyTexture, &copySize);
+            break;
+        }
+        default:
+            UNREACHABLE();
+            break;
+    }
+
+    wgpu::BufferDescriptor destinationBufferDescriptor = {};
+    destinationBufferDescriptor.size = expectedDataSize;
+    destinationBufferDescriptor.usage = wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::CopyDst;
+    wgpu::Buffer destinationBuffer = device.CreateBuffer(&destinationBufferDescriptor);
+
+    wgpu::ImageCopyTexture imageCopyTexture = utils::CreateImageCopyTexture(texture);
+    wgpu::ImageCopyBuffer imageCopyDestinationBuffer =
+        utils::CreateImageCopyBuffer(destinationBuffer);
+    encoder.CopyTextureToBuffer(&imageCopyTexture, &imageCopyDestinationBuffer, &copySize);
+
+    wgpu::CommandBuffer commandBuffer = encoder.Finish();
+    queue.Submit(1, &commandBuffer);
+
+    EXPECT_BUFFER_U8_RANGE_EQ(expectedData.data(), destinationBuffer, 0, expectedDataSize);
+}
+
+DAWN_INSTANTIATE_TEST_P(
+    CopyToDepthStencilTextureAfterDestroyingBigBufferTests,
+    {D3D12Backend(), D3D12Backend({"d3d12_force_clear_copyable_depth_stencil_texture_on_creation"}),
+     MetalBackend(), OpenGLBackend(), OpenGLESBackend(), VulkanBackend()},
+    {wgpu::TextureFormat::Depth16Unorm, wgpu::TextureFormat::Stencil8},
+    {InitializationMethod::CopyBufferToTexture, InitializationMethod::WriteTexture,
+     InitializationMethod::CopyTextureToTexture},
+    {true, false});

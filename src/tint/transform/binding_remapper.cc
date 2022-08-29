@@ -22,6 +22,7 @@
 #include "src/tint/program_builder.h"
 #include "src/tint/sem/function.h"
 #include "src/tint/sem/variable.h"
+#include "src/tint/utils/string.h"
 
 TINT_INSTANTIATE_TYPEINFO(tint::transform::BindingRemapper);
 TINT_INSTANTIATE_TYPEINFO(tint::transform::BindingRemapper::Remappings);
@@ -67,9 +68,10 @@ void BindingRemapper::Run(CloneContext& ctx, const DataMap& inputs, DataMap&) co
             }
             auto* func = ctx.src->Sem().Get(func_ast);
             std::unordered_map<sem::BindingPoint, int> binding_point_counts;
-            for (auto* var : func->TransitivelyReferencedGlobals()) {
-                if (auto binding_point = var->Declaration()->BindingPoint()) {
-                    BindingPoint from{binding_point.group->value, binding_point.binding->value};
+            for (auto* global : func->TransitivelyReferencedGlobals()) {
+                if (global->Declaration()->HasBindingPoint()) {
+                    BindingPoint from = global->BindingPoint();
+
                     auto bp_it = remappings->binding_points.find(from);
                     if (bp_it != remappings->binding_points.end()) {
                         // Remapped
@@ -88,10 +90,12 @@ void BindingRemapper::Run(CloneContext& ctx, const DataMap& inputs, DataMap&) co
         }
     }
 
-    for (auto* var : ctx.src->AST().GlobalVariables()) {
-        if (auto binding_point = var->BindingPoint()) {
+    for (auto* var : ctx.src->AST().Globals<ast::Var>()) {
+        if (var->HasBindingPoint()) {
+            auto* global_sem = ctx.src->Sem().Get<sem::GlobalVariable>(var);
+
             // The original binding point
-            BindingPoint from{binding_point.group->value, binding_point.binding->value};
+            BindingPoint from = global_sem->BindingPoint();
 
             // The binding point after remapping
             BindingPoint bp = from;
@@ -105,8 +109,11 @@ void BindingRemapper::Run(CloneContext& ctx, const DataMap& inputs, DataMap&) co
                 auto* new_group = ctx.dst->create<ast::GroupAttribute>(to.group);
                 auto* new_binding = ctx.dst->create<ast::BindingAttribute>(to.binding);
 
-                ctx.Replace(binding_point.group, new_group);
-                ctx.Replace(binding_point.binding, new_binding);
+                auto* old_group = ast::GetAttribute<ast::GroupAttribute>(var->attributes);
+                auto* old_binding = ast::GetAttribute<ast::BindingAttribute>(var->attributes);
+
+                ctx.Replace(old_group, new_group);
+                ctx.Replace(old_binding, new_binding);
                 bp = to;
             }
 
@@ -125,15 +132,15 @@ void BindingRemapper::Run(CloneContext& ctx, const DataMap& inputs, DataMap&) co
                     ctx.dst->Diagnostics().add_error(
                         diag::System::Transform,
                         "cannot apply access control to variable with storage class " +
-                            std::string(ast::ToString(sem->StorageClass())));
+                            std::string(utils::ToString(sem->StorageClass())));
                     return;
                 }
                 auto* ty = sem->Type()->UnwrapRef();
                 const ast::Type* inner_ty = CreateASTTypeFor(ctx, ty);
-                auto* new_var = ctx.dst->create<ast::Variable>(
-                    ctx.Clone(var->source), ctx.Clone(var->symbol), var->declared_storage_class, ac,
-                    inner_ty, false, false, ctx.Clone(var->constructor),
-                    ctx.Clone(var->attributes));
+                auto* new_var =
+                    ctx.dst->Var(ctx.Clone(var->source), ctx.Clone(var->symbol), inner_ty,
+                                 var->declared_storage_class, ac, ctx.Clone(var->constructor),
+                                 ctx.Clone(var->attributes));
                 ctx.Replace(var, new_var);
             }
 

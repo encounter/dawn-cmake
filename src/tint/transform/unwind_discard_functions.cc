@@ -54,8 +54,8 @@ class State {
     Symbol ModuleDiscardVarName() {
         if (!module_discard_var_name.IsValid()) {
             module_discard_var_name = b.Symbols().New("tint_discard");
-            ctx.dst->Global(module_discard_var_name, b.ty.bool_(), b.Expr(false),
-                            ast::StorageClass::kPrivate);
+            ctx.dst->GlobalVar(module_discard_var_name, b.ty.bool_(), b.Expr(false),
+                               ast::StorageClass::kPrivate);
         }
         return module_discard_var_name;
     }
@@ -67,7 +67,8 @@ class State {
     Symbol ModuleDiscardFuncName() {
         if (!module_discard_func_name.IsValid()) {
             module_discard_func_name = b.Symbols().New("tint_discard_func");
-            b.Func(module_discard_func_name, {}, b.ty.void_(), {b.Discard()});
+            b.Func(module_discard_func_name, tint::utils::Empty, b.ty.void_(),
+                   tint::utils::Vector{b.Discard()});
         }
         return module_discard_func_name;
     }
@@ -108,14 +109,14 @@ class State {
     //    }
     //
     const ast::IfStatement* IfDiscardReturn(const ast::Statement* stmt) {
-        ast::StatementList stmts;
+        tint::utils::Vector<const ast::Statement*, 2> stmts;
 
         // For entry point functions, also emit the discard statement
         if (IsInEntryPointFunc(stmt)) {
-            stmts.emplace_back(CallDiscardFunc());
+            stmts.Push(CallDiscardFunc());
         }
 
-        stmts.emplace_back(Return(stmt));
+        stmts.Push(Return(stmt));
 
         auto var_name = ModuleDiscardVarName();
         return b.If(var_name, b.Block(stmts));
@@ -140,7 +141,7 @@ class State {
 
         auto ip = utils::GetInsertionPoint(ctx, stmt);
         auto var_name = b.Sym();
-        auto* decl = b.Decl(b.Var(var_name, nullptr, ctx.Clone(expr)));
+        auto* decl = b.Decl(b.Var(var_name, ctx.Clone(expr)));
         ctx.InsertBefore(ip.first->Declaration()->statements, ip.second, decl);
 
         ctx.InsertBefore(ip.first->Declaration()->statements, ip.second, IfDiscardReturn(stmt));
@@ -257,6 +258,15 @@ class State {
                 if (MayDiscard(sem.Get(s->condition))) {
                     TINT_ICE(Transform, b.Diagnostics())
                         << "Unexpected ForLoopStatement condition that may discard. "
+                           "Make sure transform::PromoteSideEffectsToDecl was run "
+                           "first.";
+                }
+                return nullptr;
+            },
+            [&](const ast::WhileStatement* s) -> const ast::Statement* {
+                if (MayDiscard(sem.Get(s->condition))) {
+                    TINT_ICE(Transform, b.Diagnostics())
+                        << "Unexpected WhileStatement condition that may discard. "
                            "Make sure transform::PromoteSideEffectsToDecl was run "
                            "first.";
                 }

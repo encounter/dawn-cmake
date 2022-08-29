@@ -15,6 +15,8 @@
 #include "src/tint/writer/spirv/spv_dump.h"
 #include "src/tint/writer/spirv/test_helper.h"
 
+using namespace tint::number_suffixes;  // NOLINT
+
 namespace tint::writer::spirv {
 namespace {
 
@@ -35,10 +37,10 @@ TEST_F(BuilderTest, Return) {
 }
 
 TEST_F(BuilderTest, Return_WithValue) {
-    auto* val = vec3<f32>(1.f, 1.f, 3.f);
+    auto* val = vec3<f32>(1_f, 1_f, 3_f);
 
     auto* ret = Return(val);
-    Func("test", {}, ty.vec3<f32>(), {ret}, {});
+    Func("test", utils::Empty, ty.vec3<f32>(), utils::Vector{ret}, utils::Empty);
 
     spirv::Builder& b = Build();
 
@@ -61,7 +63,7 @@ TEST_F(BuilderTest, Return_WithValue_GeneratesLoad) {
     auto* var = Var("param", ty.f32());
 
     auto* ret = Return(var);
-    Func("test", {}, ty.f32(), {Decl(var), ret}, {});
+    Func("test", utils::Empty, ty.f32(), utils::Vector{Decl(var), ret}, utils::Empty);
 
     spirv::Builder& b = Build();
 

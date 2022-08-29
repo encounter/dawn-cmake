@@ -32,8 +32,10 @@
 #include "dawn/native/Limits.h"
 #include "dawn/native/ObjectBase.h"
 #include "dawn/native/ObjectType_autogen.h"
+#include "dawn/native/RefCountedWithExternalCount.h"
 #include "dawn/native/StagingBuffer.h"
 #include "dawn/native/Toggles.h"
+#include "dawn/native/UsageValidationMode.h"
 
 #include "dawn/native/DawnNative.h"
 #include "dawn/native/dawn_platform.h"
@@ -46,6 +48,7 @@ namespace dawn::native {
 class AsyncTaskManager;
 class AttachmentState;
 class AttachmentStateBlueprint;
+class Blob;
 class BlobCache;
 class CallbackTaskManager;
 class DynamicUploader;
@@ -55,12 +58,12 @@ struct CallbackTask;
 struct InternalPipelineStore;
 struct ShaderModuleParseResult;
 
-using WGSLExtensionsSet = std::unordered_set<std::string>;
+using WGSLExtensionSet = std::unordered_set<std::string>;
 
-class DeviceBase : public RefCounted {
+class DeviceBase : public RefCountedWithExternalCount {
   public:
     DeviceBase(AdapterBase* adapter, const DeviceDescriptor* descriptor);
-    virtual ~DeviceBase();
+    ~DeviceBase() override;
 
     void HandleError(InternalErrorType type, const char* message);
 
@@ -201,7 +204,9 @@ class DeviceBase : public RefCounted {
     Ref<PipelineCacheBase> GetOrCreatePipelineCache(const CacheKey& key);
 
     // Object creation methods that be used in a reentrant manner.
-    ResultOrError<Ref<BindGroupBase>> CreateBindGroup(const BindGroupDescriptor* descriptor);
+    ResultOrError<Ref<BindGroupBase>> CreateBindGroup(
+        const BindGroupDescriptor* descriptor,
+        UsageValidationMode mode = UsageValidationMode::Default);
     ResultOrError<Ref<BindGroupLayoutBase>> CreateBindGroupLayout(
         const BindGroupLayoutDescriptor* descriptor,
         bool allowInternalBinding = false);
@@ -261,11 +266,18 @@ class DeviceBase : public RefCounted {
 
     // For Dawn Wire
     BufferBase* APICreateErrorBuffer();
+    ExternalTextureBase* APICreateErrorExternalTexture();
+    TextureBase* APICreateErrorTexture(const TextureDescriptor* desc);
 
+    AdapterBase* APIGetAdapter();
     QueueBase* APIGetQueue();
 
     bool APIGetLimits(SupportedLimits* limits) const;
+    // Note that we should not use this function to query the features which can only be enabled
+    // behind toggles (use IsFeatureEnabled() instead).
     bool APIHasFeature(wgpu::FeatureName feature) const;
+    // Note that we should not use this function to query the features which can only be enabled
+    // behind toggles (use IsFeatureEnabled() instead).
     size_t APIEnumerateFeatures(wgpu::FeatureName* features) const;
     void APIInjectError(wgpu::ErrorType type, const char* message);
     bool APITick();
@@ -279,6 +291,8 @@ class DeviceBase : public RefCounted {
     MaybeError ValidateIsAlive() const;
 
     BlobCache* GetBlobCache();
+    Blob LoadCachedBlob(const CacheKey& key);
+    void StoreCachedBlob(const CacheKey& key, const Blob& blob);
 
     virtual ResultOrError<std::unique_ptr<StagingBufferBase>> CreateStagingBuffer(size_t size) = 0;
     virtual MaybeError CopyFromStagingToBuffer(StagingBufferBase* source,
@@ -319,8 +333,7 @@ class DeviceBase : public RefCounted {
     std::mutex* GetObjectListMutex(ObjectType type);
 
     std::vector<const char*> GetTogglesUsed() const;
-    WGSLExtensionsSet GetWGSLExtensionAllowList() const;
-    bool IsFeatureEnabled(Feature feature) const;
+    WGSLExtensionSet GetWGSLExtensionAllowList() const;
     bool IsToggleEnabled(Toggle toggle) const;
     bool IsValidationEnabled() const;
     bool IsRobustnessEnabled() const;
@@ -350,6 +363,7 @@ class DeviceBase : public RefCounted {
     // BackendMetadata that we can query from the device.
     virtual uint32_t GetOptimalBytesPerRowAlignment() const = 0;
     virtual uint64_t GetOptimalBufferToTextureCopyOffsetAlignment() const = 0;
+    virtual uint64_t GetBufferCopyOffsetAlignmentForDepthStencil() const;
 
     virtual float GetTimestampPeriodInNS() const = 0;
 
@@ -360,6 +374,10 @@ class DeviceBase : public RefCounted {
 
     virtual bool ShouldDuplicateParametersForDrawIndirect(
         const RenderPipelineBase* renderPipelineBase) const;
+
+    // TODO(crbug.com/dawn/1434): Make this function non-overridable when we support requesting
+    // Adapter with toggles.
+    virtual bool IsFeatureEnabled(Feature feature) const;
 
     const CombinedLimits& GetLimits() const;
 
@@ -400,6 +418,8 @@ class DeviceBase : public RefCounted {
     void IncrementLastSubmittedCommandSerial();
 
   private:
+    void WillDropLastExternalRef() override;
+
     virtual ResultOrError<Ref<BindGroupBase>> CreateBindGroupImpl(
         const BindGroupDescriptor* descriptor) = 0;
     virtual ResultOrError<Ref<BindGroupLayoutBase>> CreateBindGroupLayoutImpl(
@@ -507,12 +527,7 @@ class DeviceBase : public RefCounted {
 
     std::unique_ptr<ErrorScopeStack> mErrorScopeStack;
 
-    // The Device keeps a ref to the Instance so that any live Device keeps the Instance alive.
-    // The Instance shouldn't need to ref child objects so this shouldn't introduce ref cycles.
-    // The Device keeps a simple pointer to the Adapter because the Adapter is owned by the
-    // Instance.
-    Ref<InstanceBase> mInstance;
-    AdapterBase* mAdapter = nullptr;
+    Ref<AdapterBase> mAdapter;
 
     // The object caches aren't exposed in the header as they would require a lot of
     // additional includes.
@@ -549,7 +564,7 @@ class DeviceBase : public RefCounted {
 
     CombinedLimits mLimits;
     FeaturesSet mEnabledFeatures;
-    WGSLExtensionsSet mWGSLExtensionAllowList;
+    WGSLExtensionSet mWGSLExtensionAllowList;
 
     std::unique_ptr<InternalPipelineStore> mInternalPipelineStore;
 

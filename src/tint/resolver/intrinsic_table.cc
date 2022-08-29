@@ -19,7 +19,11 @@
 #include <unordered_map>
 #include <utility>
 
+#include "src/tint/ast/binary_expression.h"
 #include "src/tint/program_builder.h"
+#include "src/tint/sem/abstract_float.h"
+#include "src/tint/sem/abstract_int.h"
+#include "src/tint/sem/abstract_numeric.h"
 #include "src/tint/sem/atomic.h"
 #include "src/tint/sem/depth_multisampled_texture.h"
 #include "src/tint/sem/depth_texture.h"
@@ -28,12 +32,14 @@
 #include "src/tint/sem/pipeline_stage_set.h"
 #include "src/tint/sem/sampled_texture.h"
 #include "src/tint/sem/storage_texture.h"
+#include "src/tint/sem/type_constructor.h"
+#include "src/tint/sem/type_conversion.h"
 #include "src/tint/utils/hash.h"
 #include "src/tint/utils/map.h"
 #include "src/tint/utils/math.h"
 #include "src/tint/utils/scoped_assignment.h"
 
-namespace tint {
+namespace tint::resolver {
 namespace {
 
 // Forward declarations
@@ -41,6 +47,12 @@ struct OverloadInfo;
 class Matchers;
 class NumberMatcher;
 class TypeMatcher;
+
+/// The utils::Vector `N` template argument value for arrays of parameters.
+constexpr static const size_t kNumFixedParams = 8;
+
+/// The utils::Vector `N` template argument value for arrays of overload candidates.
+constexpr static const size_t kNumFixedCandidates = 8;
 
 /// A special type that matches all TypeMatchers
 class Any final : public Castable<Any, sem::Type> {
@@ -98,83 +110,102 @@ struct Number {
 const Number Number::any{Number::kAny};
 const Number Number::invalid{Number::kInvalid};
 
-/// ClosedState holds the state of the open / closed numbers and types.
+/// TemplateState holds the state of the template numbers and types.
 /// Used by the MatchState.
-class ClosedState {
+class TemplateState {
   public:
-    explicit ClosedState(ProgramBuilder& b) : builder(b) {}
-
-    /// If the type with index `idx` is open, then it is closed with type `ty` and
-    /// Type() returns true. If the type is closed, then `Type()` returns true iff
-    /// it is equal to `ty`.
-    bool Type(uint32_t idx, const sem::Type* ty) {
-        auto res = types_.emplace(idx, ty);
-        return res.second || res.first->second == ty;
+    /// If the template type with index `idx` is undefined, then it is defined with the `ty` and
+    /// Type() returns `ty`.
+    /// If the template type is defined, and `ty` can be converted to the template type then the
+    /// template type is returned.
+    /// If the template type is defined, and the template type can be converted to `ty`, then the
+    /// template type is replaced with `ty`, and `ty` is returned.
+    /// If none of the above applies, then `ty` is a type mismatch for the template type, and
+    /// nullptr is returned.
+    const sem::Type* Type(size_t idx, const sem::Type* ty) {
+        if (idx >= types_.Length()) {
+            types_.Resize(idx + 1);
+        }
+        auto& t = types_[idx];
+        if (t == nullptr) {
+            t = ty;
+            return ty;
+        }
+        ty = sem::Type::Common(utils::Vector{t, ty});
+        if (ty) {
+            t = ty;
+        }
+        return ty;
     }
 
-    /// If the number with index `idx` is open, then it is closed with number
-    /// `number` and Num() returns true. If the number is closed, then `Num()`
-    /// returns true iff it is equal to `ty`.
-    bool Num(uint32_t idx, Number number) {
-        auto res = numbers_.emplace(idx, number.Value());
-        return res.second || res.first->second == number.Value();
+    /// If the number with index `idx` is undefined, then it is defined with the number `number` and
+    /// Num() returns true. If the number is defined, then `Num()` returns true iff it is equal to
+    /// `ty`.
+    bool Num(size_t idx, Number number) {
+        if (idx >= numbers_.Length()) {
+            numbers_.Resize(idx + 1, Number::invalid);
+        }
+        auto& n = numbers_[idx];
+        if (!n.IsValid()) {
+            n = number.Value();
+            return true;
+        }
+        return n.Value() == number.Value();
     }
 
-    /// Type returns the closed type with index `idx`.
-    /// An ICE is raised if the type is not closed.
-    const sem::Type* Type(uint32_t idx) const {
-        auto it = types_.find(idx);
-        if (it == types_.end()) {
-            TINT_ICE(Resolver, builder.Diagnostics())
-                << "type with index " << idx << " is not closed";
+    /// Type returns the template type with index `idx`, or nullptr if the type was not defined.
+    const sem::Type* Type(size_t idx) const {
+        if (idx >= types_.Length()) {
             return nullptr;
         }
-        TINT_ASSERT(Resolver, it != types_.end());
-        return it->second;
+        return types_[idx];
+    }
+
+    /// SetType replaces the template type with index `idx` with type `ty`.
+    void SetType(size_t idx, const sem::Type* ty) {
+        if (idx >= types_.Length()) {
+            types_.Resize(idx + 1);
+        }
+        types_[idx] = ty;
     }
 
     /// Type returns the number type with index `idx`.
-    /// An ICE is raised if the number is not closed.
-    Number Num(uint32_t idx) const {
-        auto it = numbers_.find(idx);
-        if (it == numbers_.end()) {
-            TINT_ICE(Resolver, builder.Diagnostics())
-                << "number with index " << idx << " is not closed";
+    Number Num(size_t idx) const {
+        if (idx >= numbers_.Length()) {
             return Number::invalid;
         }
-        return Number(it->second);
+        return numbers_[idx];
     }
 
   private:
-    ProgramBuilder& builder;
-    std::unordered_map<uint32_t, const sem::Type*> types_;
-    std::unordered_map<uint32_t, uint32_t> numbers_;
+    utils::Vector<const sem::Type*, 4> types_;
+    utils::Vector<Number, 2> numbers_;
 };
 
 /// Index type used for matcher indices
 using MatcherIndex = uint8_t;
 
-/// Index value used for open types / numbers that do not have a constraint
+/// Index value used for template types / numbers that do not have a constraint
 constexpr MatcherIndex kNoMatcher = std::numeric_limits<MatcherIndex>::max();
 
 /// MatchState holds the state used to match an overload.
 class MatchState {
   public:
     MatchState(ProgramBuilder& b,
-               ClosedState& c,
+               TemplateState& t,
                const Matchers& m,
-               const OverloadInfo& o,
+               const OverloadInfo* o,
                MatcherIndex const* matcher_indices)
-        : builder(b), closed(c), matchers(m), overload(o), matcher_indices_(matcher_indices) {}
+        : builder(b), templates(t), matchers(m), overload(o), matcher_indices_(matcher_indices) {}
 
     /// The program builder
     ProgramBuilder& builder;
-    /// The open / closed types and numbers
-    ClosedState& closed;
+    /// The template types and numbers
+    TemplateState& templates;
     /// The type and number matchers
     Matchers const& matchers;
     /// The current overload being evaluated
-    OverloadInfo const& overload;
+    OverloadInfo const* overload;
 
     /// Type uses the next TypeMatcher from the matcher indices to match the type
     /// `ty`. If the type matches, the canonical expected type is returned. If the
@@ -211,14 +242,14 @@ class TypeMatcher {
 
     /// Checks whether the given type matches the matcher rules, and returns the
     /// expected, canonicalized type on success.
-    /// Match may close open types and numbers in state.
+    /// Match may define and refine the template types and numbers in state.
     /// @param type the type to match
     /// @returns the canonicalized type on match, otherwise nullptr
     virtual const sem::Type* Match(MatchState& state, const sem::Type* type) const = 0;
 
     /// @return a string representation of the matcher. Used for printing error
     /// messages when no overload is found.
-    virtual std::string String(MatchState& state) const = 0;
+    virtual std::string String(MatchState* state) const = 0;
 };
 
 /// A NumberMatcher is the interface used to match a number or enumerator used
@@ -229,55 +260,58 @@ class NumberMatcher {
     virtual ~NumberMatcher() = default;
 
     /// Checks whether the given number matches the matcher rules.
-    /// Match may close open numbers in state.
+    /// Match may define template numbers in state.
     /// @param number the number to match
     /// @returns true if the argument type is as expected.
     virtual Number Match(MatchState& state, Number number) const = 0;
 
     /// @return a string representation of the matcher. Used for printing error
     /// messages when no overload is found.
-    virtual std::string String(MatchState& state) const = 0;
+    virtual std::string String(MatchState* state) const = 0;
 };
 
-/// OpenTypeMatcher is a Matcher for an open type.
-/// The OpenTypeMatcher will match against any type (so long as it is consistent
-/// across all uses in the overload)
-class OpenTypeMatcher : public TypeMatcher {
+/// TemplateTypeMatcher is a Matcher for a template type.
+/// The TemplateTypeMatcher will initially match against any type, and then will only be further
+/// constrained based on the conversion rules defined at https://www.w3.org/TR/WGSL/#conversion-rank
+class TemplateTypeMatcher : public TypeMatcher {
   public:
     /// Constructor
-    explicit OpenTypeMatcher(uint32_t index) : index_(index) {}
+    explicit TemplateTypeMatcher(size_t index) : index_(index) {}
 
     const sem::Type* Match(MatchState& state, const sem::Type* type) const override {
         if (type->Is<Any>()) {
-            return state.closed.Type(index_);
+            return state.templates.Type(index_);
         }
-        return state.closed.Type(index_, type) ? type : nullptr;
+        if (auto* templates = state.templates.Type(index_, type)) {
+            return templates;
+        }
+        return nullptr;
     }
 
-    std::string String(MatchState& state) const override;
+    std::string String(MatchState* state) const override;
 
   private:
-    uint32_t index_;
+    size_t index_;
 };
 
-/// OpenNumberMatcher is a Matcher for an open number.
-/// The OpenNumberMatcher will match against any number (so long as it is
-/// consistent for the overload)
-class OpenNumberMatcher : public NumberMatcher {
+/// TemplateNumberMatcher is a Matcher for a template number.
+/// The TemplateNumberMatcher will match against any number (so long as it is
+/// consistent for all uses in the overload)
+class TemplateNumberMatcher : public NumberMatcher {
   public:
-    explicit OpenNumberMatcher(uint32_t index) : index_(index) {}
+    explicit TemplateNumberMatcher(size_t index) : index_(index) {}
 
     Number Match(MatchState& state, Number number) const override {
         if (number.IsAny()) {
-            return state.closed.Num(index_);
+            return state.templates.Num(index_);
         }
-        return state.closed.Num(index_, number) ? number : Number::invalid;
+        return state.templates.Num(index_, number) ? number : Number::invalid;
     }
 
-    std::string String(MatchState& state) const override;
+    std::string String(MatchState* state) const override;
 
   private:
-    uint32_t index_;
+    size_t index_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -289,19 +323,61 @@ using TexelFormat = ast::TexelFormat;
 using Access = ast::Access;
 using StorageClass = ast::StorageClass;
 using ParameterUsage = sem::ParameterUsage;
-using PipelineStageSet = sem::PipelineStageSet;
 using PipelineStage = ast::PipelineStage;
+
+/// Unique flag bits for overloads
+enum class OverloadFlag {
+    kIsBuiltin,                 // The overload is a builtin ('fn')
+    kIsOperator,                // The overload is an operator ('op')
+    kIsConstructor,             // The overload is a type constructor ('ctor')
+    kIsConverter,               // The overload is a type converter ('conv')
+    kSupportsVertexPipeline,    // The overload can be used in vertex shaders
+    kSupportsFragmentPipeline,  // The overload can be used in fragment shaders
+    kSupportsComputePipeline,   // The overload can be used in compute shaders
+    kIsDeprecated,              // The overload is deprecated
+};
+
+// An enum set of OverloadFlag, used by OperatorInfo
+using OverloadFlags = utils::EnumSet<OverloadFlag>;
 
 bool match_bool(const sem::Type* ty) {
     return ty->IsAnyOf<Any, sem::Bool>();
+}
+
+const sem::AbstractFloat* build_fa(MatchState& state) {
+    return state.builder.create<sem::AbstractFloat>();
+}
+
+bool match_fa(const sem::Type* ty) {
+    return ty->IsAnyOf<Any, sem::AbstractFloat>();
+}
+
+const sem::AbstractInt* build_ia(MatchState& state) {
+    return state.builder.create<sem::AbstractInt>();
+}
+
+bool match_ia(const sem::Type* ty) {
+    return ty->IsAnyOf<Any, sem::AbstractInt>();
 }
 
 const sem::Bool* build_bool(MatchState& state) {
     return state.builder.create<sem::Bool>();
 }
 
+const sem::F16* build_f16(MatchState& state) {
+    return state.builder.create<sem::F16>();
+}
+
+bool match_f16(const sem::Type* ty) {
+    return ty->IsAnyOf<Any, sem::F16, sem::AbstractNumeric>();
+}
+
+const sem::F32* build_f32(MatchState& state) {
+    return state.builder.create<sem::F32>();
+}
+
 bool match_f32(const sem::Type* ty) {
-    return ty->IsAnyOf<Any, sem::F32>();
+    return ty->IsAnyOf<Any, sem::F32, sem::AbstractNumeric>();
 }
 
 const sem::I32* build_i32(MatchState& state) {
@@ -309,7 +385,7 @@ const sem::I32* build_i32(MatchState& state) {
 }
 
 bool match_i32(const sem::Type* ty) {
-    return ty->IsAnyOf<Any, sem::I32>();
+    return ty->IsAnyOf<Any, sem::I32, sem::AbstractInt>();
 }
 
 const sem::U32* build_u32(MatchState& state) {
@@ -317,11 +393,7 @@ const sem::U32* build_u32(MatchState& state) {
 }
 
 bool match_u32(const sem::Type* ty) {
-    return ty->IsAnyOf<Any, sem::U32>();
-}
-
-const sem::F32* build_f32(MatchState& state) {
-    return state.builder.create<sem::F32>();
+    return ty->IsAnyOf<Any, sem::U32, sem::AbstractInt>();
 }
 
 bool match_vec(const sem::Type* ty, Number& N, const sem::Type*& T) {
@@ -339,11 +411,7 @@ bool match_vec(const sem::Type* ty, Number& N, const sem::Type*& T) {
     return false;
 }
 
-const sem::Vector* build_vec(MatchState& state, Number N, const sem::Type* el) {
-    return state.builder.create<sem::Vector>(el, N.Value());
-}
-
-template <int N>
+template <uint32_t N>
 bool match_vec(const sem::Type* ty, const sem::Type*& T) {
     if (ty->Is<Any>()) {
         T = ty;
@@ -359,29 +427,22 @@ bool match_vec(const sem::Type* ty, const sem::Type*& T) {
     return false;
 }
 
-bool match_vec2(const sem::Type* ty, const sem::Type*& T) {
-    return match_vec<2>(ty, T);
+const sem::Vector* build_vec(MatchState& state, Number N, const sem::Type* el) {
+    return state.builder.create<sem::Vector>(el, N.Value());
 }
 
-const sem::Vector* build_vec2(MatchState& state, const sem::Type* T) {
-    return build_vec(state, Number(2), T);
+template <uint32_t N>
+const sem::Vector* build_vec(MatchState& state, const sem::Type* el) {
+    return state.builder.create<sem::Vector>(el, N);
 }
 
-bool match_vec3(const sem::Type* ty, const sem::Type*& T) {
-    return match_vec<3>(ty, T);
-}
+constexpr auto match_vec2 = match_vec<2>;
+constexpr auto match_vec3 = match_vec<3>;
+constexpr auto match_vec4 = match_vec<4>;
 
-const sem::Vector* build_vec3(MatchState& state, const sem::Type* T) {
-    return build_vec(state, Number(3), T);
-}
-
-bool match_vec4(const sem::Type* ty, const sem::Type*& T) {
-    return match_vec<4>(ty, T);
-}
-
-const sem::Vector* build_vec4(MatchState& state, const sem::Type* T) {
-    return build_vec(state, Number(4), T);
-}
+constexpr auto build_vec2 = build_vec<2>;
+constexpr auto build_vec3 = build_vec<3>;
+constexpr auto build_vec4 = build_vec<4>;
 
 bool match_mat(const sem::Type* ty, Number& M, Number& N, const sem::Type*& T) {
     if (ty->Is<Any>()) {
@@ -399,10 +460,51 @@ bool match_mat(const sem::Type* ty, Number& M, Number& N, const sem::Type*& T) {
     return false;
 }
 
-const sem::Matrix* build_mat(MatchState& state, Number N, Number M, const sem::Type* T) {
-    auto* column_type = state.builder.create<sem::Vector>(T, M.Value());
-    return state.builder.create<sem::Matrix>(column_type, N.Value());
+template <uint32_t C, uint32_t R>
+bool match_mat(const sem::Type* ty, const sem::Type*& T) {
+    if (ty->Is<Any>()) {
+        T = ty;
+        return true;
+    }
+    if (auto* m = ty->As<sem::Matrix>()) {
+        if (m->columns() == C && m->rows() == R) {
+            T = m->type();
+            return true;
+        }
+    }
+    return false;
 }
+
+const sem::Matrix* build_mat(MatchState& state, Number C, Number R, const sem::Type* T) {
+    auto* column_type = state.builder.create<sem::Vector>(T, R.Value());
+    return state.builder.create<sem::Matrix>(column_type, C.Value());
+}
+
+template <uint32_t C, uint32_t R>
+const sem::Matrix* build_mat(MatchState& state, const sem::Type* T) {
+    auto* column_type = state.builder.create<sem::Vector>(T, R);
+    return state.builder.create<sem::Matrix>(column_type, C);
+}
+
+constexpr auto build_mat2x2 = build_mat<2, 2>;
+constexpr auto build_mat2x3 = build_mat<2, 3>;
+constexpr auto build_mat2x4 = build_mat<2, 4>;
+constexpr auto build_mat3x2 = build_mat<3, 2>;
+constexpr auto build_mat3x3 = build_mat<3, 3>;
+constexpr auto build_mat3x4 = build_mat<3, 4>;
+constexpr auto build_mat4x2 = build_mat<4, 2>;
+constexpr auto build_mat4x3 = build_mat<4, 3>;
+constexpr auto build_mat4x4 = build_mat<4, 4>;
+
+constexpr auto match_mat2x2 = match_mat<2, 2>;
+constexpr auto match_mat2x3 = match_mat<2, 3>;
+constexpr auto match_mat2x4 = match_mat<2, 4>;
+constexpr auto match_mat3x2 = match_mat<3, 2>;
+constexpr auto match_mat3x3 = match_mat<3, 3>;
+constexpr auto match_mat3x4 = match_mat<3, 4>;
+constexpr auto match_mat4x2 = match_mat<4, 2>;
+constexpr auto match_mat4x3 = match_mat<4, 3>;
+constexpr auto match_mat4x4 = match_mat<4, 4>;
 
 bool match_array(const sem::Type* ty, const sem::Type*& T) {
     if (ty->Is<Any>()) {
@@ -630,30 +732,48 @@ const sem::ExternalTexture* build_texture_external(MatchState& state) {
 // Builtin types starting with a _ prefix cannot be declared in WGSL, so they
 // can only be used as return types. Because of this, they must only match Any,
 // which is used as the return type matcher.
-bool match_modf_result(const sem::Type* ty) {
-    return ty->Is<Any>();
+bool match_modf_result(const sem::Type* ty, const sem::Type*& T) {
+    if (!ty->Is<Any>()) {
+        return false;
+    }
+    T = ty;
+    return true;
 }
-bool match_modf_result_vec(const sem::Type* ty, Number& N) {
+bool match_modf_result_vec(const sem::Type* ty, Number& N, const sem::Type*& T) {
     if (!ty->Is<Any>()) {
         return false;
     }
     N = Number::any;
+    T = ty;
     return true;
 }
-bool match_frexp_result(const sem::Type* ty) {
-    return ty->Is<Any>();
+bool match_frexp_result(const sem::Type* ty, const sem::Type*& T) {
+    if (!ty->Is<Any>()) {
+        return false;
+    }
+    T = ty;
+    return true;
 }
-bool match_frexp_result_vec(const sem::Type* ty, Number& N) {
+bool match_frexp_result_vec(const sem::Type* ty, Number& N, const sem::Type*& T) {
     if (!ty->Is<Any>()) {
         return false;
     }
     N = Number::any;
+    T = ty;
     return true;
+}
+
+bool match_atomic_compare_exchange_result(const sem::Type* ty, const sem::Type*& T) {
+    if (ty->Is<Any>()) {
+        T = ty;
+        return true;
+    }
+    return false;
 }
 
 struct NameAndType {
     std::string name;
-    sem::Type* type;
+    const sem::Type* type;
 };
 const sem::Struct* build_struct(MatchState& state,
                                 std::string name,
@@ -687,25 +807,51 @@ const sem::Struct* build_struct(MatchState& state,
         /* size_no_padding */ size_without_padding);
 }
 
-const sem::Struct* build_modf_result(MatchState& state) {
-    auto* f32 = state.builder.create<sem::F32>();
-    return build_struct(state, "__modf_result", {{"fract", f32}, {"whole", f32}});
+const sem::Struct* build_modf_result(MatchState& state, const sem::Type* el) {
+    std::string display_name;
+    if (el->Is<sem::F16>()) {
+        display_name = "__modf_result_f16";
+    } else {
+        display_name = "__modf_result";
+    }
+    return build_struct(state, display_name, {{"fract", el}, {"whole", el}});
 }
-const sem::Struct* build_modf_result_vec(MatchState& state, Number& n) {
-    auto* vec_f32 = state.builder.create<sem::Vector>(state.builder.create<sem::F32>(), n.Value());
-    return build_struct(state, "__modf_result_vec" + std::to_string(n.Value()),
-                        {{"fract", vec_f32}, {"whole", vec_f32}});
+const sem::Struct* build_modf_result_vec(MatchState& state, Number& n, const sem::Type* el) {
+    std::string display_name;
+    if (el->Is<sem::F16>()) {
+        display_name = "__modf_result_vec" + std::to_string(n.Value()) + "_f16";
+    } else {
+        display_name = "__modf_result_vec" + std::to_string(n.Value());
+    }
+    auto* vec = state.builder.create<sem::Vector>(el, n.Value());
+    return build_struct(state, display_name, {{"fract", vec}, {"whole", vec}});
 }
-const sem::Struct* build_frexp_result(MatchState& state) {
-    auto* f32 = state.builder.create<sem::F32>();
+const sem::Struct* build_frexp_result(MatchState& state, const sem::Type* el) {
+    std::string display_name;
+    if (el->Is<sem::F16>()) {
+        display_name = "__frexp_result_f16";
+    } else {
+        display_name = "__frexp_result";
+    }
     auto* i32 = state.builder.create<sem::I32>();
-    return build_struct(state, "__frexp_result", {{"sig", f32}, {"exp", i32}});
+    return build_struct(state, display_name, {{"sig", el}, {"exp", i32}});
 }
-const sem::Struct* build_frexp_result_vec(MatchState& state, Number& n) {
-    auto* vec_f32 = state.builder.create<sem::Vector>(state.builder.create<sem::F32>(), n.Value());
+const sem::Struct* build_frexp_result_vec(MatchState& state, Number& n, const sem::Type* el) {
+    std::string display_name;
+    if (el->Is<sem::F16>()) {
+        display_name = "__frexp_result_vec" + std::to_string(n.Value()) + "_f16";
+    } else {
+        display_name = "__frexp_result_vec" + std::to_string(n.Value());
+    }
+    auto* vec = state.builder.create<sem::Vector>(el, n.Value());
     auto* vec_i32 = state.builder.create<sem::Vector>(state.builder.create<sem::I32>(), n.Value());
-    return build_struct(state, "__frexp_result_vec" + std::to_string(n.Value()),
-                        {{"sig", vec_f32}, {"exp", vec_i32}});
+    return build_struct(state, display_name, {{"sig", vec}, {"exp", vec_i32}});
+}
+const sem::Struct* build_atomic_compare_exchange_result(MatchState& state, const sem::Type* ty) {
+    return build_struct(
+        state, "__atomic_compare_exchange_result" + ty->FriendlyName(state.builder.Symbols()),
+        {{"old_value", const_cast<sem::Type*>(ty)},
+         {"exchanged", state.builder.create<sem::Bool>()}});
 }
 
 /// ParameterInfo describes a parameter
@@ -720,18 +866,18 @@ struct ParameterInfo {
     MatcherIndex const* const matcher_indices;
 };
 
-/// OpenTypeInfo describes an open type
-struct OpenTypeInfo {
-    /// Name of the open type (e.g. 'T')
+/// TemplateTypeInfo describes an template type
+struct TemplateTypeInfo {
+    /// Name of the template type (e.g. 'T')
     const char* name;
     /// Optional type matcher constraint.
     /// Either an index in Matchers::type, or kNoMatcher
     const MatcherIndex matcher_index;
 };
 
-/// OpenNumberInfo describes an open number
-struct OpenNumberInfo {
-    /// Name of the open number (e.g. 'N')
+/// TemplateNumberInfo describes a template number
+struct TemplateNumberInfo {
+    /// Name of the template number (e.g. 'N')
     const char* name;
     /// Optional number matcher constraint.
     /// Either an index in Matchers::number, or kNoMatcher
@@ -742,29 +888,29 @@ struct OpenNumberInfo {
 struct OverloadInfo {
     /// Total number of parameters for the overload
     const uint8_t num_parameters;
-    /// Total number of open types for the overload
-    const uint8_t num_open_types;
-    /// Total number of open numbers for the overload
-    const uint8_t num_open_numbers;
-    /// Pointer to the first open type
-    OpenTypeInfo const* const open_types;
-    /// Pointer to the first open number
-    OpenNumberInfo const* const open_numbers;
+    /// Total number of template types for the overload
+    const uint8_t num_template_types;
+    /// Total number of template numbers for the overload
+    const uint8_t num_template_numbers;
+    /// Pointer to the first template type
+    TemplateTypeInfo const* const template_types;
+    /// Pointer to the first template number
+    TemplateNumberInfo const* const template_numbers;
     /// Pointer to the first parameter
     ParameterInfo const* const parameters;
     /// Pointer to a list of matcher indices that index on Matchers::type and
     /// Matchers::number, used to build the return type. If the function has no
     /// return type then this is null
     MatcherIndex const* const return_matcher_indices;
-    /// The pipeline stages that this overload can be used in
-    PipelineStageSet supported_stages;
-    /// True if the overload is marked as deprecated
-    bool is_deprecated;
+    /// The flags for the overload
+    OverloadFlags flags;
+    /// The function used to evaluate the overload at shader-creation time.
+    ConstEval::Function const const_eval_fn;
 };
 
-/// BuiltinInfo describes a builtin function
-struct BuiltinInfo {
-    /// Number of overloads of the builtin function
+/// IntrinsicInfo describes a builtin function or operator overload
+struct IntrinsicInfo {
+    /// Number of overloads of the intrinsic
     const uint8_t num_overloads;
     /// Pointer to the start of the overloads for the function
     OverloadInfo const* const overloads;
@@ -772,9 +918,8 @@ struct BuiltinInfo {
 
 #include "intrinsic_table.inl"
 
-/// BuiltinPrototype describes a fully matched builtin function, which is
-/// used as a lookup for building unique sem::Builtin instances.
-struct BuiltinPrototype {
+/// IntrinsicPrototype describes a fully matched intrinsic.
+struct IntrinsicPrototype {
     /// Parameter describes a single parameter
     struct Parameter {
         /// Parameter type
@@ -783,34 +928,31 @@ struct BuiltinPrototype {
         ParameterUsage const usage = ParameterUsage::kNone;
     };
 
-    /// Hasher provides a hash function for the BuiltinPrototype
+    /// Hasher provides a hash function for the IntrinsicPrototype
     struct Hasher {
-        /// @param i the BuiltinPrototype to create a hash for
+        /// @param i the IntrinsicPrototype to create a hash for
         /// @return the hash value
-        inline std::size_t operator()(const BuiltinPrototype& i) const {
-            size_t hash = utils::Hash(i.parameters.size());
+        inline std::size_t operator()(const IntrinsicPrototype& i) const {
+            size_t hash = utils::Hash(i.parameters.Length());
             for (auto& p : i.parameters) {
-                utils::HashCombine(&hash, p.type, p.usage);
+                hash = utils::HashCombine(hash, p.type, p.usage);
             }
-            return utils::Hash(hash, i.type, i.return_type, i.supported_stages, i.is_deprecated);
+            return utils::Hash(hash, i.overload, i.return_type);
         }
     };
 
-    sem::BuiltinType type = sem::BuiltinType::kNone;
-    std::vector<Parameter> parameters;
+    const OverloadInfo* overload = nullptr;
     sem::Type const* return_type = nullptr;
-    PipelineStageSet supported_stages;
-    bool is_deprecated = false;
+    utils::Vector<Parameter, kNumFixedParams> parameters;
 };
 
-/// Equality operator for BuiltinPrototype
-bool operator==(const BuiltinPrototype& a, const BuiltinPrototype& b) {
-    if (a.type != b.type || a.supported_stages != b.supported_stages ||
-        a.return_type != b.return_type || a.is_deprecated != b.is_deprecated ||
-        a.parameters.size() != b.parameters.size()) {
+/// Equality operator for IntrinsicPrototype
+bool operator==(const IntrinsicPrototype& a, const IntrinsicPrototype& b) {
+    if (a.overload != b.overload || a.return_type != b.return_type ||
+        a.parameters.Length() != b.parameters.Length()) {
         return false;
     }
-    for (size_t i = 0; i < a.parameters.size(); i++) {
+    for (size_t i = 0; i < a.parameters.Length(); i++) {
         auto& pa = a.parameters[i];
         auto& pb = b.parameters[i];
         if (pa.type != pb.type || pa.usage != pb.usage) {
@@ -825,36 +967,140 @@ class Impl : public IntrinsicTable {
   public:
     explicit Impl(ProgramBuilder& builder);
 
-    const sem::Builtin* Lookup(sem::BuiltinType builtin_type,
-                               const std::vector<const sem::Type*>& args,
-                               const Source& source) override;
+    Builtin Lookup(sem::BuiltinType builtin_type,
+                   utils::VectorRef<const sem::Type*> args,
+                   const Source& source) override;
+
+    UnaryOperator Lookup(ast::UnaryOp op, const sem::Type* arg, const Source& source) override;
+
+    BinaryOperator Lookup(ast::BinaryOp op,
+                          const sem::Type* lhs,
+                          const sem::Type* rhs,
+                          const Source& source,
+                          bool is_compound) override;
+
+    CtorOrConv Lookup(CtorConvIntrinsic type,
+                      const sem::Type* template_arg,
+                      utils::VectorRef<const sem::Type*> args,
+                      const Source& source) override;
 
   private:
-    const sem::Builtin* Match(sem::BuiltinType builtin_type,
-                              const OverloadInfo& overload,
-                              const std::vector<const sem::Type*>& args,
-                              int& match_score);
+    /// Candidate holds information about an overload evaluated for resolution.
+    struct Candidate {
+        /// The candidate overload
+        const OverloadInfo* overload;
+        /// The template types and numbers
+        TemplateState templates;
+        /// The parameter types for the candidate overload
+        utils::Vector<IntrinsicPrototype::Parameter, kNumFixedParams> parameters;
+        /// The match-score of the candidate overload.
+        /// A score of zero indicates an exact match.
+        /// Non-zero scores are used for diagnostics when no overload matches.
+        /// Lower scores are displayed first (top-most).
+        size_t score;
+    };
 
-    MatchState Match(ClosedState& closed,
-                     const OverloadInfo& overload,
+    /// A list of candidates
+    using Candidates = utils::Vector<Candidate, kNumFixedCandidates>;
+
+    /// Callback function when no overloads match.
+    using OnNoMatch = std::function<void(utils::VectorRef<Candidate>)>;
+
+    /// Sorts the candidates based on their score, with the lowest (best-ranking) scores first.
+    static inline void SortCandidates(Candidates& candidates) {
+        std::stable_sort(candidates.begin(), candidates.end(),
+                         [&](const Candidate& a, const Candidate& b) { return a.score < b.score; });
+    }
+
+    /// Attempts to find a single intrinsic overload that matches the provided argument types.
+    /// @param intrinsic the intrinsic being called
+    /// @param intrinsic_name the name of the intrinsic
+    /// @param args the argument types
+    /// @param templates initial template state. This may contain explicitly specified template
+    ///                  arguments. For example `vec3<f32>()` would have the first template-type
+    ///                  defined as `f32`.
+    /// @param on_no_match an error callback when no intrinsic overloads matched the provided
+    ///                    arguments.
+    /// @returns the matched intrinsic. If no intrinsic could be matched then IntrinsicPrototype
+    ///          will hold nullptrs for IntrinsicPrototype::overload and
+    ///          IntrinsicPrototype::return_type.
+    IntrinsicPrototype MatchIntrinsic(const IntrinsicInfo& intrinsic,
+                                      const char* intrinsic_name,
+                                      utils::VectorRef<const sem::Type*> args,
+                                      TemplateState templates,
+                                      OnNoMatch on_no_match) const;
+
+    /// Evaluates the single overload for the provided argument types.
+    /// @param overload the overload being considered
+    /// @param args the argument types
+    /// @param templates initial template state. This may contain explicitly specified template
+    ///                  arguments. For example `vec3<f32>()` would have the first template-type
+    ///                  template as `f32`.
+    /// @returns the evaluated Candidate information.
+    Candidate ScoreOverload(const OverloadInfo* overload,
+                            utils::VectorRef<const sem::Type*> args,
+                            TemplateState templates) const;
+
+    /// Performs overload resolution given the list of candidates, by ranking the conversions of
+    /// arguments to the each of the candidate's parameter types.
+    /// @param candidates the list of candidate overloads
+    /// @param intrinsic_name the name of the intrinsic
+    /// @param args the argument types
+    /// @param templates initial template state. This may contain explicitly specified template
+    ///                  arguments. For example `vec3<f32>()` would have the first template-type
+    ///                  template as `f32`.
+    /// @see https://www.w3.org/TR/WGSL/#overload-resolution-section
+    /// @returns the resolved Candidate.
+    Candidate ResolveCandidate(Candidates&& candidates,
+                               const char* intrinsic_name,
+                               utils::VectorRef<const sem::Type*> args,
+                               TemplateState templates) const;
+
+    /// Match constructs a new MatchState
+    /// @param templates the template state used for matcher evaluation
+    /// @param overload the overload being evaluated
+    /// @param matcher_indices pointer to a list of matcher indices
+    MatchState Match(TemplateState& templates,
+                     const OverloadInfo* overload,
                      MatcherIndex const* matcher_indices) const;
 
+    // Prints the overload for emitting diagnostics
     void PrintOverload(std::ostream& ss,
-                       const OverloadInfo& overload,
-                       sem::BuiltinType builtin_type) const;
+                       const OverloadInfo* overload,
+                       const char* intrinsic_name) const;
+
+    // Prints the list of candidates for emitting diagnostics
+    void PrintCandidates(std::ostream& ss,
+                         utils::VectorRef<Candidate> candidates,
+                         const char* intrinsic_name) const;
+
+    /// Raises an error when no overload is a clear winner of overload resolution
+    void ErrAmbiguousOverload(const char* intrinsic_name,
+                              utils::VectorRef<const sem::Type*> args,
+                              TemplateState templates,
+                              utils::VectorRef<Candidate> candidates) const;
 
     ProgramBuilder& builder;
     Matchers matchers;
-    std::unordered_map<BuiltinPrototype, sem::Builtin*, BuiltinPrototype::Hasher> builtins;
+    std::unordered_map<IntrinsicPrototype, sem::Builtin*, IntrinsicPrototype::Hasher> builtins;
+    std::unordered_map<IntrinsicPrototype, sem::TypeConstructor*, IntrinsicPrototype::Hasher>
+        constructors;
+    std::unordered_map<IntrinsicPrototype, sem::TypeConversion*, IntrinsicPrototype::Hasher>
+        converters;
 };
 
 /// @return a string representing a call to a builtin with the given argument
 /// types.
 std::string CallSignature(ProgramBuilder& builder,
-                          sem::BuiltinType builtin_type,
-                          const std::vector<const sem::Type*>& args) {
+                          const char* intrinsic_name,
+                          utils::VectorRef<const sem::Type*> args,
+                          const sem::Type* template_arg = nullptr) {
     std::stringstream ss;
-    ss << sem::str(builtin_type) << "(";
+    ss << intrinsic_name;
+    if (template_arg) {
+        ss << "<" << template_arg->FriendlyName(builder.Symbols()) << ">";
+    }
+    ss << "(";
     {
         bool first = true;
         for (auto* arg : args) {
@@ -870,185 +1116,497 @@ std::string CallSignature(ProgramBuilder& builder,
     return ss.str();
 }
 
-std::string OpenTypeMatcher::String(MatchState& state) const {
-    return state.overload.open_types[index_].name;
+std::string TemplateTypeMatcher::String(MatchState* state) const {
+    return state->overload->template_types[index_].name;
 }
 
-std::string OpenNumberMatcher::String(MatchState& state) const {
-    return state.overload.open_numbers[index_].name;
+std::string TemplateNumberMatcher::String(MatchState* state) const {
+    return state->overload->template_numbers[index_].name;
 }
 
 Impl::Impl(ProgramBuilder& b) : builder(b) {}
 
-const sem::Builtin* Impl::Lookup(sem::BuiltinType builtin_type,
-                                 const std::vector<const sem::Type*>& args,
-                                 const Source& source) {
-    // Candidate holds information about a mismatched overload that could be what
-    // the user intended to call.
-    struct Candidate {
-        const OverloadInfo* overload;
-        int score;
+Impl::Builtin Impl::Lookup(sem::BuiltinType builtin_type,
+                           utils::VectorRef<const sem::Type*> args,
+                           const Source& source) {
+    const char* intrinsic_name = sem::str(builtin_type);
+
+    // Generates an error when no overloads match the provided arguments
+    auto on_no_match = [&](utils::VectorRef<Candidate> candidates) {
+        std::stringstream ss;
+        ss << "no matching call to " << CallSignature(builder, intrinsic_name, args) << std::endl;
+        if (!candidates.IsEmpty()) {
+            ss << std::endl
+               << candidates.Length() << " candidate function"
+               << (candidates.Length() > 1 ? "s:" : ":") << std::endl;
+            PrintCandidates(ss, candidates, intrinsic_name);
+        }
+        builder.Diagnostics().add_error(diag::System::Resolver, ss.str(), source);
     };
 
-    // The list of failed matches that had promise.
-    std::vector<Candidate> candidates;
-
-    auto& builtin = kBuiltins[static_cast<uint32_t>(builtin_type)];
-    for (uint32_t o = 0; o < builtin.num_overloads; o++) {
-        int match_score = 1000;
-        auto& overload = builtin.overloads[o];
-        if (auto* match = Match(builtin_type, overload, args, match_score)) {
-            return match;
-        }
-        if (match_score > 0) {
-            candidates.emplace_back(Candidate{&overload, match_score});
-        }
+    // Resolve the intrinsic overload
+    auto match = MatchIntrinsic(kBuiltins[static_cast<size_t>(builtin_type)], intrinsic_name, args,
+                                TemplateState{}, on_no_match);
+    if (!match.overload) {
+        return {};
     }
 
-    // Sort the candidates with the most promising first
-    std::stable_sort(candidates.begin(), candidates.end(),
-                     [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
-
-    // Generate an error message
-    std::stringstream ss;
-    ss << "no matching call to " << CallSignature(builder, builtin_type, args) << std::endl;
-    if (!candidates.empty()) {
-        ss << std::endl;
-        ss << candidates.size() << " candidate function" << (candidates.size() > 1 ? "s:" : ":")
-           << std::endl;
-        for (auto& candidate : candidates) {
-            ss << "  ";
-            PrintOverload(ss, *candidate.overload, builtin_type);
-            ss << std::endl;
+    // De-duplicate builtins that are identical.
+    auto* sem = utils::GetOrCreate(builtins, match, [&] {
+        utils::Vector<sem::Parameter*, kNumFixedParams> params;
+        params.Reserve(match.parameters.Length());
+        for (auto& p : match.parameters) {
+            params.Push(builder.create<sem::Parameter>(
+                nullptr, static_cast<uint32_t>(params.Length()), p.type, ast::StorageClass::kNone,
+                ast::Access::kUndefined, p.usage));
         }
-    }
-    builder.Diagnostics().add_error(diag::System::Resolver, ss.str(), source);
-    return nullptr;
+        sem::PipelineStageSet supported_stages;
+        if (match.overload->flags.Contains(OverloadFlag::kSupportsVertexPipeline)) {
+            supported_stages.Add(ast::PipelineStage::kVertex);
+        }
+        if (match.overload->flags.Contains(OverloadFlag::kSupportsFragmentPipeline)) {
+            supported_stages.Add(ast::PipelineStage::kFragment);
+        }
+        if (match.overload->flags.Contains(OverloadFlag::kSupportsComputePipeline)) {
+            supported_stages.Add(ast::PipelineStage::kCompute);
+        }
+        auto eval_stage = match.overload->const_eval_fn ? sem::EvaluationStage::kConstant
+                                                        : sem::EvaluationStage::kRuntime;
+        return builder.create<sem::Builtin>(
+            builtin_type, match.return_type, std::move(params), eval_stage, supported_stages,
+            match.overload->flags.Contains(OverloadFlag::kIsDeprecated));
+    });
+    return Builtin{sem, match.overload->const_eval_fn};
 }
 
-const sem::Builtin* Impl::Match(sem::BuiltinType builtin_type,
-                                const OverloadInfo& overload,
-                                const std::vector<const sem::Type*>& args,
-                                int& match_score) {
-    // Score wait for argument <-> parameter count matches / mismatches
-    constexpr int kScorePerParamArgMismatch = -1;
-    constexpr int kScorePerMatchedParam = 2;
-    constexpr int kScorePerMatchedOpenType = 1;
-    constexpr int kScorePerMatchedOpenNumber = 1;
-
-    auto num_parameters = overload.num_parameters;
-    auto num_arguments = static_cast<decltype(num_parameters)>(args.size());
-
-    bool overload_matched = true;
-
-    if (num_parameters != num_arguments) {
-        match_score += kScorePerParamArgMismatch * (std::max(num_parameters, num_arguments) -
-                                                    std::min(num_parameters, num_arguments));
-        overload_matched = false;
-    }
-
-    ClosedState closed(builder);
-
-    std::vector<BuiltinPrototype::Parameter> parameters;
-
-    auto num_params = std::min(num_parameters, num_arguments);
-    for (uint32_t p = 0; p < num_params; p++) {
-        auto& parameter = overload.parameters[p];
-        auto* indices = parameter.matcher_indices;
-        auto* type = Match(closed, overload, indices).Type(args[p]->UnwrapRef());
-        if (type) {
-            parameters.emplace_back(BuiltinPrototype::Parameter{type, parameter.usage});
-            match_score += kScorePerMatchedParam;
-        } else {
-            overload_matched = false;
+IntrinsicTable::UnaryOperator Impl::Lookup(ast::UnaryOp op,
+                                           const sem::Type* arg,
+                                           const Source& source) {
+    auto [intrinsic_index, intrinsic_name] = [&]() -> std::pair<size_t, const char*> {
+        switch (op) {
+            case ast::UnaryOp::kComplement:
+                return {kUnaryOperatorComplement, "operator ~ "};
+            case ast::UnaryOp::kNegation:
+                return {kUnaryOperatorMinus, "operator - "};
+            case ast::UnaryOp::kNot:
+                return {kUnaryOperatorNot, "operator ! "};
+            default:
+                return {0, "<unknown>"};
         }
+    }();
+
+    utils::Vector args{arg};
+
+    // Generates an error when no overloads match the provided arguments
+    auto on_no_match = [&, name = intrinsic_name](utils::VectorRef<Candidate> candidates) {
+        std::stringstream ss;
+        ss << "no matching overload for " << CallSignature(builder, name, args) << std::endl;
+        if (!candidates.IsEmpty()) {
+            ss << std::endl
+               << candidates.Length() << " candidate operator"
+               << (candidates.Length() > 1 ? "s:" : ":") << std::endl;
+            PrintCandidates(ss, candidates, name);
+        }
+        builder.Diagnostics().add_error(diag::System::Resolver, ss.str(), source);
+    };
+
+    // Resolve the intrinsic overload
+    auto match = MatchIntrinsic(kUnaryOperators[intrinsic_index], intrinsic_name, args,
+                                TemplateState{}, on_no_match);
+    if (!match.overload) {
+        return {};
     }
 
-    if (overload_matched) {
-        // Check all constrained open types matched
-        for (uint32_t ot = 0; ot < overload.num_open_types; ot++) {
-            auto& open_type = overload.open_types[ot];
-            if (open_type.matcher_index != kNoMatcher) {
-                auto* index = &open_type.matcher_index;
-                if (Match(closed, overload, index).Type(closed.Type(ot))) {
-                    match_score += kScorePerMatchedOpenType;
-                } else {
-                    overload_matched = false;
-                }
+    return UnaryOperator{
+        match.return_type,
+        match.parameters[0].type,
+        match.overload->const_eval_fn,
+    };
+}
+
+IntrinsicTable::BinaryOperator Impl::Lookup(ast::BinaryOp op,
+                                            const sem::Type* lhs,
+                                            const sem::Type* rhs,
+                                            const Source& source,
+                                            bool is_compound) {
+    auto [intrinsic_index, intrinsic_name] = [&]() -> std::pair<size_t, const char*> {
+        switch (op) {
+            case ast::BinaryOp::kAnd:
+                return {kBinaryOperatorAnd, is_compound ? "operator &= " : "operator & "};
+            case ast::BinaryOp::kOr:
+                return {kBinaryOperatorOr, is_compound ? "operator |= " : "operator | "};
+            case ast::BinaryOp::kXor:
+                return {kBinaryOperatorXor, is_compound ? "operator ^= " : "operator ^ "};
+            case ast::BinaryOp::kLogicalAnd:
+                return {kBinaryOperatorLogicalAnd, "operator && "};
+            case ast::BinaryOp::kLogicalOr:
+                return {kBinaryOperatorLogicalOr, "operator || "};
+            case ast::BinaryOp::kEqual:
+                return {kBinaryOperatorEqual, "operator == "};
+            case ast::BinaryOp::kNotEqual:
+                return {kBinaryOperatorNotEqual, "operator != "};
+            case ast::BinaryOp::kLessThan:
+                return {kBinaryOperatorLessThan, "operator < "};
+            case ast::BinaryOp::kGreaterThan:
+                return {kBinaryOperatorGreaterThan, "operator > "};
+            case ast::BinaryOp::kLessThanEqual:
+                return {kBinaryOperatorLessThanEqual, "operator <= "};
+            case ast::BinaryOp::kGreaterThanEqual:
+                return {kBinaryOperatorGreaterThanEqual, "operator >= "};
+            case ast::BinaryOp::kShiftLeft:
+                return {kBinaryOperatorShiftLeft, is_compound ? "operator <<= " : "operator << "};
+            case ast::BinaryOp::kShiftRight:
+                return {kBinaryOperatorShiftRight, is_compound ? "operator >>= " : "operator >> "};
+            case ast::BinaryOp::kAdd:
+                return {kBinaryOperatorPlus, is_compound ? "operator += " : "operator + "};
+            case ast::BinaryOp::kSubtract:
+                return {kBinaryOperatorMinus, is_compound ? "operator -= " : "operator - "};
+            case ast::BinaryOp::kMultiply:
+                return {kBinaryOperatorStar, is_compound ? "operator *= " : "operator * "};
+            case ast::BinaryOp::kDivide:
+                return {kBinaryOperatorDivide, is_compound ? "operator /= " : "operator / "};
+            case ast::BinaryOp::kModulo:
+                return {kBinaryOperatorModulo, is_compound ? "operator %= " : "operator % "};
+            default:
+                return {0, "<unknown>"};
+        }
+    }();
+
+    utils::Vector args{lhs, rhs};
+
+    // Generates an error when no overloads match the provided arguments
+    auto on_no_match = [&, name = intrinsic_name](utils::VectorRef<Candidate> candidates) {
+        std::stringstream ss;
+        ss << "no matching overload for " << CallSignature(builder, name, args) << std::endl;
+        if (!candidates.IsEmpty()) {
+            ss << std::endl
+               << candidates.Length() << " candidate operator"
+               << (candidates.Length() > 1 ? "s:" : ":") << std::endl;
+            PrintCandidates(ss, candidates, name);
+        }
+        builder.Diagnostics().add_error(diag::System::Resolver, ss.str(), source);
+    };
+
+    // Resolve the intrinsic overload
+    auto match = MatchIntrinsic(kBinaryOperators[intrinsic_index], intrinsic_name, args,
+                                TemplateState{}, on_no_match);
+    if (!match.overload) {
+        return {};
+    }
+
+    return BinaryOperator{
+        match.return_type,
+        match.parameters[0].type,
+        match.parameters[1].type,
+        match.overload->const_eval_fn,
+    };
+}
+
+IntrinsicTable::CtorOrConv Impl::Lookup(CtorConvIntrinsic type,
+                                        const sem::Type* template_arg,
+                                        utils::VectorRef<const sem::Type*> args,
+                                        const Source& source) {
+    auto name = str(type);
+
+    // Generates an error when no overloads match the provided arguments
+    auto on_no_match = [&](utils::VectorRef<Candidate> candidates) {
+        std::stringstream ss;
+        ss << "no matching constructor for " << CallSignature(builder, name, args, template_arg)
+           << std::endl;
+        Candidates ctor, conv;
+        for (auto candidate : candidates) {
+            if (candidate.overload->flags.Contains(OverloadFlag::kIsConstructor)) {
+                ctor.Push(candidate);
+            } else {
+                conv.Push(candidate);
             }
         }
-    }
-
-    if (overload_matched) {
-        // Check all constrained open numbers matched
-        for (uint32_t on = 0; on < overload.num_open_numbers; on++) {
-            auto& open_number = overload.open_numbers[on];
-            if (open_number.matcher_index != kNoMatcher) {
-                auto* index = &open_number.matcher_index;
-                if (Match(closed, overload, index).Num(closed.Num(on)).IsValid()) {
-                    match_score += kScorePerMatchedOpenNumber;
-                } else {
-                    overload_matched = false;
-                }
-            }
+        if (!ctor.IsEmpty()) {
+            ss << std::endl
+               << ctor.Length() << " candidate constructor" << (ctor.Length() > 1 ? "s:" : ":")
+               << std::endl;
+            PrintCandidates(ss, ctor, name);
         }
+        if (!conv.IsEmpty()) {
+            ss << std::endl
+               << conv.Length() << " candidate conversion" << (conv.Length() > 1 ? "s:" : ":")
+               << std::endl;
+            PrintCandidates(ss, conv, name);
+        }
+        builder.Diagnostics().add_error(diag::System::Resolver, ss.str(), source);
+    };
+
+    // If a template type was provided, then close the 0'th type with this.
+    TemplateState templates;
+    if (template_arg) {
+        templates.Type(0, template_arg);
     }
 
-    if (!overload_matched) {
-        return nullptr;
+    // Resolve the intrinsic overload
+    auto match = MatchIntrinsic(kConstructorsAndConverters[static_cast<size_t>(type)], name, args,
+                                templates, on_no_match);
+    if (!match.overload) {
+        return {};
+    }
+
+    // Was this overload a constructor or conversion?
+    if (match.overload->flags.Contains(OverloadFlag::kIsConstructor)) {
+        utils::Vector<const sem::Parameter*, 8> params;
+        params.Reserve(match.parameters.Length());
+        for (auto& p : match.parameters) {
+            params.Push(builder.create<sem::Parameter>(
+                nullptr, static_cast<uint32_t>(params.Length()), p.type, ast::StorageClass::kNone,
+                ast::Access::kUndefined, p.usage));
+        }
+        auto eval_stage = match.overload->const_eval_fn ? sem::EvaluationStage::kConstant
+                                                        : sem::EvaluationStage::kRuntime;
+        auto* target = utils::GetOrCreate(constructors, match, [&]() {
+            return builder.create<sem::TypeConstructor>(match.return_type, std::move(params),
+                                                        eval_stage);
+        });
+        return CtorOrConv{target, match.overload->const_eval_fn};
+    }
+
+    // Conversion.
+    auto* target = utils::GetOrCreate(converters, match, [&]() {
+        auto param = builder.create<sem::Parameter>(
+            nullptr, 0u, match.parameters[0].type, ast::StorageClass::kNone,
+            ast::Access::kUndefined, match.parameters[0].usage);
+        auto eval_stage = match.overload->const_eval_fn ? sem::EvaluationStage::kConstant
+                                                        : sem::EvaluationStage::kRuntime;
+        return builder.create<sem::TypeConversion>(match.return_type, param, eval_stage);
+    });
+    return CtorOrConv{target, match.overload->const_eval_fn};
+}
+
+IntrinsicPrototype Impl::MatchIntrinsic(const IntrinsicInfo& intrinsic,
+                                        const char* intrinsic_name,
+                                        utils::VectorRef<const sem::Type*> args,
+                                        TemplateState templates,
+                                        OnNoMatch on_no_match) const {
+    size_t num_matched = 0;
+    size_t match_idx = 0;
+    utils::Vector<Candidate, kNumFixedCandidates> candidates;
+    candidates.Reserve(intrinsic.num_overloads);
+    for (size_t overload_idx = 0; overload_idx < static_cast<size_t>(intrinsic.num_overloads);
+         overload_idx++) {
+        auto candidate = ScoreOverload(&intrinsic.overloads[overload_idx], args, templates);
+        if (candidate.score == 0) {
+            match_idx = overload_idx;
+            num_matched++;
+        }
+        candidates.Push(std::move(candidate));
+    }
+
+    // How many candidates matched?
+    if (num_matched == 0) {
+        // Sort the candidates with the most promising first
+        SortCandidates(candidates);
+        on_no_match(std::move(candidates));
+        return {};
+    }
+
+    Candidate match;
+
+    if (num_matched == 1) {
+        match = std::move(candidates[match_idx]);
+    } else {
+        match = ResolveCandidate(std::move(candidates), intrinsic_name, args, std::move(templates));
+        if (!match.overload) {
+            // Ambiguous overload. ResolveCandidate() will have already raised an error diagnostic.
+            return {};
+        }
     }
 
     // Build the return type
     const sem::Type* return_type = nullptr;
-    if (auto* indices = overload.return_matcher_indices) {
+    if (auto* indices = match.overload->return_matcher_indices) {
         Any any;
-        return_type = Match(closed, overload, indices).Type(&any);
+        return_type = Match(match.templates, match.overload, indices).Type(&any);
         if (!return_type) {
-            std::stringstream ss;
-            PrintOverload(ss, overload, builtin_type);
-            TINT_ICE(Resolver, builder.Diagnostics())
-                << "MatchState.Match() returned null for " << ss.str();
-            return nullptr;
+            TINT_ICE(Resolver, builder.Diagnostics()) << "MatchState.Match() returned null";
+            return {};
         }
     } else {
         return_type = builder.create<sem::Void>();
     }
 
-    BuiltinPrototype builtin;
-    builtin.type = builtin_type;
-    builtin.return_type = return_type;
-    builtin.parameters = std::move(parameters);
-    builtin.supported_stages = overload.supported_stages;
-    builtin.is_deprecated = overload.is_deprecated;
-
-    // De-duplicate builtins that are identical.
-    return utils::GetOrCreate(builtins, builtin, [&] {
-        std::vector<sem::Parameter*> params;
-        params.reserve(builtin.parameters.size());
-        for (auto& p : builtin.parameters) {
-            params.emplace_back(builder.create<sem::Parameter>(
-                nullptr, static_cast<uint32_t>(params.size()), p.type, ast::StorageClass::kNone,
-                ast::Access::kUndefined, p.usage));
-        }
-        return builder.create<sem::Builtin>(builtin.type, builtin.return_type, std::move(params),
-                                            builtin.supported_stages, builtin.is_deprecated);
-    });
+    return IntrinsicPrototype{match.overload, return_type, std::move(match.parameters)};
 }
 
-MatchState Impl::Match(ClosedState& closed,
-                       const OverloadInfo& overload,
+Impl::Candidate Impl::ScoreOverload(const OverloadInfo* overload,
+                                    utils::VectorRef<const sem::Type*> args,
+                                    TemplateState templates) const {
+    // Penalty weights for overload mismatching.
+    // This scoring is used to order the suggested overloads in diagnostic on overload mismatch, and
+    // has no impact for a correct program.
+    // The overloads with the lowest score will be displayed first (top-most).
+    constexpr int kMismatchedParamCountPenalty = 3;
+    constexpr int kMismatchedParamTypePenalty = 2;
+    constexpr int kMismatchedTemplateTypePenalty = 1;
+    constexpr int kMismatchedTemplateNumberPenalty = 1;
+
+    size_t num_parameters = static_cast<size_t>(overload->num_parameters);
+    size_t num_arguments = static_cast<size_t>(args.Length());
+
+    size_t score = 0;
+
+    if (num_parameters != num_arguments) {
+        score += kMismatchedParamCountPenalty * (std::max(num_parameters, num_arguments) -
+                                                 std::min(num_parameters, num_arguments));
+    }
+
+    // Invoke the matchers for each parameter <-> argument pair.
+    // If any arguments cannot be matched, then `score` will be increased.
+    // If the overload has any template types or numbers then these will be set based on the
+    // argument types. Template types may be refined by constraining with later argument types. For
+    // example calling `F<T>(T, T)` with the argument types (abstract-int, i32) will first set T to
+    // abstract-int when matching the first argument, and then constrained down to i32 when matching
+    // the second argument.
+    // Note that inferred template types are not tested against their matchers at this point.
+    auto num_params = std::min(num_parameters, num_arguments);
+    for (size_t p = 0; p < num_params; p++) {
+        auto& parameter = overload->parameters[p];
+        auto* indices = parameter.matcher_indices;
+        if (!Match(templates, overload, indices).Type(args[p]->UnwrapRef())) {
+            score += kMismatchedParamTypePenalty;
+        }
+    }
+
+    if (score == 0) {
+        // Check all constrained template types matched their constraint matchers.
+        // If the template type *does not* match any of the types in the constraint matcher, then
+        // `score` is incremented. If the template type *does* match a type, then the template type
+        // is replaced with the first matching type. The order of types in the template matcher is
+        // important here, which can be controlled with the [[precedence(N)]] decorations on the
+        // types in intrinsics.def.
+        for (size_t ot = 0; ot < overload->num_template_types; ot++) {
+            auto* matcher_index = &overload->template_types[ot].matcher_index;
+            if (*matcher_index != kNoMatcher) {
+                if (auto* template_type = templates.Type(ot)) {
+                    if (auto* ty = Match(templates, overload, matcher_index).Type(template_type)) {
+                        // Template type matched one of the types in the template type's matcher.
+                        // Replace the template type with this type.
+                        templates.SetType(ot, ty);
+                        continue;
+                    }
+                }
+                score += kMismatchedTemplateTypePenalty;
+            }
+        }
+    }
+
+    if (score == 0) {
+        // Check all constrained open numbers matched.
+        // Unlike template types, numbers are not constrained, so we're just checking that the
+        // inferred number matches the constraints on the overload. Increments `score` if the
+        // template numbers do not match their constraint matchers.
+        for (size_t on = 0; on < overload->num_template_numbers; on++) {
+            auto* matcher_index = &overload->template_numbers[on].matcher_index;
+            if (*matcher_index != kNoMatcher) {
+                auto template_num = templates.Num(on);
+                if (!template_num.IsValid() ||
+                    !Match(templates, overload, matcher_index).Num(template_num).IsValid()) {
+                    score += kMismatchedTemplateNumberPenalty;
+                }
+            }
+        }
+    }
+
+    // Now that all the template types have been finalized, we can construct the parameters.
+    utils::Vector<IntrinsicPrototype::Parameter, kNumFixedParams> parameters;
+    if (score == 0) {
+        parameters.Reserve(num_params);
+        for (size_t p = 0; p < num_params; p++) {
+            auto& parameter = overload->parameters[p];
+            auto* indices = parameter.matcher_indices;
+            auto* ty = Match(templates, overload, indices).Type(args[p]->UnwrapRef());
+            parameters.Emplace(ty, parameter.usage);
+        }
+    }
+
+    return Candidate{overload, templates, parameters, score};
+}
+
+Impl::Candidate Impl::ResolveCandidate(Impl::Candidates&& candidates,
+                                       const char* intrinsic_name,
+                                       utils::VectorRef<const sem::Type*> args,
+                                       TemplateState templates) const {
+    utils::Vector<uint32_t, kNumFixedParams> best_ranks;
+    best_ranks.Resize(args.Length(), 0xffffffff);
+    size_t num_matched = 0;
+    Candidate* best = nullptr;
+    for (auto& candidate : candidates) {
+        if (candidate.score > 0) {
+            continue;  // Candidate has already been ruled out.
+        }
+        bool some_won = false;   // An argument ranked less than the 'best' overload's argument
+        bool some_lost = false;  // An argument ranked more than the 'best' overload's argument
+        for (size_t i = 0; i < args.Length(); i++) {
+            auto rank = sem::Type::ConversionRank(args[i], candidate.parameters[i].type);
+            if (best_ranks[i] > rank) {
+                best_ranks[i] = rank;
+                some_won = true;
+            } else if (best_ranks[i] < rank) {
+                some_lost = true;
+            }
+        }
+        // If no arguments of this candidate ranked worse than the previous best candidate, then
+        // this candidate becomes the new best candidate.
+        // If no arguments of this candidate ranked better than the previous best candidate, then
+        // this candidate is removed from the list of matches.
+        // If neither of the above apply, then we have two candidates with no clear winner, which
+        // results in an ambiguous overload error. In this situation the loop ends with
+        // `num_matched > 1`.
+        if (some_won) {
+            // One or more arguments of this candidate ranked better than the previous best
+            // candidate's argument(s).
+            num_matched++;
+            if (!some_lost) {
+                // All arguments were at as-good or better than the previous best.
+                if (best) {
+                    // Mark the previous best candidate as no longer being in the running, by
+                    // setting its score to a non-zero value. We pick 1 as this is the closest to 0
+                    // (match) as we can get.
+                    best->score = 1;
+                    num_matched--;
+                }
+                // This candidate is the new best.
+                best = &candidate;
+            }
+        } else {
+            // No arguments ranked better than the current best.
+            // Change the score of this candidate to a non-zero value, so that it's not considered a
+            // match.
+            candidate.score = 1;
+        }
+    }
+
+    if (num_matched > 1) {
+        // Re-sort the candidates with the most promising first
+        SortCandidates(candidates);
+        // Raise an error
+        ErrAmbiguousOverload(intrinsic_name, args, templates, candidates);
+        return {};
+    }
+
+    return std::move(*best);
+}
+
+MatchState Impl::Match(TemplateState& templates,
+                       const OverloadInfo* overload,
                        MatcherIndex const* matcher_indices) const {
-    return MatchState(builder, closed, matchers, overload, matcher_indices);
+    return MatchState(builder, templates, matchers, overload, matcher_indices);
 }
 
 void Impl::PrintOverload(std::ostream& ss,
-                         const OverloadInfo& overload,
-                         sem::BuiltinType builtin_type) const {
-    ClosedState closed(builder);
+                         const OverloadInfo* overload,
+                         const char* intrinsic_name) const {
+    TemplateState templates;
 
-    ss << builtin_type << "(";
-    for (uint32_t p = 0; p < overload.num_parameters; p++) {
-        auto& parameter = overload.parameters[p];
+    ss << intrinsic_name << "(";
+    for (size_t p = 0; p < overload->num_parameters; p++) {
+        auto& parameter = overload->parameters[p];
         if (p > 0) {
             ss << ", ";
         }
@@ -1056,13 +1614,13 @@ void Impl::PrintOverload(std::ostream& ss,
             ss << sem::str(parameter.usage) << ": ";
         }
         auto* indices = parameter.matcher_indices;
-        ss << Match(closed, overload, indices).TypeName();
+        ss << Match(templates, overload, indices).TypeName();
     }
     ss << ")";
-    if (overload.return_matcher_indices) {
+    if (overload->return_matcher_indices) {
         ss << " -> ";
-        auto* indices = overload.return_matcher_indices;
-        ss << Match(closed, overload, indices).TypeName();
+        auto* indices = overload->return_matcher_indices;
+        ss << Match(templates, overload, indices).TypeName();
     }
 
     bool first = true;
@@ -1070,23 +1628,33 @@ void Impl::PrintOverload(std::ostream& ss,
         ss << (first ? "  where: " : ", ");
         first = false;
     };
-    for (uint32_t i = 0; i < overload.num_open_types; i++) {
-        auto& open_type = overload.open_types[i];
-        if (open_type.matcher_index != kNoMatcher) {
+    for (size_t i = 0; i < overload->num_template_types; i++) {
+        auto& template_type = overload->template_types[i];
+        if (template_type.matcher_index != kNoMatcher) {
             separator();
-            ss << open_type.name;
-            auto* index = &open_type.matcher_index;
-            ss << " is " << Match(closed, overload, index).TypeName();
+            ss << template_type.name;
+            auto* index = &template_type.matcher_index;
+            ss << " is " << Match(templates, overload, index).TypeName();
         }
     }
-    for (uint32_t i = 0; i < overload.num_open_numbers; i++) {
-        auto& open_number = overload.open_numbers[i];
-        if (open_number.matcher_index != kNoMatcher) {
+    for (size_t i = 0; i < overload->num_template_numbers; i++) {
+        auto& template_number = overload->template_numbers[i];
+        if (template_number.matcher_index != kNoMatcher) {
             separator();
-            ss << open_number.name;
-            auto* index = &open_number.matcher_index;
-            ss << " is " << Match(closed, overload, index).NumName();
+            ss << template_number.name;
+            auto* index = &template_number.matcher_index;
+            ss << " is " << Match(templates, overload, index).NumName();
         }
+    }
+}
+
+void Impl::PrintCandidates(std::ostream& ss,
+                           utils::VectorRef<Candidate> candidates,
+                           const char* intrinsic_name) const {
+    for (auto& candidate : candidates) {
+        ss << "  ";
+        PrintOverload(ss, candidate.overload, intrinsic_name);
+        ss << std::endl;
     }
 }
 
@@ -1105,13 +1673,49 @@ Number MatchState::Num(Number number) {
 std::string MatchState::TypeName() {
     MatcherIndex matcher_index = *matcher_indices_++;
     auto* matcher = matchers.type[matcher_index];
-    return matcher->String(*this);
+    return matcher->String(this);
 }
 
 std::string MatchState::NumName() {
     MatcherIndex matcher_index = *matcher_indices_++;
     auto* matcher = matchers.number[matcher_index];
-    return matcher->String(*this);
+    return matcher->String(this);
+}
+
+void Impl::ErrAmbiguousOverload(const char* intrinsic_name,
+                                utils::VectorRef<const sem::Type*> args,
+                                TemplateState templates,
+                                utils::VectorRef<Candidate> candidates) const {
+    std::stringstream ss;
+    ss << "ambiguous overload while attempting to match " << intrinsic_name;
+    for (size_t i = 0; i < std::numeric_limits<size_t>::max(); i++) {
+        if (auto* ty = templates.Type(i)) {
+            ss << ((i == 0) ? "<" : ", ") << ty->FriendlyName(builder.Symbols());
+        } else {
+            if (i > 0) {
+                ss << ">";
+            }
+            break;
+        }
+    }
+    ss << "(";
+    bool first = true;
+    for (auto* arg : args) {
+        if (!first) {
+            ss << ", ";
+        }
+        first = false;
+        ss << arg->FriendlyName(builder.Symbols());
+    }
+    ss << "):\n";
+    for (auto& candidate : candidates) {
+        if (candidate.score == 0) {
+            ss << "  ";
+            PrintOverload(ss, candidate.overload, intrinsic_name);
+            ss << std::endl;
+        }
+    }
+    TINT_ICE(Resolver, builder.Diagnostics()) << ss.str();
 }
 
 }  // namespace
@@ -1122,7 +1726,7 @@ std::unique_ptr<IntrinsicTable> IntrinsicTable::Create(ProgramBuilder& builder) 
 
 IntrinsicTable::~IntrinsicTable() = default;
 
-/// TypeInfo for the Any type declared in the anonymous namespace above
-TINT_INSTANTIATE_TYPEINFO(Any);
+}  // namespace tint::resolver
 
-}  // namespace tint
+/// TypeInfo for the Any type declared in the anonymous namespace above
+TINT_INSTANTIATE_TYPEINFO(tint::resolver::Any);

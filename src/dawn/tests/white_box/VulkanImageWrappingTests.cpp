@@ -110,7 +110,7 @@ class VulkanImageWrappingTestBase : public DawnTest {
     // assertion failure
     void IgnoreSignalSemaphore(wgpu::Texture wrappedTexture) {
         ExternalImageExportInfoVkForTesting exportInfo;
-        bool result = mBackend->ExportImage(wrappedTexture, VK_IMAGE_LAYOUT_GENERAL, &exportInfo);
+        bool result = mBackend->ExportImage(wrappedTexture, VK_IMAGE_LAYOUT_UNDEFINED, &exportInfo);
         ASSERT(result);
     }
 
@@ -202,7 +202,7 @@ TEST_P(VulkanImageWrappingValidationTests, DoubleSignalSemaphoreExport) {
 
     ExternalImageExportInfoVkForTesting exportInfo;
     ASSERT_DEVICE_ERROR(bool success =
-                            mBackend->ExportImage(texture, VK_IMAGE_LAYOUT_GENERAL, &exportInfo));
+                            mBackend->ExportImage(texture, VK_IMAGE_LAYOUT_UNDEFINED, &exportInfo));
     ASSERT_FALSE(success);
     ASSERT_EQ(exportInfo.semaphores.size(), 0u);
 }
@@ -214,7 +214,7 @@ TEST_P(VulkanImageWrappingValidationTests, NormalTextureSignalSemaphoreExport) {
 
     ExternalImageExportInfoVkForTesting exportInfo;
     ASSERT_DEVICE_ERROR(bool success =
-                            mBackend->ExportImage(texture, VK_IMAGE_LAYOUT_GENERAL, &exportInfo));
+                            mBackend->ExportImage(texture, VK_IMAGE_LAYOUT_UNDEFINED, &exportInfo));
     ASSERT_FALSE(success);
     ASSERT_EQ(exportInfo.semaphores.size(), 0u);
 }
@@ -227,7 +227,7 @@ TEST_P(VulkanImageWrappingValidationTests, DestroyedTextureSignalSemaphoreExport
 
     ExternalImageExportInfoVkForTesting exportInfo;
     ASSERT_DEVICE_ERROR(bool success =
-                            mBackend->ExportImage(texture, VK_IMAGE_LAYOUT_GENERAL, &exportInfo));
+                            mBackend->ExportImage(texture, VK_IMAGE_LAYOUT_UNDEFINED, &exportInfo));
     ASSERT_FALSE(success);
     ASSERT_EQ(exportInfo.semaphores.size(), 0u);
 }
@@ -322,7 +322,7 @@ TEST_P(VulkanImageWrappingUsageTests, ClearImageAcrossDevices) {
         exportInfo.releasedOldLayout, exportInfo.releasedNewLayout);
 
     // Verify |device| sees the changes from |secondDevice|
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(1, 2, 3, 4), nextWrappedTexture, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(1, 2, 3, 4), nextWrappedTexture, 0, 0);
 
     IgnoreSignalSemaphore(nextWrappedTexture);
 }
@@ -348,7 +348,7 @@ TEST_P(VulkanImageWrappingUsageTests, UninitializedTextureIsCleared) {
         exportInfo.releasedOldLayout, exportInfo.releasedNewLayout, false);
 
     // Verify |device| doesn't see the changes from |secondDevice|
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(0, 0, 0, 0), nextWrappedTexture, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(0, 0, 0, 0), nextWrappedTexture, 0, 0);
 
     IgnoreSignalSemaphore(nextWrappedTexture);
 }
@@ -382,7 +382,7 @@ TEST_P(VulkanImageWrappingUsageTests, CopyTextureToTextureSrcSync) {
     SimpleCopyTextureToTexture(device, queue, deviceWrappedTexture, copyDstTexture);
 
     // Verify |copyDstTexture| sees changes from |secondDevice|
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(1, 2, 3, 4), copyDstTexture, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(1, 2, 3, 4), copyDstTexture, 0, 0);
 
     IgnoreSignalSemaphore(deviceWrappedTexture);
 }
@@ -433,7 +433,7 @@ TEST_P(VulkanImageWrappingUsageTests, CopyTextureToTextureDstSync) {
         secondExportInfo.releasedOldLayout, secondExportInfo.releasedNewLayout);
 
     // Verify |nextWrappedTexture| contains the color from our copy
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(1, 2, 3, 4), nextWrappedTexture, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(1, 2, 3, 4), nextWrappedTexture, 0, 0);
 
     IgnoreSignalSemaphore(nextWrappedTexture);
 }
@@ -540,7 +540,7 @@ TEST_P(VulkanImageWrappingUsageTests, CopyBufferToTextureDstSync) {
         secondExportInfo.releasedOldLayout, secondExportInfo.releasedNewLayout);
 
     // Verify |nextWrappedTexture| contains the color from our copy
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(1, 2, 3, 4), nextWrappedTexture, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(1, 2, 3, 4), nextWrappedTexture, 0, 0);
 
     IgnoreSignalSemaphore(nextWrappedTexture);
 }
@@ -581,10 +581,10 @@ TEST_P(VulkanImageWrappingUsageTests, DoubleTextureUsage) {
     SimpleCopyTextureToTexture(device, queue, deviceWrappedTexture, secondCopyDstTexture);
 
     // Verify |copyDstTexture| sees changes from |secondDevice|
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(1, 2, 3, 4), copyDstTexture, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(1, 2, 3, 4), copyDstTexture, 0, 0);
 
     // Verify |secondCopyDstTexture| sees changes from |secondDevice|
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(1, 2, 3, 4), secondCopyDstTexture, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(1, 2, 3, 4), secondCopyDstTexture, 0, 0);
 
     IgnoreSignalSemaphore(deviceWrappedTexture);
 }
@@ -669,7 +669,7 @@ TEST_P(VulkanImageWrappingUsageTests, ChainTextureCopy) {
     SimpleCopyTextureToTexture(device, queue, wrappedTexCDevice1, texD);
 
     // Verify D matches clear color
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(1, 2, 3, 4), texD, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(1, 2, 3, 4), texD, 0, 0);
 
     IgnoreSignalSemaphore(wrappedTexCDevice1);
 }
@@ -793,24 +793,24 @@ TEST_P(VulkanImageWrappingUsageTests, SRGBReinterpretation) {
 
     wgpu::ImageCopyTexture dst = {};
     dst.texture = texture;
-    std::array<RGBA8, 4> rgbaTextureData = {
-        RGBA8(180, 0, 0, 255),
-        RGBA8(0, 84, 0, 127),
-        RGBA8(0, 0, 62, 100),
-        RGBA8(62, 180, 84, 90),
+    std::array<utils::RGBA8, 4> rgbaTextureData = {
+        utils::RGBA8(180, 0, 0, 255),
+        utils::RGBA8(0, 84, 0, 127),
+        utils::RGBA8(0, 0, 62, 100),
+        utils::RGBA8(62, 180, 84, 90),
     };
 
     wgpu::TextureDataLayout dataLayout = {};
-    dataLayout.bytesPerRow = textureDesc.size.width * sizeof(RGBA8);
+    dataLayout.bytesPerRow = textureDesc.size.width * sizeof(utils::RGBA8);
 
-    queue.WriteTexture(&dst, rgbaTextureData.data(), rgbaTextureData.size() * sizeof(RGBA8),
+    queue.WriteTexture(&dst, rgbaTextureData.data(), rgbaTextureData.size() * sizeof(utils::RGBA8),
                        &dataLayout, &textureDesc.size);
 
     wgpu::TextureView textureView = texture.CreateView(&viewDesc);
 
     utils::ComboRenderPipelineDescriptor pipelineDesc;
     pipelineDesc.vertex.module = utils::CreateShaderModule(device, R"(
-            @stage(vertex)
+            @vertex
             fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
                 var pos = array<vec2<f32>, 6>(
                                             vec2<f32>(-1.0, -1.0),
@@ -825,7 +825,7 @@ TEST_P(VulkanImageWrappingUsageTests, SRGBReinterpretation) {
     pipelineDesc.cFragment.module = utils::CreateShaderModule(device, R"(
             @group(0) @binding(0) var texture : texture_2d<f32>;
 
-            @stage(fragment)
+            @fragment
             fn main(@builtin(position) coord: vec4<f32>) -> @location(0) vec4<f32> {
                 return textureLoad(texture, vec2<i32>(coord.xy), 0);
             }
@@ -852,18 +852,18 @@ TEST_P(VulkanImageWrappingUsageTests, SRGBReinterpretation) {
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    EXPECT_PIXEL_RGBA8_BETWEEN(  //
-        RGBA8(116, 0, 0, 255),   //
-        RGBA8(117, 0, 0, 255), renderPass.color, 0, 0);
-    EXPECT_PIXEL_RGBA8_BETWEEN(  //
-        RGBA8(0, 23, 0, 127),    //
-        RGBA8(0, 24, 0, 127), renderPass.color, 1, 0);
-    EXPECT_PIXEL_RGBA8_BETWEEN(  //
-        RGBA8(0, 0, 12, 100),    //
-        RGBA8(0, 0, 13, 100), renderPass.color, 0, 1);
-    EXPECT_PIXEL_RGBA8_BETWEEN(  //
-        RGBA8(12, 116, 23, 90),  //
-        RGBA8(13, 117, 24, 90), renderPass.color, 1, 1);
+    EXPECT_PIXEL_RGBA8_BETWEEN(        //
+        utils::RGBA8(116, 0, 0, 255),  //
+        utils::RGBA8(117, 0, 0, 255), renderPass.color, 0, 0);
+    EXPECT_PIXEL_RGBA8_BETWEEN(       //
+        utils::RGBA8(0, 23, 0, 127),  //
+        utils::RGBA8(0, 24, 0, 127), renderPass.color, 1, 0);
+    EXPECT_PIXEL_RGBA8_BETWEEN(       //
+        utils::RGBA8(0, 0, 12, 100),  //
+        utils::RGBA8(0, 0, 13, 100), renderPass.color, 0, 1);
+    EXPECT_PIXEL_RGBA8_BETWEEN(         //
+        utils::RGBA8(12, 116, 23, 90),  //
+        utils::RGBA8(13, 117, 24, 90), renderPass.color, 1, 1);
 
     IgnoreSignalSemaphore(texture);
 }

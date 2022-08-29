@@ -158,6 +158,21 @@ TEST_F(MslBinaryTest, ModF32) {
     EXPECT_EQ(out.str(), "fmod(left, right)");
 }
 
+TEST_F(MslBinaryTest, ModF16) {
+    Enable(ast::Extension::kF16);
+
+    auto* left = Var("left", ty.f16());
+    auto* right = Var("right", ty.f16());
+    auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kModulo, Expr(left), Expr(right));
+    WrapInFunction(left, right, expr);
+
+    GeneratorImpl& gen = Build();
+
+    std::stringstream out;
+    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    EXPECT_EQ(out.str(), "fmod(left, right)");
+}
+
 TEST_F(MslBinaryTest, ModVec3F32) {
     auto* left = Var("left", ty.vec3<f32>());
     auto* right = Var("right", ty.vec3<f32>());
@@ -169,6 +184,47 @@ TEST_F(MslBinaryTest, ModVec3F32) {
     std::stringstream out;
     ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
     EXPECT_EQ(out.str(), "fmod(left, right)");
+}
+
+TEST_F(MslBinaryTest, ModVec3F16) {
+    Enable(ast::Extension::kF16);
+
+    auto* left = Var("left", ty.vec3<f16>());
+    auto* right = Var("right", ty.vec3<f16>());
+    auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kModulo, Expr(left), Expr(right));
+    WrapInFunction(left, right, expr);
+
+    GeneratorImpl& gen = Build();
+
+    std::stringstream out;
+    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    EXPECT_EQ(out.str(), "fmod(left, right)");
+}
+
+TEST_F(MslBinaryTest, BoolAnd) {
+    auto* left = Var("left", Expr(true));
+    auto* right = Var("right", Expr(false));
+    auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kAnd, Expr(left), Expr(right));
+    WrapInFunction(left, right, expr);
+
+    GeneratorImpl& gen = Build();
+
+    std::stringstream out;
+    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    EXPECT_EQ(out.str(), "bool(left & right)");
+}
+
+TEST_F(MslBinaryTest, BoolOr) {
+    auto* left = Var("left", Expr(true));
+    auto* right = Var("right", Expr(false));
+    auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kOr, Expr(left), Expr(right));
+    WrapInFunction(left, right, expr);
+
+    GeneratorImpl& gen = Build();
+
+    std::stringstream out;
+    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    EXPECT_EQ(out.str(), "bool(left | right)");
 }
 
 }  // namespace

@@ -16,6 +16,7 @@
 #define SRC_TINT_READER_WGSL_LEXER_H_
 
 #include <string>
+#include <vector>
 
 #include "src/tint/reader/wgsl/token.h"
 
@@ -29,11 +30,14 @@ class Lexer {
     explicit Lexer(const Source::File* file);
     ~Lexer();
 
+    /// @return the token list.
+    std::vector<Token> Lex();
+
+  private:
     /// Returns the next token in the input stream.
     /// @return Token
     Token next();
 
-  private:
     /// Advances past blankspace and comments, if present at the current position.
     /// @returns error token, EOF, or uninitialized
     Token skip_blankspace_and_comments();
@@ -43,7 +47,8 @@ class Lexer {
     /// @returns uninitialized token on success, or error
     Token skip_comment();
 
-    Token build_token_from_int_if_possible(Source source, size_t start, size_t end, int32_t base);
+    Token build_token_from_int_if_possible(Source source, size_t start, int32_t base);
+
     Token check_keyword(const Source&, std::string_view);
 
     /// The try_* methods have the following in common:
@@ -95,7 +100,8 @@ class Lexer {
     bool is_hex(char ch) const;
     /// @returns true if string at `pos` matches `substr`
     bool matches(size_t pos, std::string_view substr);
-
+    /// @returns true if char at `pos` matches `ch`
+    bool matches(size_t pos, char ch);
     /// The source file content
     Source::File const* const file_;
     /// The current location within the input

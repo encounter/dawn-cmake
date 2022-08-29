@@ -422,7 +422,8 @@ void ResolveMultisampledRenderTargets(const OpenGLFunctions& gl,
 Extent3D ComputeTextureCopyExtent(const TextureCopy& textureCopy, const Extent3D& copySize) {
     Extent3D validTextureCopyExtent = copySize;
     const TextureBase* texture = textureCopy.texture.Get();
-    Extent3D virtualSizeAtLevel = texture->GetMipLevelVirtualSize(textureCopy.mipLevel);
+    Extent3D virtualSizeAtLevel =
+        texture->GetMipLevelSingleSubresourceVirtualSize(textureCopy.mipLevel);
     ASSERT(textureCopy.origin.x <= virtualSizeAtLevel.width);
     ASSERT(textureCopy.origin.y <= virtualSizeAtLevel.height);
     if (copySize.width > virtualSizeAtLevel.width - textureCopy.origin.x) {
@@ -447,7 +448,7 @@ CommandBuffer::CommandBuffer(CommandEncoder* encoder, const CommandBufferDescrip
     : CommandBufferBase(encoder, descriptor) {}
 
 MaybeError CommandBuffer::Execute() {
-    const OpenGLFunctions& gl = ToBackend(GetDevice())->gl;
+    const OpenGLFunctions& gl = ToBackend(GetDevice())->GetGL();
 
     auto LazyClearSyncScope = [](const SyncScopeResourceUsage& scope) {
         for (size_t i = 0; i < scope.textures.size(); i++) {
@@ -766,7 +767,7 @@ MaybeError CommandBuffer::Execute() {
 }
 
 MaybeError CommandBuffer::ExecuteComputePass() {
-    const OpenGLFunctions& gl = ToBackend(GetDevice())->gl;
+    const OpenGLFunctions& gl = ToBackend(GetDevice())->GetGL();
     ComputePipeline* lastPipeline = nullptr;
     BindGroupTracker bindGroupTracker = {};
 
@@ -843,7 +844,7 @@ MaybeError CommandBuffer::ExecuteComputePass() {
 }
 
 MaybeError CommandBuffer::ExecuteRenderPass(BeginRenderPassCmd* renderPass) {
-    const OpenGLFunctions& gl = ToBackend(GetDevice())->gl;
+    const OpenGLFunctions& gl = ToBackend(GetDevice())->GetGL();
     GLuint fbo = 0;
 
     // Create the framebuffer used for this render pass and calls the correct glDrawBuffers
@@ -1240,7 +1241,7 @@ void DoTexSubImage(const OpenGLFunctions& gl,
     uint32_t z = destination.origin.z;
     if (texture->GetFormat().isCompressed) {
         size_t rowSize = copySize.width / blockInfo.width * blockInfo.byteSize;
-        Extent3D virtSize = texture->GetMipLevelVirtualSize(destination.mipLevel);
+        Extent3D virtSize = texture->GetMipLevelSingleSubresourceVirtualSize(destination.mipLevel);
         uint32_t width = std::min(copySize.width, virtSize.width - x);
 
         // In GLES glPixelStorei() doesn't affect CompressedTexSubImage*D() and

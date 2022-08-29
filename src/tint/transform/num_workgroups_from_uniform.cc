@@ -52,7 +52,7 @@ NumWorkgroupsFromUniform::~NumWorkgroupsFromUniform() = default;
 bool NumWorkgroupsFromUniform::ShouldRun(const Program* program, const DataMap&) const {
     for (auto* node : program->ASTNodes().Objects()) {
         if (auto* attr = node->As<ast::BuiltinAttribute>()) {
-            if (attr->builtin == ast::Builtin::kNumWorkgroups) {
+            if (attr->builtin == ast::BuiltinValue::kNumWorkgroups) {
                 return true;
             }
         }
@@ -89,7 +89,7 @@ void NumWorkgroupsFromUniform::Run(CloneContext& ctx, const DataMap& inputs, Dat
             for (auto* member : str->Members()) {
                 auto* builtin =
                     ast::GetAttribute<ast::BuiltinAttribute>(member->Declaration()->attributes);
-                if (!builtin || builtin->builtin != ast::Builtin::kNumWorkgroups) {
+                if (!builtin || builtin->builtin != ast::BuiltinValue::kNumWorkgroups) {
                     continue;
                 }
 
@@ -121,11 +121,36 @@ void NumWorkgroupsFromUniform::Run(CloneContext& ctx, const DataMap& inputs, Dat
         if (!num_workgroups_ubo) {
             auto* num_workgroups_struct = ctx.dst->Structure(
                 ctx.dst->Sym(),
-                {ctx.dst->Member(kNumWorkgroupsMemberName, ctx.dst->ty.vec3(ctx.dst->ty.u32()))});
-            num_workgroups_ubo = ctx.dst->Global(
+                utils::Vector{
+                    ctx.dst->Member(kNumWorkgroupsMemberName, ctx.dst->ty.vec3(ctx.dst->ty.u32())),
+                });
+
+            uint32_t group, binding;
+            if (cfg->ubo_binding.has_value()) {
+                // If cfg->ubo_binding holds a value, use the specified binding point.
+                group = cfg->ubo_binding->group;
+                binding = cfg->ubo_binding->binding;
+            } else {
+                // If cfg->ubo_binding holds no value, use the binding 0 of the largest used group
+                // plus 1, or group 0 if no resource bound.
+                group = 0;
+
+                for (auto* global : ctx.src->AST().GlobalVariables()) {
+                    if (global->HasBindingPoint()) {
+                        auto* global_sem = ctx.src->Sem().Get<sem::GlobalVariable>(global);
+                        auto binding_point = global_sem->BindingPoint();
+                        if (binding_point.group >= group) {
+                            group = binding_point.group + 1;
+                        }
+                    }
+                }
+
+                binding = 0;
+            }
+
+            num_workgroups_ubo = ctx.dst->GlobalVar(
                 ctx.dst->Sym(), ctx.dst->ty.Of(num_workgroups_struct), ast::StorageClass::kUniform,
-                ast::AttributeList{
-                    ctx.dst->GroupAndBinding(cfg->ubo_binding.group, cfg->ubo_binding.binding)});
+                ctx.dst->Group(group), ctx.dst->Binding(binding));
         }
         return num_workgroups_ubo;
     };
@@ -151,7 +176,8 @@ void NumWorkgroupsFromUniform::Run(CloneContext& ctx, const DataMap& inputs, Dat
     ctx.Clone();
 }
 
-NumWorkgroupsFromUniform::Config::Config(sem::BindingPoint ubo_bp) : ubo_binding(ubo_bp) {}
+NumWorkgroupsFromUniform::Config::Config(std::optional<sem::BindingPoint> ubo_bp)
+    : ubo_binding(ubo_bp) {}
 NumWorkgroupsFromUniform::Config::Config(const Config&) = default;
 NumWorkgroupsFromUniform::Config::~Config() = default;
 

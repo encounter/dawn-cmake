@@ -28,13 +28,15 @@ struct IDXGIKeyedMutex;
 
 namespace dawn::native::d3d12 {
 
+class Device;
+
 // Wraps 11 wrapped resources in a cache.
 class D3D11on12ResourceCacheEntry : public RefCounted {
   public:
     explicit D3D11on12ResourceCacheEntry(ComPtr<ID3D11On12Device> d3d11on12Device);
     D3D11on12ResourceCacheEntry(ComPtr<IDXGIKeyedMutex> d3d11on12Resource,
                                 ComPtr<ID3D11On12Device> d3d11on12Device);
-    ~D3D11on12ResourceCacheEntry();
+    ~D3D11on12ResourceCacheEntry() override;
 
     MaybeError AcquireKeyedMutex();
     void ReleaseKeyedMutex();
@@ -69,7 +71,7 @@ class D3D11on12ResourceCache {
     D3D11on12ResourceCache();
     ~D3D11on12ResourceCache();
 
-    Ref<D3D11on12ResourceCacheEntry> GetOrCreateD3D11on12Resource(WGPUDevice device,
+    Ref<D3D11on12ResourceCacheEntry> GetOrCreateD3D11on12Resource(Device* backendDevice,
                                                                   ID3D12Resource* d3d12Resource);
 
   private:

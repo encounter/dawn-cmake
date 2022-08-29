@@ -285,7 +285,7 @@ ExpectedResult expected_texture_overload(ast::builtin::test::ValidTextureOverloa
         case ValidTextureOverload::kSampleGrad2dF32:
             return R"(tint_symbol.SampleGrad(tint_symbol_1, float2(1.0f, 2.0f), float2(3.0f, 4.0f), float2(5.0f, 6.0f));)";
         case ValidTextureOverload::kSampleGrad2dOffsetF32:
-            return R"(tint_symbol.SampleGrad(tint_symbol_1, float2(1.0f, 2.0f), float2(3.0f, 4.0f), float2(5.0f, 6.0f), int2(7, 7));)";
+            return R"(tint_symbol.SampleGrad(tint_symbol_1, float2(1.0f, 2.0f), float2(3.0f, 4.0f), float2(5.0f, 6.0f), (7).xx);)";
         case ValidTextureOverload::kSampleGrad2dArrayF32:
             return R"(tint_symbol.SampleGrad(tint_symbol_1, float3(1.0f, 2.0f, float(3)), float2(4.0f, 5.0f), float2(6.0f, 7.0f));)";
         case ValidTextureOverload::kSampleGrad2dArrayOffsetF32:
@@ -370,7 +370,8 @@ TEST_P(HlslGeneratorBuiltinTextureTest, Call) {
     auto* call = Call(param.function, param.args(this));
     auto* stmt = CallStmt(call);
 
-    Func("main", {}, ty.void_(), {stmt}, {Stage(ast::PipelineStage::kFragment)});
+    Func("main", utils::Empty, ty.void_(), utils::Vector{stmt},
+         utils::Vector{Stage(ast::PipelineStage::kFragment)});
 
     GeneratorImpl& gen = SanitizeAndBuild();
 

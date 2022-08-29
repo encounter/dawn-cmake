@@ -26,7 +26,7 @@ class CullingTest : public DawnTest {
         // 1. The top-left one is counterclockwise (CCW)
         // 2. The bottom-right one is clockwise (CW)
         pipelineDescriptor.vertex.module = utils::CreateShaderModule(device, R"(
-            @stage(vertex)
+            @vertex
             fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
                 var pos = array<vec2<f32>, 6>(
                     vec2<f32>(-1.0,  1.0),
@@ -42,7 +42,7 @@ class CullingTest : public DawnTest {
         // RGBA8 format for the back buffer. So (FragCoord.xy - vec2(0.5)) / 255 in shader code
         // will make the pixel's R and G channels exactly equal to the pixel's x and y coordinates.
         pipelineDescriptor.cFragment.module = utils::CreateShaderModule(device, R"(
-            @stage(fragment)
+            @fragment
             fn main(@builtin(position) FragCoord : vec4<f32>) -> @location(0) vec4<f32> {
                 return vec4<f32>(
                     (FragCoord.xy - vec2<f32>(0.5, 0.5)) / vec2<f32>(255.0, 255.0),
@@ -86,14 +86,15 @@ class CullingTest : public DawnTest {
         wgpu::CommandBuffer commandBuffer = commandEncoder.Finish();
         queue.Submit(1, &commandBuffer);
 
-        const RGBA8 kBackgroundColor = RGBA8::kBlue;
-        const RGBA8 kTopLeftColor = RGBA8::kBlack;
-        constexpr RGBA8 kBottomRightColor = RGBA8(3, 3, 0, 255);
+        const utils::RGBA8 kBackgroundColor = utils::RGBA8::kBlue;
+        const utils::RGBA8 kTopLeftColor = utils::RGBA8::kBlack;
+        constexpr utils::RGBA8 kBottomRightColor = utils::RGBA8(3, 3, 0, 255);
 
-        RGBA8 kCCWTriangleTopLeftColor = isCCWTriangleCulled ? kBackgroundColor : kTopLeftColor;
+        utils::RGBA8 kCCWTriangleTopLeftColor =
+            isCCWTriangleCulled ? kBackgroundColor : kTopLeftColor;
         EXPECT_PIXEL_RGBA8_EQ(kCCWTriangleTopLeftColor, colorTexture, 0, 0);
 
-        RGBA8 kCWTriangleBottomRightColor =
+        utils::RGBA8 kCWTriangleBottomRightColor =
             isCWTriangleCulled ? kBackgroundColor : kBottomRightColor;
         EXPECT_PIXEL_RGBA8_EQ(kCWTriangleBottomRightColor, colorTexture, kSize - 1, kSize - 1);
     }

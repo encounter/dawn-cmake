@@ -101,7 +101,7 @@ class CreatePipelineAsyncTest : public DawnTest {
 
         queue.Submit(1, &commands);
 
-        EXPECT_PIXEL_RGBA8_EQ(RGBA8(0, 255, 0, 255), outputTexture, 0, 0);
+        EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(0, 255, 0, 255), outputTexture, 0, 0);
     }
 
     void ValidateCreateRenderPipelineAsync() { ValidateCreateRenderPipelineAsync(&task); }
@@ -135,7 +135,7 @@ TEST_P(CreatePipelineAsyncTest, BasicUseOfCreateComputePipelineAsync) {
         }
         @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
 
-        @stage(compute) @workgroup_size(1) fn main() {
+        @compute @workgroup_size(1) fn main() {
             ssbo.value = 1u;
         })");
     csDesc.compute.entryPoint = "main";
@@ -165,7 +165,7 @@ TEST_P(CreatePipelineAsyncTest, ReleaseEntryPointAfterCreatComputePipelineAsync)
         }
         @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
 
-        @stage(compute) @workgroup_size(1) fn main() {
+        @compute @workgroup_size(1) fn main() {
             ssbo.value = 1u;
         })");
 
@@ -204,7 +204,7 @@ TEST_P(CreatePipelineAsyncTest, CreateComputePipelineFailed) {
         }
         @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
 
-        @stage(compute) @workgroup_size(1) fn main() {
+        @compute @workgroup_size(1) fn main() {
             ssbo.value = 1u;
         })");
     csDesc.compute.entryPoint = "main0";
@@ -236,11 +236,11 @@ TEST_P(CreatePipelineAsyncTest, BasicUseOfCreateRenderPipelineAsync) {
 
     utils::ComboRenderPipelineDescriptor renderPipelineDescriptor;
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-        @stage(vertex) fn main() -> @builtin(position) vec4<f32> {
+        @vertex fn main() -> @builtin(position) vec4<f32> {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         })");
     wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
-        @stage(fragment) fn main() -> @location(0) vec4<f32> {
+        @fragment fn main() -> @location(0) vec4<f32> {
             return vec4<f32>(0.0, 1.0, 0.0, 1.0);
         })");
     renderPipelineDescriptor.vertex.module = vsModule;
@@ -260,11 +260,11 @@ TEST_P(CreatePipelineAsyncTest, ReleaseEntryPointsAfterCreateRenderPipelineAsync
 
     utils::ComboRenderPipelineDescriptor renderPipelineDescriptor;
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-        @stage(vertex) fn main() -> @builtin(position) vec4<f32> {
+        @vertex fn main() -> @builtin(position) vec4<f32> {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         })");
     wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
-        @stage(fragment) fn main() -> @location(0) vec4<f32> {
+        @fragment fn main() -> @location(0) vec4<f32> {
             return vec4<f32>(0.0, 1.0, 0.0, 1.0);
         })");
     renderPipelineDescriptor.vertex.module = vsModule;
@@ -311,7 +311,7 @@ TEST_P(CreatePipelineAsyncTest, ReleaseEntryPointsAfterCreateRenderPipelineAsync
 
     queue.Submit(1, &commands);
 
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(0, 255, 0, 255), outputTexture, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(0, 255, 0, 255), outputTexture, 0, 0);
 }
 
 // Verify CreateRenderPipelineAsync() works as expected when there is any error that happens during
@@ -325,11 +325,11 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineFailed) {
 
     utils::ComboRenderPipelineDescriptor renderPipelineDescriptor;
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-        @stage(vertex) fn main() -> @builtin(position) vec4<f32> {
+        @vertex fn main() -> @builtin(position) vec4<f32> {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         })");
     wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
-        @stage(fragment) fn main() -> @location(0) vec4<f32> {
+        @fragment fn main() -> @location(0) vec4<f32> {
             return vec4<f32>(0.0, 1.0, 0.0, 1.0);
         })");
     renderPipelineDescriptor.vertex.module = vsModule;
@@ -363,7 +363,7 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineFailed) {
 TEST_P(CreatePipelineAsyncTest, ReleaseDeviceBeforeCallbackOfCreateComputePipelineAsync) {
     wgpu::ComputePipelineDescriptor csDesc;
     csDesc.compute.module = utils::CreateShaderModule(device, R"(
-        @stage(compute) @workgroup_size(1) fn main() {
+        @compute @workgroup_size(1) fn main() {
         })");
     csDesc.compute.entryPoint = "main";
 
@@ -387,11 +387,11 @@ TEST_P(CreatePipelineAsyncTest, ReleaseDeviceBeforeCallbackOfCreateComputePipeli
 TEST_P(CreatePipelineAsyncTest, ReleaseDeviceBeforeCallbackOfCreateRenderPipelineAsync) {
     utils::ComboRenderPipelineDescriptor renderPipelineDescriptor;
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-        @stage(vertex) fn main() -> @builtin(position) vec4<f32> {
+        @vertex fn main() -> @builtin(position) vec4<f32> {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         })");
     wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
-        @stage(fragment) fn main() -> @location(0) vec4<f32> {
+        @fragment fn main() -> @location(0) vec4<f32> {
             return vec4<f32>(0.0, 1.0, 0.0, 1.0);
         })");
     renderPipelineDescriptor.vertex.module = vsModule;
@@ -419,7 +419,7 @@ TEST_P(CreatePipelineAsyncTest, ReleaseDeviceBeforeCallbackOfCreateRenderPipelin
 TEST_P(CreatePipelineAsyncTest, DestroyDeviceBeforeCallbackOfCreateComputePipelineAsync) {
     wgpu::ComputePipelineDescriptor csDesc;
     csDesc.compute.module = utils::CreateShaderModule(device, R"(
-        @stage(compute) @workgroup_size(1) fn main() {
+        @compute @workgroup_size(1) fn main() {
         })");
     csDesc.compute.entryPoint = "main";
 
@@ -444,11 +444,11 @@ TEST_P(CreatePipelineAsyncTest, DestroyDeviceBeforeCallbackOfCreateComputePipeli
 TEST_P(CreatePipelineAsyncTest, DestroyDeviceBeforeCallbackOfCreateRenderPipelineAsync) {
     utils::ComboRenderPipelineDescriptor renderPipelineDescriptor;
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-        @stage(vertex) fn main() -> @builtin(position) vec4<f32> {
+        @vertex fn main() -> @builtin(position) vec4<f32> {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         })");
     wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
-        @stage(fragment) fn main() -> @location(0) vec4<f32> {
+        @fragment fn main() -> @location(0) vec4<f32> {
             return vec4<f32>(0.0, 1.0, 0.0, 1.0);
         })");
     renderPipelineDescriptor.vertex.module = vsModule;
@@ -482,7 +482,7 @@ TEST_P(CreatePipelineAsyncTest, CreateSameComputePipelineTwice) {
         }
         @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
 
-        @stage(compute) @workgroup_size(1) fn main() {
+        @compute @workgroup_size(1) fn main() {
             ssbo.value = 1u;
         })");
     csDesc.compute.entryPoint = "main";
@@ -541,7 +541,7 @@ TEST_P(CreatePipelineAsyncTest, CreateSameComputePipelineTwiceAtSameTime) {
         }
         @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
 
-        @stage(compute) @workgroup_size(1) fn main() {
+        @compute @workgroup_size(1) fn main() {
             ssbo.value = 1u;
         })");
     csDesc.compute.entryPoint = "main";
@@ -578,11 +578,11 @@ TEST_P(CreatePipelineAsyncTest, CreateSameRenderPipelineTwiceAtSameTime) {
 
     utils::ComboRenderPipelineDescriptor renderPipelineDescriptor;
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-        @stage(vertex) fn main() -> @builtin(position) vec4<f32> {
+        @vertex fn main() -> @builtin(position) vec4<f32> {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         })");
     wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
-        @stage(fragment) fn main() -> @location(0) vec4<f32> {
+        @fragment fn main() -> @location(0) vec4<f32> {
             return vec4<f32>(0.0, 1.0, 0.0, 1.0);
         })");
     renderPipelineDescriptor.vertex.module = vsModule;
@@ -639,7 +639,7 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithVertexBufferLayouts
             @builtin(position) position: vec4<f32>,
         }
 
-        @stage(vertex)
+        @vertex
         fn main(vertexInput : VertexInput) -> VertexOutput {
             var vertexOutput : VertexOutput;
             vertexOutput.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -651,7 +651,7 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithVertexBufferLayouts
             return vertexOutput;
         })");
         renderPipelineDescriptor.cFragment.module = utils::CreateShaderModule(device, R"(
-        @stage(fragment)
+        @fragment
         fn main(@location(0) fragColorIn : vec4<f32>) -> @location(0) vec4<f32> {
             return fragColorIn;
         })");
@@ -703,7 +703,7 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithVertexBufferLayouts
 
     // The color attachment will have the expected color when the vertex attribute values are
     // fetched correctly.
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(0, 255, 0, 255), renderTarget, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(0, 255, 0, 255), renderTarget, 0, 0);
 }
 
 // Verify calling CreateRenderPipelineAsync() with valid depthStencilState works on all backends.
@@ -731,12 +731,12 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithDepthStencilState) 
     {
         utils::ComboRenderPipelineDescriptor renderPipelineDescriptor;
         renderPipelineDescriptor.vertex.module = utils::CreateShaderModule(device, R"(
-        @stage(vertex)
+        @vertex
         fn main() -> @builtin(position) vec4<f32> {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         })");
         renderPipelineDescriptor.cFragment.module = utils::CreateShaderModule(device, R"(
-        @stage(fragment)
+        @fragment
         fn main() -> @location(0) vec4<f32> {
             return vec4<f32>(1.0, 0.0, 0.0, 1.0);
         })");
@@ -776,7 +776,7 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithDepthStencilState) 
 
     // The color in the color attachment should not be changed after the draw call as no pixel can
     // pass the stencil test.
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(0, 255, 0, 255), renderTarget, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(0, 255, 0, 255), renderTarget, 0, 0);
 }
 
 // Verify calling CreateRenderPipelineAsync() with multisample.Count > 1 works on all backends.
@@ -803,12 +803,12 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineWithMultisampleState) {
     {
         utils::ComboRenderPipelineDescriptor renderPipelineDescriptor;
         renderPipelineDescriptor.vertex.module = utils::CreateShaderModule(device, R"(
-        @stage(vertex)
+        @vertex
         fn main() -> @builtin(position) vec4<f32> {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         })");
         renderPipelineDescriptor.cFragment.module = utils::CreateShaderModule(device, R"(
-        @stage(fragment)
+        @fragment
         fn main() -> @location(0) vec4<f32> {
             return vec4<f32>(0.0, 1.0, 0.0, 1.0);
         })");
@@ -842,7 +842,7 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineWithMultisampleState) {
     queue.Submit(1, &commands);
 
     // The color in resolveTarget should be the expected color (0, 1, 0, 1).
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8(0, 255, 0, 255), resolveTarget, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(0, 255, 0, 255), resolveTarget, 0, 0);
 }
 
 // Verify calling CreateRenderPipelineAsync() with valid BlendState works on all backends.
@@ -875,7 +875,7 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithBlendState) {
     {
         utils::ComboRenderPipelineDescriptor renderPipelineDescriptor;
         renderPipelineDescriptor.vertex.module = utils::CreateShaderModule(device, R"(
-        @stage(vertex)
+        @vertex
         fn main() -> @builtin(position) vec4<f32> {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         })");
@@ -885,7 +885,7 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithBlendState) {
             @location(1) fragColor1 : vec4<f32>,
         }
 
-        @stage(fragment) fn main() -> FragmentOut {
+        @fragment fn main() -> FragmentOut {
             var output : FragmentOut;
             output.fragColor0 = vec4<f32>(0.4, 0.0, 0.0, 0.4);
             output.fragColor1 = vec4<f32>(0.0, 1.0, 0.0, 1.0);
@@ -946,8 +946,8 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithBlendState) {
     // When the blend states are all set correctly, the color of renderTargets[0] should be
     // (0.6, 0, 0, 0.6) = colorAttachment0.clearValue + (0.4, 0.0, 0.0, 0.4), and the color of
     // renderTargets[1] should be (0.8, 0, 0, 0.8) = (1, 0, 0, 1) - colorAttachment1.clearValue.
-    RGBA8 expected0 = {153, 0, 0, 153};
-    RGBA8 expected1 = {0, 204, 0, 204};
+    utils::RGBA8 expected0 = {153, 0, 0, 153};
+    utils::RGBA8 expected1 = {0, 204, 0, 204};
     EXPECT_PIXEL_RGBA8_EQ(expected0, renderTargets[0], 0, 0);
     EXPECT_PIXEL_RGBA8_EQ(expected1, renderTargets[1], 0, 0);
 }

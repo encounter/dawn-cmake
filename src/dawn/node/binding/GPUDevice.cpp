@@ -41,6 +41,53 @@ namespace wgpu::binding {
 
 namespace {
 
+// Returns a string representation of the WGPULoggingType
+const char* str(WGPULoggingType ty) {
+    switch (ty) {
+        case WGPULoggingType_Verbose:
+            return "verbose";
+        case WGPULoggingType_Info:
+            return "info";
+        case WGPULoggingType_Warning:
+            return "warning";
+        case WGPULoggingType_Error:
+            return "error";
+        default:
+            return "unknown";
+    }
+}
+
+// Returns a string representation of the WGPUErrorType
+const char* str(WGPUErrorType ty) {
+    switch (ty) {
+        case WGPUErrorType_NoError:
+            return "no error";
+        case WGPUErrorType_Validation:
+            return "validation";
+        case WGPUErrorType_OutOfMemory:
+            return "out of memory";
+        case WGPUErrorType_Unknown:
+            return "unknown";
+        case WGPUErrorType_DeviceLost:
+            return "device lost";
+        default:
+            return "unknown";
+    }
+}
+
+// There's something broken with Node when attempting to write more than 65536 bytes to cout.
+// Split the string up into writes of 4k chunks .
+// Likely related: https://github.com/nodejs/node/issues/12921
+void chunkedWrite(const char* msg) {
+    while (true) {
+        auto n = printf("%.4096s", msg);
+        if (n == 0) {
+            break;
+        }
+        msg += n;
+    }
+}
+
 class DeviceLostInfo : public interop::GPUDeviceLostInfo {
   public:
     DeviceLostInfo(interop::GPUDeviceLostReason reason, std::string message)
@@ -56,7 +103,16 @@ class DeviceLostInfo : public interop::GPUDeviceLostInfo {
     std::string message_;
 };
 
-class OOMError : public interop::GPUOutOfMemoryError {};
+class OOMError : public interop::GPUOutOfMemoryError {
+  public:
+    explicit OOMError(std::string message) : message_(std::move(message)) {}
+
+    std::string getMessage(Napi::Env) override { return message_; };
+
+  private:
+    std::string message_;
+};
+
 class ValidationError : public interop::GPUValidationError {
   public:
     explicit ValidationError(std::string message) : message_(std::move(message)) {}
@@ -79,12 +135,14 @@ GPUDevice::GPUDevice(Napi::Env env, wgpu::Device device)
       lost_promise_(env, PROMISE_INFO) {
     device_.SetLoggingCallback(
         [](WGPULoggingType type, char const* message, void* userdata) {
-            std::cout << type << ": " << message << std::endl;
+            printf("%s:\n", str(type));
+            chunkedWrite(message);
         },
         nullptr);
     device_.SetUncapturedErrorCallback(
         [](WGPUErrorType type, char const* message, void* userdata) {
-            std::cout << type << ": " << message << std::endl;
+            printf("%s:\n", str(type));
+            chunkedWrite(message);
         },
         nullptr);
 
@@ -109,7 +167,15 @@ GPUDevice::GPUDevice(Napi::Env env, wgpu::Device device)
         this);
 }
 
-GPUDevice::~GPUDevice() {}
+GPUDevice::~GPUDevice() {
+    // A bit of a fudge to work around the fact that the CTS doesn't destroy GPU devices.
+    // Without this, we'll get a 'Promise not resolved or rejected' fatal message as the
+    // lost_promise_ is left hanging. We'll also not clean up any GPU objects before terminating the
+    // process, which is not a good idea.
+    if (!destroyed_) {
+        destroy(env_);
+    }
+}
 
 interop::Interface<interop::GPUSupportedFeatures> GPUDevice::getFeatures(Napi::Env env) {
     class Features : public interop::GPUSupportedFeatures {
@@ -138,6 +204,7 @@ void GPUDevice::destroy(Napi::Env env) {
             env_, interop::GPUDeviceLostReason::kDestroyed, "device was destroyed"));
     }
     device_.Destroy();
+    destroyed_ = true;
 }
 
 interop::Interface<interop::GPUBuffer> GPUDevice::createBuffer(
@@ -166,7 +233,8 @@ interop::Interface<interop::GPUTexture> GPUDevice::createTexture(
         !conv(desc.dimension, descriptor.dimension) ||                                 //
         !conv(desc.mipLevelCount, descriptor.mipLevelCount) ||                         //
         !conv(desc.sampleCount, descriptor.sampleCount) ||                             //
-        !conv(desc.format, descriptor.format)) {
+        !conv(desc.format, descriptor.format) ||                                       //
+        !conv(desc.viewFormats, desc.viewFormatCount, descriptor.viewFormats)) {
         return {};
     }
     return interop::GPUTexture::Create<GPUTexture>(env, device_.CreateTexture(&desc));
@@ -435,8 +503,9 @@ void GPUDevice::pushErrorScope(Napi::Env env, interop::GPUErrorFilter filter) {
     device_.PushErrorScope(f);
 }
 
-interop::Promise<std::optional<interop::GPUError>> GPUDevice::popErrorScope(Napi::Env env) {
-    using Promise = interop::Promise<std::optional<interop::GPUError>>;
+interop::Promise<std::optional<interop::Interface<interop::GPUError>>> GPUDevice::popErrorScope(
+    Napi::Env env) {
+    using Promise = interop::Promise<std::optional<interop::Interface<interop::GPUError>>>;
     struct Context {
         Napi::Env env;
         Promise promise;
@@ -453,13 +522,18 @@ interop::Promise<std::optional<interop::GPUError>> GPUDevice::popErrorScope(Napi
                 case WGPUErrorType::WGPUErrorType_NoError:
                     c->promise.Resolve({});
                     break;
-                case WGPUErrorType::WGPUErrorType_OutOfMemory:
-                    c->promise.Resolve(interop::GPUOutOfMemoryError::Create<OOMError>(env));
+                case WGPUErrorType::WGPUErrorType_OutOfMemory: {
+                    interop::Interface<interop::GPUError> err{
+                        interop::GPUOutOfMemoryError::Create<OOMError>(env, message)};
+                    c->promise.Resolve(err);
                     break;
-                case WGPUErrorType::WGPUErrorType_Validation:
-                    c->promise.Resolve(
-                        interop::GPUValidationError::Create<ValidationError>(env, message));
+                }
+                case WGPUErrorType::WGPUErrorType_Validation: {
+                    interop::Interface<interop::GPUError> err{
+                        interop::GPUValidationError::Create<ValidationError>(env, message)};
+                    c->promise.Resolve(err);
                     break;
+                }
                 case WGPUErrorType::WGPUErrorType_Unknown:
                 case WGPUErrorType::WGPUErrorType_DeviceLost:
                     c->promise.Reject(Errors::OperationError(env, message));

@@ -16,6 +16,7 @@
 #define SRC_TINT_WRITER_MSL_GENERATOR_IMPL_H_
 
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -45,6 +46,7 @@
 // Forward declarations
 namespace tint::sem {
 class Call;
+class Constant;
 class Builtin;
 class TypeConstructor;
 class TypeConversion;
@@ -250,6 +252,11 @@ class GeneratorImpl : public TextGenerator {
     /// @param stmt the statement to emit
     /// @returns true if the statement was successfully emitted
     bool EmitIf(const ast::IfStatement* stmt);
+    /// Handles a constant value
+    /// @param out the output stream
+    /// @param constant the constant value to emit
+    /// @returns true if the constant value was successfully emitted
+    bool EmitConstant(std::ostream& out, const sem::Constant* constant);
     /// Handles a literal
     /// @param out the output of the expression stream
     /// @param lit the literal to emit
@@ -263,6 +270,10 @@ class GeneratorImpl : public TextGenerator {
     /// @param stmt the statement to emit
     /// @returns true if the statement was emitted
     bool EmitForLoop(const ast::ForLoopStatement* stmt);
+    /// Handles a while statement
+    /// @param stmt the statement to emit
+    /// @returns true if the statement was emitted
+    bool EmitWhile(const ast::WhileStatement* stmt);
     /// Handles a member accessor expression
     /// @param out the output of the expression stream
     /// @param expr the member accessor expression
@@ -283,11 +294,11 @@ class GeneratorImpl : public TextGenerator {
     /// Emits a list of statements
     /// @param stmts the statement list
     /// @returns true if the statements were emitted successfully
-    bool EmitStatements(const ast::StatementList& stmts);
+    bool EmitStatements(utils::VectorRef<const ast::Statement*> stmts);
     /// Emits a list of statements with an indentation
     /// @param stmts the statement list
     /// @returns true if the statements were emitted successfully
-    bool EmitStatementsWithIndent(const ast::StatementList& stmts);
+    bool EmitStatementsWithIndent(utils::VectorRef<const ast::Statement*> stmts);
     /// Handles generating a switch statement
     /// @param stmt the statement to emit
     /// @returns true if the statement was emitted
@@ -326,19 +337,29 @@ class GeneratorImpl : public TextGenerator {
     /// @param str the struct to generate
     /// @returns true if the struct is emitted
     bool EmitStructType(TextBuffer* buffer, const sem::Struct* str);
+    /// Handles generating a structure declaration only the first time called. Subsequent calls are
+    /// a no-op and return true.
+    /// @param buffer the text buffer that the type declaration will be written to
+    /// @param ty the struct to generate
+    /// @returns true if the struct is emitted
+    bool EmitStructTypeOnce(TextBuffer* buffer, const sem::Struct* ty);
     /// Handles a unary op expression
     /// @param out the output of the expression stream
     /// @param expr the expression to emit
     /// @returns true if the expression was emitted
     bool EmitUnaryOp(std::ostream& out, const ast::UnaryOpExpression* expr);
-    /// Handles generating a variable
+    /// Handles generating a 'var' declaration
     /// @param var the variable to generate
     /// @returns true if the variable was emitted
-    bool EmitVariable(const sem::Variable* var);
-    /// Handles generating a program scope constant variable
-    /// @param var the variable to emit
+    bool EmitVar(const ast::Var* var);
+    /// Handles generating a function-scope 'let' declaration
+    /// @param let the variable to generate
     /// @returns true if the variable was emitted
-    bool EmitProgramConstVariable(const ast::Variable* var);
+    bool EmitLet(const ast::Let* let);
+    /// Handles generating a module-scope 'override' declaration
+    /// @param override the 'override' to emit
+    /// @returns true if the variable was emitted
+    bool EmitOverride(const ast::Override* override);
     /// Emits the zero value for the given type
     /// @param out the output of the expression stream
     /// @param type the type to emit the value for
@@ -353,7 +374,7 @@ class GeneratorImpl : public TextGenerator {
     /// Converts a builtin to an attribute name
     /// @param builtin the builtin to convert
     /// @returns the string name of the builtin or blank on error
-    std::string builtin_to_attribute(ast::Builtin builtin) const;
+    std::string builtin_to_attribute(ast::BuiltinValue builtin) const;
 
     /// Converts interpolation attributes to an MSL attribute
     /// @param type the interpolation type
@@ -388,26 +409,34 @@ class GeneratorImpl : public TextGenerator {
                            const sem::Builtin* builtin,
                            F&& build);
 
+    /// @returns the name of the templated tint_array helper type, generating it if this is the
+    /// first call.
+    const std::string& ArrayType();
+
     TextBuffer helpers_;  // Helper functions emitted at the top of the output
 
     /// @returns the MSL packed type size and alignment in bytes for the given
     /// type.
     SizeAndAlign MslPackedTypeSizeAndAlign(const sem::Type* ty);
 
-    using StorageClassToString = std::unordered_map<ast::StorageClass, std::string>;
-
     std::function<bool()> emit_continuing_;
 
     /// Name of atomicCompareExchangeWeak() helper for the given pointer storage
-    /// class.
-    StorageClassToString atomicCompareExchangeWeak_;
+    /// class and struct return type
+    using ACEWKeyType =
+        utils::UnorderedKeyWrapper<std::tuple<ast::StorageClass, const sem::Struct*>>;
+    std::unordered_map<ACEWKeyType, std::string> atomicCompareExchangeWeak_;
 
-    /// Unique name of the 'TINT_INVARIANT' preprocessor define. Non-empty only if
-    /// an invariant attribute has been generated.
+    /// Unique name of the 'TINT_INVARIANT' preprocessor define.
+    /// Non-empty only if an invariant attribute has been generated.
     std::string invariant_define_name_;
 
     /// True if matrix-packed_vector operator overloads have been generated.
     bool matrix_packed_vector_overloads_ = false;
+
+    /// Unique name of the tint_array<T, N> template.
+    /// Non-empty only if the template has been generated.
+    std::string array_template_name_;
 
     /// A map from entry point name to a list of dynamic workgroup allocations.
     /// Each entry in the vector is the size of the workgroup allocation that
@@ -417,6 +446,7 @@ class GeneratorImpl : public TextGenerator {
     std::unordered_map<const sem::Builtin*, std::string> builtins_;
     std::unordered_map<const sem::Type*, std::string> unary_minus_funcs_;
     std::unordered_map<uint32_t, std::string> int_dot_funcs_;
+    std::unordered_set<const sem::Struct*> emitted_structs_;
 };
 
 }  // namespace tint::writer::msl

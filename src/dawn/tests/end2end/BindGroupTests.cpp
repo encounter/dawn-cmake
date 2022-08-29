@@ -54,7 +54,7 @@ class BindGroupTests : public DawnTest {
 
     wgpu::ShaderModule MakeSimpleVSModule() const {
         return utils::CreateShaderModule(device, R"(
-        @stage(vertex)
+        @vertex
         fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
              var pos = array<vec2<f32>, 3>(
                 vec2<f32>(-1.0, 1.0),
@@ -88,7 +88,7 @@ class BindGroupTests : public DawnTest {
             }
         }
 
-        fs << "\n@stage(fragment) fn main() -> @location(0) vec4<f32>{\n";
+        fs << "\n@fragment fn main() -> @location(0) vec4<f32>{\n";
         fs << "var fragColor : vec4<f32> = vec4<f32>();\n";
         for (size_t i = 0; i < bindingTypes.size(); ++i) {
             fs << "fragColor = fragColor + buffer" << i << ".color;\n";
@@ -137,7 +137,7 @@ TEST_P(BindGroupTests, ReusedBindGroupSingleSubmit) {
         }
         @group(0) @binding(0) var <uniform> contents: Contents;
 
-        @stage(compute) @workgroup_size(1) fn main() {
+        @compute @workgroup_size(1) fn main() {
           var f : f32 = contents.f;
         })");
 
@@ -173,7 +173,7 @@ TEST_P(BindGroupTests, ReusedUBO) {
 
         @group(0) @binding(0) var <uniform> vertexUbo : VertexUniformBuffer;
 
-        @stage(vertex)
+        @vertex
         fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
             var pos = array<vec2<f32>, 3>(
                 vec2<f32>(-1.0, 1.0),
@@ -190,7 +190,7 @@ TEST_P(BindGroupTests, ReusedUBO) {
         }
         @group(0) @binding(1) var <uniform> fragmentUbo : FragmentUniformBuffer;
 
-        @stage(fragment) fn main() -> @location(0) vec4<f32> {
+        @fragment fn main() -> @location(0) vec4<f32> {
             return fragmentUbo.color;
         })");
 
@@ -228,8 +228,8 @@ TEST_P(BindGroupTests, ReusedUBO) {
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    RGBA8 filled(0, 255, 0, 255);
-    RGBA8 notFilled(0, 0, 0, 0);
+    utils::RGBA8 filled(0, 255, 0, 255);
+    utils::RGBA8 notFilled(0, 0, 0, 0);
     uint32_t min = 1, max = kRTSize - 3;
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, min, min);
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, max, min);
@@ -250,7 +250,7 @@ TEST_P(BindGroupTests, UBOSamplerAndTexture) {
         }
         @group(0) @binding(0) var <uniform> vertexUbo : VertexUniformBuffer;
 
-        @stage(vertex)
+        @vertex
         fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
             var pos = array<vec2<f32>, 3>(
                 vec2<f32>(-1.0, 1.0),
@@ -265,7 +265,7 @@ TEST_P(BindGroupTests, UBOSamplerAndTexture) {
         @group(0) @binding(1) var samp : sampler;
         @group(0) @binding(2) var tex : texture_2d<f32>;
 
-        @stage(fragment)
+        @fragment
         fn main(@builtin(position) FragCoord : vec4<f32>) -> @location(0) vec4<f32> {
             return textureSample(tex, samp, FragCoord.xy);
         })");
@@ -304,13 +304,13 @@ TEST_P(BindGroupTests, UBOSamplerAndTexture) {
     wgpu::TextureView textureView = texture.CreateView();
 
     uint32_t width = kRTSize, height = kRTSize;
-    uint32_t widthInBytes = width * sizeof(RGBA8);
+    uint32_t widthInBytes = width * sizeof(utils::RGBA8);
     widthInBytes = (widthInBytes + 255) & ~255;
     uint32_t sizeInBytes = widthInBytes * height;
-    uint32_t size = sizeInBytes / sizeof(RGBA8);
-    std::vector<RGBA8> data = std::vector<RGBA8>(size);
+    uint32_t size = sizeInBytes / sizeof(utils::RGBA8);
+    std::vector<utils::RGBA8> data = std::vector<utils::RGBA8>(size);
     for (uint32_t i = 0; i < size; i++) {
-        data[i] = RGBA8(0, 255, 0, 255);
+        data[i] = utils::RGBA8(0, 255, 0, 255);
     }
     wgpu::Buffer stagingBuffer =
         utils::CreateBufferFromData(device, data.data(), sizeInBytes, wgpu::BufferUsage::CopySrc);
@@ -334,8 +334,8 @@ TEST_P(BindGroupTests, UBOSamplerAndTexture) {
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    RGBA8 filled(0, 255, 0, 255);
-    RGBA8 notFilled(0, 0, 0, 0);
+    utils::RGBA8 filled(0, 255, 0, 255);
+    utils::RGBA8 notFilled(0, 0, 0, 0);
     uint32_t min = 1, max = kRTSize - 3;
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, min, min);
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, max, min);
@@ -355,7 +355,7 @@ TEST_P(BindGroupTests, MultipleBindLayouts) {
         @group(0) @binding(0) var <uniform> vertexUbo1 : VertexUniformBuffer;
         @group(1) @binding(0) var <uniform> vertexUbo2 : VertexUniformBuffer;
 
-        @stage(vertex)
+        @vertex
         fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
             var pos = array<vec2<f32>, 3>(
                 vec2<f32>(-1.0, 1.0),
@@ -376,7 +376,7 @@ TEST_P(BindGroupTests, MultipleBindLayouts) {
         @group(0) @binding(1) var <uniform> fragmentUbo1 : FragmentUniformBuffer;
         @group(1) @binding(1) var <uniform> fragmentUbo2 : FragmentUniformBuffer;
 
-        @stage(fragment) fn main() -> @location(0) vec4<f32> {
+        @fragment fn main() -> @location(0) vec4<f32> {
             return fragmentUbo1.color + fragmentUbo2.color;
         })");
 
@@ -422,8 +422,8 @@ TEST_P(BindGroupTests, MultipleBindLayouts) {
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    RGBA8 filled(255, 255, 0, 255);
-    RGBA8 notFilled(0, 0, 0, 0);
+    utils::RGBA8 filled(255, 255, 0, 255);
+    utils::RGBA8 notFilled(0, 0, 0, 0);
     uint32_t min = 1, max = kRTSize - 3;
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, min, min);
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, max, min);
@@ -445,16 +445,16 @@ TEST_P(BindGroupTests, MultipleEntryPointsWithMultipleNonZeroGroups) {
         @group(1) @binding(0) var <uniform> contents1: Contents;
         @group(2) @binding(0) var <uniform> contents2: Contents;
 
-        @stage(compute) @workgroup_size(1) fn main0() {
+        @compute @workgroup_size(1) fn main0() {
           var a : f32 = contents0.f;
         }
 
-        @stage(compute) @workgroup_size(1) fn main1() {
+        @compute @workgroup_size(1) fn main1() {
           var a : f32 = contents1.f;
           var b : f32 = contents2.f;
         }
 
-        @stage(compute) @workgroup_size(1) fn main2() {
+        @compute @workgroup_size(1) fn main2() {
           var a : f32 = contents0.f;
           var b : f32 = contents1.f;
           var c : f32 = contents2.f;
@@ -590,8 +590,8 @@ TEST_P(BindGroupTests, DrawTwiceInSamePipelineWithFourBindGroupSets) {
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    RGBA8 filled(255, 0, 0, 255);
-    RGBA8 notFilled(0, 0, 0, 0);
+    utils::RGBA8 filled(255, 0, 0, 255);
+    utils::RGBA8 notFilled(0, 0, 0, 0);
     uint32_t min = 1, max = kRTSize - 3;
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, min, min);
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, max, min);
@@ -632,8 +632,8 @@ TEST_P(BindGroupTests, SetBindGroupBeforePipeline) {
     queue.Submit(1, &commands);
 
     // The result should be red.
-    RGBA8 filled(255, 0, 0, 255);
-    RGBA8 notFilled(0, 0, 0, 0);
+    utils::RGBA8 filled(255, 0, 0, 255);
+    utils::RGBA8 notFilled(0, 0, 0, 0);
     uint32_t min = 1, max = kRTSize - 3;
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, min, min);
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, max, min);
@@ -693,8 +693,8 @@ TEST_P(BindGroupTests, SetDynamicBindGroupBeforePipeline) {
     queue.Submit(1, &commands);
 
     // The result should be RGBAunorm(1, 0, 0, 0.5) + RGBAunorm(0, 1, 0, 0.5)
-    RGBA8 filled(255, 255, 0, 255);
-    RGBA8 notFilled(0, 0, 0, 0);
+    utils::RGBA8 filled(255, 255, 0, 255);
+    utils::RGBA8 notFilled(0, 0, 0, 0);
     uint32_t min = 1, max = kRTSize - 3;
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, min, min);
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, max, min);
@@ -770,8 +770,8 @@ TEST_P(BindGroupTests, BindGroupsPersistAfterPipelineChange) {
     queue.Submit(1, &commands);
 
     // The result should be RGBAunorm(1, 0, 0, 0.5) + RGBAunorm(0, 1, 0, 0.5)
-    RGBA8 filled(255, 255, 0, 255);
-    RGBA8 notFilled(0, 0, 0, 0);
+    utils::RGBA8 filled(255, 255, 0, 255);
+    utils::RGBA8 notFilled(0, 0, 0, 0);
     uint32_t min = 1, max = kRTSize - 3;
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, min, min);
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, max, min);
@@ -782,6 +782,9 @@ TEST_P(BindGroupTests, BindGroupsPersistAfterPipelineChange) {
 // Do a successful draw. Then, change the pipeline and one bind group.
 // Draw to check that the all bind groups are set.
 TEST_P(BindGroupTests, DrawThenChangePipelineAndBindGroup) {
+    // TODO(anglebug.com/3032): fix failure in ANGLE/D3D11
+    DAWN_SUPPRESS_TEST_IF(IsANGLE() && IsWindows());
+
     utils::BasicRenderPass renderPass = utils::CreateBasicRenderPass(device, kRTSize, kRTSize);
 
     // Create a bind group layout which uses a single dynamic uniform buffer.
@@ -875,8 +878,8 @@ TEST_P(BindGroupTests, DrawThenChangePipelineAndBindGroup) {
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    RGBA8 filled(255, 255, 255, 255);
-    RGBA8 notFilled(0, 0, 0, 0);
+    utils::RGBA8 filled(255, 255, 255, 255);
+    utils::RGBA8 notFilled(0, 0, 0, 0);
     uint32_t min = 1, max = kRTSize - 3;
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, min, min);
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, max, min);
@@ -977,8 +980,8 @@ TEST_P(BindGroupTests, DrawThenChangePipelineTwiceAndBindGroup) {
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    RGBA8 filled(255, 255, 255, 255);
-    RGBA8 notFilled(0, 0, 0, 0);
+    utils::RGBA8 filled(255, 255, 255, 255);
+    utils::RGBA8 notFilled(0, 0, 0, 0);
     uint32_t min = 1, max = kRTSize - 3;
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, min, min);
     EXPECT_PIXEL_RGBA8_EQ(filled, renderPass.color, max, min);
@@ -1051,7 +1054,7 @@ TEST_P(BindGroupTests, DynamicOffsetOrder) {
         @group(0) @binding(0) var<storage, read> buffer0 : Buffer;
         @group(0) @binding(4) var<storage, read_write> outputBuffer : OutputBuffer;
 
-        @stage(compute) @workgroup_size(1) fn main() {
+        @compute @workgroup_size(1) fn main() {
             outputBuffer.value = vec3<u32>(buffer0.value, buffer2.value, buffer3.value);
         })");
     pipelineDescriptor.compute.entryPoint = "main";
@@ -1133,7 +1136,7 @@ TEST_P(BindGroupTests, DynamicAndNonDynamicBindingsDoNotConflictAfterRemapping) 
         @group(0) @binding(1) var<uniform> buffer1 : Buffer;
         @group(0) @binding(2) var<storage, read_write> outputBuffer : OutputBuffer;
 
-        @stage(compute) @workgroup_size(1) fn main() {
+        @compute @workgroup_size(1) fn main() {
             outputBuffer.value = vec2<u32>(buffer0.value, buffer1.value);
         })");
         pipelineDescriptor.compute.entryPoint = "main";
@@ -1236,7 +1239,7 @@ TEST_P(BindGroupTests, ArbitraryBindingNumbers) {
     utils::BasicRenderPass renderPass = utils::CreateBasicRenderPass(device, kRTSize, kRTSize);
 
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-        @stage(vertex)
+        @vertex
         fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
             var pos = array<vec2<f32>, 3>(
                 vec2<f32>(-1.0, 1.0),
@@ -1255,7 +1258,7 @@ TEST_P(BindGroupTests, ArbitraryBindingNumbers) {
         @group(0) @binding(47) var <uniform> ubo2 : Ubo;
         @group(0) @binding(111) var <uniform> ubo3 : Ubo;
 
-        @stage(fragment) fn main() -> @location(0) vec4<f32> {
+        @fragment fn main() -> @location(0) vec4<f32> {
             return ubo1.color + 2.0 * ubo2.color + 4.0 * ubo3.color;
         })");
 
@@ -1275,7 +1278,8 @@ TEST_P(BindGroupTests, ArbitraryBindingNumbers) {
     wgpu::Buffer blue =
         utils::CreateBufferFromData(device, wgpu::BufferUsage::Uniform, {0.0f, 0.0f, 0.251f, 0.0f});
 
-    auto DoTest = [&](wgpu::Buffer color1, wgpu::Buffer color2, wgpu::Buffer color3, RGBA8 filled) {
+    auto DoTest = [&](wgpu::Buffer color1, wgpu::Buffer color2, wgpu::Buffer color3,
+                      utils::RGBA8 filled) {
         auto DoTestInner = [&](wgpu::BindGroup bindGroup) {
             wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
             wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPass.renderPassInfo);
@@ -1306,25 +1310,25 @@ TEST_P(BindGroupTests, ArbitraryBindingNumbers) {
     };
 
     // first color is normal, second is 2x, third is 3x.
-    DoTest(black, black, black, RGBA8(0, 0, 0, 0));
+    DoTest(black, black, black, utils::RGBA8(0, 0, 0, 0));
 
     // Check the first binding maps to the first slot. We know this because the colors are
     // multiplied 1x.
-    DoTest(red, black, black, RGBA8(64, 0, 0, 0));
-    DoTest(green, black, black, RGBA8(0, 64, 0, 0));
-    DoTest(blue, black, black, RGBA8(0, 0, 64, 0));
+    DoTest(red, black, black, utils::RGBA8(64, 0, 0, 0));
+    DoTest(green, black, black, utils::RGBA8(0, 64, 0, 0));
+    DoTest(blue, black, black, utils::RGBA8(0, 0, 64, 0));
 
     // Use multiple bindings and check the second color maps to the second slot.
     // We know this because the second slot is multiplied 2x.
-    DoTest(green, blue, black, RGBA8(0, 64, 128, 0));
-    DoTest(blue, green, black, RGBA8(0, 128, 64, 0));
-    DoTest(red, green, black, RGBA8(64, 128, 0, 0));
+    DoTest(green, blue, black, utils::RGBA8(0, 64, 128, 0));
+    DoTest(blue, green, black, utils::RGBA8(0, 128, 64, 0));
+    DoTest(red, green, black, utils::RGBA8(64, 128, 0, 0));
 
     // Use multiple bindings and check the third color maps to the third slot.
     // We know this because the third slot is multiplied 4x.
-    DoTest(black, blue, red, RGBA8(255, 0, 128, 0));
-    DoTest(blue, black, green, RGBA8(0, 255, 64, 0));
-    DoTest(red, black, blue, RGBA8(64, 0, 255, 0));
+    DoTest(black, blue, red, utils::RGBA8(255, 0, 128, 0));
+    DoTest(blue, black, green, utils::RGBA8(0, 255, 64, 0));
+    DoTest(red, black, blue, utils::RGBA8(64, 0, 255, 0));
 }
 
 // This is a regression test for crbug.com/dawn/355 which tests that destruction of a bind group
@@ -1355,7 +1359,7 @@ TEST_P(BindGroupTests, EmptyLayout) {
     pipelineDesc.layout = utils::MakeBasicPipelineLayout(device, &bgl);
     pipelineDesc.compute.entryPoint = "main";
     pipelineDesc.compute.module = utils::CreateShaderModule(device, R"(
-        @stage(compute) @workgroup_size(1) fn main() {
+        @compute @workgroup_size(1) fn main() {
         })");
 
     wgpu::ComputePipeline pipeline = device.CreateComputePipeline(&pipelineDesc);
@@ -1378,7 +1382,7 @@ TEST_P(BindGroupTests, ReadonlyStorage) {
     utils::ComboRenderPipelineDescriptor pipelineDescriptor;
 
     pipelineDescriptor.vertex.module = utils::CreateShaderModule(device, R"(
-        @stage(vertex)
+        @vertex
         fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
             var pos = array<vec2<f32>, 3>(
                 vec2<f32>(-1.0, 1.0),
@@ -1394,7 +1398,7 @@ TEST_P(BindGroupTests, ReadonlyStorage) {
         }
         @group(0) @binding(0) var<storage, read> buffer0 : Buffer0;
 
-        @stage(fragment) fn main() -> @location(0) vec4<f32> {
+        @fragment fn main() -> @location(0) vec4<f32> {
             return buffer0.color;
         })");
 
@@ -1424,7 +1428,7 @@ TEST_P(BindGroupTests, ReadonlyStorage) {
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    EXPECT_PIXEL_RGBA8_EQ(RGBA8::kGreen, renderPass.color, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kGreen, renderPass.color, 0, 0);
 }
 
 // Test that creating a large bind group, with each binding type at the max count, works and can be
@@ -1547,7 +1551,7 @@ TEST_P(BindGroupTests, ReallyLargeBindGroup) {
     body << "result.value = 1u;\n";
 
     std::string shader =
-        interface.str() + "@stage(compute) @workgroup_size(1) fn main() {\n" + body.str() + "}\n";
+        interface.str() + "@compute @workgroup_size(1) fn main() {\n" + body.str() + "}\n";
     wgpu::ComputePipelineDescriptor cpDesc;
     cpDesc.compute.module = utils::CreateShaderModule(device, shader.c_str());
     cpDesc.compute.entryPoint = "main";

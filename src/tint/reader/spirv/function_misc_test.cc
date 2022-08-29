@@ -75,7 +75,8 @@ TEST_F(SpvParserTestMiscInstruction, OpUndef_BeforeFunction_Scalar) {
     EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr(R"(let x_11 : bool = false;
 let x_12 : u32 = 0u;
 let x_13 : i32 = 0i;
-let x_14 : f32 = 0.0;
+let x_14 : f32 = 0.0f;
+return;
 )"));
 }
 
@@ -133,7 +134,8 @@ TEST_F(SpvParserTestMiscInstruction, OpUndef_InFunction_Scalar) {
     EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr(R"(let x_11 : bool = false;
 let x_12 : u32 = 0u;
 let x_13 : i32 = 0i;
-let x_14 : f32 = 0.0;
+let x_14 : f32 = 0.0f;
+return;
 )"));
 }
 
@@ -224,7 +226,7 @@ TEST_F(SpvParserTestMiscInstruction, OpUndef_InFunction_Struct) {
     EXPECT_TRUE(fe.EmitBody()) << p->error();
     auto ast_body = fe.ast_body();
     EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr("let x_11 : S = S(false, 0u, 0i, 0.0);"));
+                HasSubstr("let x_11 : S = S(false, 0u, 0i, 0.0f);"));
 }
 
 TEST_F(SpvParserTestMiscInstruction, OpNop) {
@@ -287,51 +289,6 @@ INSTANTIATE_TEST_SUITE_P(ValidIndex,
                              {3, "w", ""},
                              {4, "", "vector component index is larger than 3: 4"},
                              {99999, "", "vector component index is larger than 3: 99999"}}));
-
-TEST_F(SpvParserTest, ValueFromBlockNotInBlockOrder) {
-    // crbug.com/tint/804
-    const auto assembly = Preamble() + CommonTypes() + R"(
-     %float_42 = OpConstant %float 42.0
-     %cond = OpUndef %bool
-
-     %100 = OpFunction %void None %voidfn
-     %10 = OpLabel
-     OpBranch %30
-
-     ; unreachable
-     %20 = OpLabel
-     %499 = OpFAdd %float %float_42 %float_42
-     %500 = OpFAdd %float %499 %float_42
-     OpBranch %25
-
-     %25 = OpLabel
-     OpBranch %80
-
-
-     %30 = OpLabel
-     OpLoopMerge %90 %80 None
-     OpBranchConditional %cond %90 %40
-
-     %40 = OpLabel
-     OpBranch %90
-
-     %80 = OpLabel ; unreachable continue target
-                ; but "dominated" by %20 and %25
-     %81 = OpFMul %float %500 %float_42 ; %500 is defined in %20
-     OpBranch %30 ; backedge
-
-     %90 = OpLabel
-     OpReturn
-     OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_TRUE(fe.EmitBody()) << p->error();
-    auto ast_body = fe.ast_body();
-    const auto got = test::ToString(p->program(), ast_body);
-    EXPECT_THAT(got, HasSubstr("let x_81 : f32 = (0.0 * 42.0);"));
-}
 
 // TODO(dneto): OpSizeof : requires Kernel (OpenCL)
 

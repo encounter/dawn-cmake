@@ -24,11 +24,23 @@ namespace tint::ast {
 /// A float literal
 class FloatLiteralExpression final : public Castable<FloatLiteralExpression, LiteralExpression> {
   public:
+    /// Literal suffix
+    enum class Suffix {
+        /// No suffix
+        kNone,
+        /// 'f' suffix (f32)
+        kF,
+        /// 'h' suffix (f16)
+        kH,
+    };
+
     /// Constructor
     /// @param pid the identifier of the program that owns this node
+    /// @param nid the unique node identifier
     /// @param src the source of this node
-    /// @param value the float literals value
-    FloatLiteralExpression(ProgramID pid, const Source& src, float value);
+    /// @param val the literal value
+    /// @param suf the literal suffix
+    FloatLiteralExpression(ProgramID pid, NodeID nid, const Source& src, double val, Suffix suf);
     ~FloatLiteralExpression() override;
 
     /// Clones this node and all transitive child nodes using the `CloneContext`
@@ -37,9 +49,18 @@ class FloatLiteralExpression final : public Castable<FloatLiteralExpression, Lit
     /// @return the newly cloned node
     const FloatLiteralExpression* Clone(CloneContext* ctx) const override;
 
-    /// The float literal value
-    const float value;
+    /// The literal value
+    const double value;
+
+    /// The literal suffix
+    const Suffix suffix;
 };
+
+/// Writes the float literal suffix to the std::ostream.
+/// @param out the std::ostream to write to
+/// @param suffix the suffix to write
+/// @returns out so calls can be chained
+std::ostream& operator<<(std::ostream& out, FloatLiteralExpression::Suffix suffix);
 
 }  // namespace tint::ast
 

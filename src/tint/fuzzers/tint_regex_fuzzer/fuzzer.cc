@@ -24,6 +24,7 @@
 #include "src/tint/fuzzers/transform_builder.h"
 #include "src/tint/reader/wgsl/parser.h"
 #include "src/tint/writer/wgsl/generator.h"
+#include "testing/libfuzzer/libfuzzer_exports.h"
 
 namespace tint::fuzzers::regex_fuzzer {
 namespace {
@@ -37,6 +38,10 @@ enum class MutationKind {
     kReplaceIdentifier,
     kReplaceLiteral,
     kInsertReturnStatement,
+    kReplaceOperator,
+    kInsertBreakOrContinue,
+    kReplaceFunctionCallWithBuiltin,
+    kAddSwizzle,
     kNumMutationKinds
 };
 
@@ -64,43 +69,65 @@ extern "C" size_t LLVMFuzzerCustomMutator(uint8_t* data,
     MutationKind mutation_kind = static_cast<MutationKind>(
         generator.GetUInt32(static_cast<uint32_t>(MutationKind::kNumMutationKinds)));
 
+    WgslMutator mutator(generator);
     switch (mutation_kind) {
         case MutationKind::kSwapIntervals:
-            if (!SwapRandomIntervals(delimiter, wgsl_code, generator)) {
+            if (!mutator.SwapRandomIntervals(delimiter, wgsl_code)) {
                 return 0;
             }
             break;
 
         case MutationKind::kDeleteInterval:
-            if (!DeleteRandomInterval(delimiter, wgsl_code, generator)) {
+            if (!mutator.DeleteRandomInterval(delimiter, wgsl_code)) {
                 return 0;
             }
             break;
 
         case MutationKind::kDuplicateInterval:
-            if (!DuplicateRandomInterval(delimiter, wgsl_code, generator)) {
+            if (!mutator.DuplicateRandomInterval(delimiter, wgsl_code)) {
                 return 0;
             }
             break;
 
         case MutationKind::kReplaceIdentifier:
-            if (!ReplaceRandomIdentifier(wgsl_code, generator)) {
+            if (!mutator.ReplaceRandomIdentifier(wgsl_code)) {
                 return 0;
             }
             break;
 
         case MutationKind::kReplaceLiteral:
-            if (!ReplaceRandomIntLiteral(wgsl_code, generator)) {
+            if (!mutator.ReplaceRandomIntLiteral(wgsl_code)) {
                 return 0;
             }
             break;
 
         case MutationKind::kInsertReturnStatement:
-            if (!InsertReturnStatement(wgsl_code, generator)) {
+            if (!mutator.InsertReturnStatement(wgsl_code)) {
                 return 0;
             }
             break;
 
+        case MutationKind::kReplaceOperator:
+            if (!mutator.ReplaceRandomOperator(wgsl_code)) {
+                return 0;
+            }
+            break;
+
+        case MutationKind::kInsertBreakOrContinue:
+            if (!mutator.InsertBreakOrContinue(wgsl_code)) {
+                return 0;
+            }
+            break;
+        case MutationKind::kReplaceFunctionCallWithBuiltin:
+            if (!mutator.ReplaceFunctionCallWithBuiltin(wgsl_code)) {
+                return 0;
+            }
+            break;
+        case MutationKind::kAddSwizzle:
+            if (!mutator.AddSwizzle(wgsl_code)) {
+                return 0;
+            }
+            break;
         default:
             assert(false && "Unreachable");
             return 0;

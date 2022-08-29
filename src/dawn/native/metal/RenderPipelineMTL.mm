@@ -98,6 +98,8 @@ MTLVertexStepFunction VertexStepModeFunction(wgpu::VertexStepMode mode) {
             return MTLVertexStepFunctionPerVertex;
         case wgpu::VertexStepMode::Instance:
             return MTLVertexStepFunctionPerInstance;
+        case wgpu::VertexStepMode::VertexBufferNotUsed:
+            UNREACHABLE();
     }
 }
 
@@ -309,6 +311,11 @@ Ref<RenderPipelineBase> RenderPipeline::CreateUninitialized(
     const RenderPipelineDescriptor* descriptor) {
     return AcquireRef(new RenderPipeline(device, descriptor));
 }
+
+RenderPipeline::RenderPipeline(DeviceBase* dev, const RenderPipelineDescriptor* desc)
+    : RenderPipelineBase(dev, desc) {}
+
+RenderPipeline::~RenderPipeline() = default;
 
 MaybeError RenderPipeline::Initialize() {
     mMtlPrimitiveTopology = MTLPrimitiveTopology(GetPrimitiveTopology());

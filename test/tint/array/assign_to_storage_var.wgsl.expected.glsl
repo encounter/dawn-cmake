@@ -28,12 +28,12 @@ layout(binding = 3, std430) buffer S_nested_1 {
   int arr[4][3][2];
 } dst_nested;
 ivec4[4] ret_arr() {
-  ivec4 tint_symbol_2[4] = ivec4[4](ivec4(0, 0, 0, 0), ivec4(0, 0, 0, 0), ivec4(0, 0, 0, 0), ivec4(0, 0, 0, 0));
+  ivec4 tint_symbol_2[4] = ivec4[4](ivec4(0), ivec4(0), ivec4(0), ivec4(0));
   return tint_symbol_2;
 }
 
 S ret_struct_arr() {
-  S tint_symbol_3 = S(ivec4[4](ivec4(0, 0, 0, 0), ivec4(0, 0, 0, 0), ivec4(0, 0, 0, 0), ivec4(0, 0, 0, 0)));
+  S tint_symbol_3 = S(ivec4[4](ivec4(0), ivec4(0), ivec4(0), ivec4(0)));
   return tint_symbol_3;
 }
 
@@ -44,7 +44,7 @@ void foo(ivec4 src_param[4]) {
   dst.arr = src_param;
   ivec4 tint_symbol[4] = ret_arr();
   dst.arr = tint_symbol;
-  ivec4 src_let[4] = ivec4[4](ivec4(0, 0, 0, 0), ivec4(0, 0, 0, 0), ivec4(0, 0, 0, 0), ivec4(0, 0, 0, 0));
+  ivec4 src_let[4] = ivec4[4](ivec4(0), ivec4(0), ivec4(0), ivec4(0));
   dst.arr = src_let;
   dst.arr = src_function;
   dst.arr = src_private;

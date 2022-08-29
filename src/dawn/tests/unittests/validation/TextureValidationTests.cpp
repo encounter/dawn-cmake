@@ -143,7 +143,6 @@ TEST_F(TextureValidationTest, SampleCount) {
     {
         wgpu::TextureDescriptor descriptor = defaultDescriptor;
         descriptor.sampleCount = 4;
-        descriptor.usage = wgpu::TextureUsage::TextureBinding;
 
         for (wgpu::TextureFormat format : utils::kFormatsInCoreSpec) {
             descriptor.format = format;
@@ -169,6 +168,16 @@ TEST_F(TextureValidationTest, SampleCount) {
         wgpu::TextureDescriptor descriptor = defaultDescriptor;
         descriptor.sampleCount = 4;
         descriptor.usage |= wgpu::TextureUsage::StorageBinding;
+
+        ASSERT_DEVICE_ERROR(device.CreateTexture(&descriptor));
+    }
+
+    // It is an error to create a texture without TextureUsage::RenderAttachment usage when
+    // sampleCount > 1.
+    {
+        wgpu::TextureDescriptor descriptor = defaultDescriptor;
+        descriptor.sampleCount = 4;
+        descriptor.usage = wgpu::TextureUsage::TextureBinding;
 
         ASSERT_DEVICE_ERROR(device.CreateTexture(&descriptor));
     }
@@ -650,14 +659,6 @@ TEST_F(TextureValidationTest, TextureFormatUndefined) {
     ASSERT_DEVICE_ERROR(device.CreateTexture(&descriptor));
 }
 
-// Test that the creation of a texture with depth24unorm-stencil8 will fail when the feature
-// Depth24UnormStencil8 is not enabled.
-TEST_F(TextureValidationTest, UseD24S8FormatWithoutEnablingFeature) {
-    wgpu::TextureDescriptor descriptor = CreateDefaultTextureDescriptor();
-    descriptor.format = wgpu::TextureFormat::Depth24UnormStencil8;
-    ASSERT_DEVICE_ERROR(device.CreateTexture(&descriptor));
-}
-
 // Test that the creation of a texture with depth32float-stencil8 will fail when the feature
 // Depth32FloatStencil8 is not enabled.
 TEST_F(TextureValidationTest, UseD32S8FormatWithoutEnablingFeature) {
@@ -696,36 +697,14 @@ TEST_F(TextureValidationTest, UseASTCFormatWithoutEnablingFeature) {
     }
 }
 
-class D24S8TextureFormatsValidationTests : public TextureValidationTest {
-  protected:
-    WGPUDevice CreateTestDevice() override {
-        wgpu::DeviceDescriptor descriptor;
-        wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::Depth24UnormStencil8};
-        descriptor.requiredFeatures = requiredFeatures;
-        descriptor.requiredFeaturesCount = 1;
-        return adapter.CreateDevice(&descriptor);
-    }
-};
-
-// Test that depth24unorm-stencil8 format is invalid for 3D texture
-TEST_F(D24S8TextureFormatsValidationTests, DepthStencilFormatsFor3D) {
-    wgpu::TextureDescriptor descriptor = CreateDefaultTextureDescriptor();
-
-    for (wgpu::TextureDimension dimension : kDimensions) {
-        descriptor.format = wgpu::TextureFormat::Depth24UnormStencil8;
-        descriptor.dimension = dimension;
-        ASSERT_DEVICE_ERROR(device.CreateTexture(&descriptor));
-    }
-}
-
 class D32S8TextureFormatsValidationTests : public TextureValidationTest {
   protected:
-    WGPUDevice CreateTestDevice() override {
+    WGPUDevice CreateTestDevice(dawn::native::Adapter dawnAdapter) override {
         wgpu::DeviceDescriptor descriptor;
         wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::Depth32FloatStencil8};
         descriptor.requiredFeatures = requiredFeatures;
         descriptor.requiredFeaturesCount = 1;
-        return adapter.CreateDevice(&descriptor);
+        return dawnAdapter.CreateDevice(&descriptor);
     }
 };
 
@@ -742,7 +721,7 @@ TEST_F(D32S8TextureFormatsValidationTests, DepthStencilFormatsFor3D) {
 
 class CompressedTextureFormatsValidationTests : public TextureValidationTest {
   protected:
-    WGPUDevice CreateTestDevice() override {
+    WGPUDevice CreateTestDevice(dawn::native::Adapter dawnAdapter) override {
         wgpu::DeviceDescriptor descriptor;
         wgpu::FeatureName requiredFeatures[3] = {wgpu::FeatureName::TextureCompressionBC,
                                                  wgpu::FeatureName::TextureCompressionETC2,
@@ -758,7 +737,7 @@ class CompressedTextureFormatsValidationTests : public TextureValidationTest {
 
         descriptor.nextInChain = &togglesDesc;
 
-        return adapter.CreateDevice(&descriptor);
+        return dawnAdapter.CreateDevice(&descriptor);
     }
 
     wgpu::TextureDescriptor CreateDefaultTextureDescriptor() {
@@ -904,6 +883,95 @@ TEST_F(CompressedTextureFormatsValidationTests, TextureSize) {
             device.CreateTexture(&descriptor);
         }
     }
+}
+
+static void CheckTextureMatchesDescriptor(const wgpu::Texture& tex,
+                                          const wgpu::TextureDescriptor& desc) {
+    EXPECT_EQ(desc.size.width, tex.GetWidth());
+    EXPECT_EQ(desc.size.height, tex.GetHeight());
+    EXPECT_EQ(desc.size.depthOrArrayLayers, tex.GetDepthOrArrayLayers());
+    EXPECT_EQ(desc.mipLevelCount, tex.GetMipLevelCount());
+    EXPECT_EQ(desc.sampleCount, tex.GetSampleCount());
+    EXPECT_EQ(desc.dimension, tex.GetDimension());
+    EXPECT_EQ(desc.usage, tex.GetUsage());
+    EXPECT_EQ(desc.format, tex.GetFormat());
+}
+
+// Test that the texture creation parameters are correctly reflected for succesfully created
+// textures.
+TEST_F(TextureValidationTest, CreationParameterReflectionForValidTextures) {
+    // Test reflection on two succesfully created but different textures.
+    {
+        wgpu::TextureDescriptor desc;
+        desc.size = {3, 2, 1};
+        desc.mipLevelCount = 1;
+        desc.sampleCount = 4;
+        desc.dimension = wgpu::TextureDimension::e2D;
+        desc.usage = wgpu::TextureUsage::RenderAttachment;
+        desc.format = wgpu::TextureFormat::RGBA8Unorm;
+        wgpu::Texture tex = device.CreateTexture(&desc);
+
+        CheckTextureMatchesDescriptor(tex, desc);
+    }
+    {
+        wgpu::TextureDescriptor desc;
+        desc.size = {47, 32, 19};
+        desc.mipLevelCount = 3;
+        desc.sampleCount = 1;
+        desc.dimension = wgpu::TextureDimension::e3D;
+        desc.usage = wgpu::TextureUsage::TextureBinding;
+        desc.format = wgpu::TextureFormat::R32Float;
+        wgpu::Texture tex = device.CreateTexture(&desc);
+
+        CheckTextureMatchesDescriptor(tex, desc);
+    }
+}
+
+// Test that the texture creation parameters are correctly reflected for error textures.
+TEST_F(TextureValidationTest, CreationParameterReflectionForErrorTextures) {
+    // Fill a descriptor with a bunch of garbage values.
+    wgpu::TextureDescriptor desc;
+    desc.size = {0, 0xFFFF'FFFF, 1};
+    desc.mipLevelCount = 0;
+    desc.sampleCount = 42;
+    desc.dimension = static_cast<wgpu::TextureDimension>(0xFFFF'FF00);
+    desc.usage = static_cast<wgpu::TextureUsage>(0xFFFF'FFFF);
+    desc.format = static_cast<wgpu::TextureFormat>(0xFFFF'FFF0);
+
+    // Error! Because the texture width is 0.
+    wgpu::Texture tex;
+    ASSERT_DEVICE_ERROR(tex = device.CreateTexture(&desc));
+
+    CheckTextureMatchesDescriptor(tex, desc);
+}
+
+// Test that CreateErrorTexture creates an invalid texture but doesn't produce an error.
+TEST_F(TextureValidationTest, CreateErrorTexture) {
+    wgpu::TextureDescriptor desc;
+    desc.format = wgpu::TextureFormat::RGBA8Unorm;
+    desc.size = {1, 1, 1};
+    desc.usage = wgpu::TextureUsage::RenderAttachment;
+
+    // Check that the descriptor is valid.
+    device.CreateTexture(&desc);
+
+    // Creating the error texture doesn't produce a validation error.
+    wgpu::Texture tex = device.CreateErrorTexture(&desc);
+
+    // Using the texture, for example to create a view, is an error.
+    ASSERT_DEVICE_ERROR(tex.CreateView());
+}
+
+// Test that the texture creation parameters are correctly reflected for textures created via
+// CreateErrorTexture
+TEST_F(TextureValidationTest, CreationParameterReflectionForCreateErrorTexture) {
+    wgpu::TextureDescriptor desc;
+    desc.format = wgpu::TextureFormat::RGBA8Unorm;
+    desc.size = {1, 1, 1};
+    desc.usage = wgpu::TextureUsage::RenderAttachment;
+
+    wgpu::Texture tex = device.CreateErrorTexture(&desc);
+    CheckTextureMatchesDescriptor(tex, desc);
 }
 
 }  // namespace

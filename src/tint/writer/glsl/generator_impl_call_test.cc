@@ -15,13 +15,15 @@
 #include "src/tint/ast/call_statement.h"
 #include "src/tint/writer/glsl/test_helper.h"
 
+using namespace tint::number_suffixes;  // NOLINT
+
 namespace tint::writer::glsl {
 namespace {
 
 using GlslGeneratorImplTest_Call = TestHelper;
 
 TEST_F(GlslGeneratorImplTest_Call, EmitExpression_Call_WithoutParams) {
-    Func("my_func", {}, ty.f32(), {Return(1.23f)});
+    Func("my_func", utils::Empty, ty.f32(), utils::Vector{Return(1.23_f)});
 
     auto* call = Call("my_func");
     WrapInFunction(call);
@@ -35,13 +37,13 @@ TEST_F(GlslGeneratorImplTest_Call, EmitExpression_Call_WithoutParams) {
 
 TEST_F(GlslGeneratorImplTest_Call, EmitExpression_Call_WithParams) {
     Func("my_func",
-         {
+         utils::Vector{
              Param(Sym(), ty.f32()),
              Param(Sym(), ty.f32()),
          },
-         ty.f32(), {Return(1.23f)});
-    Global("param1", ty.f32(), ast::StorageClass::kPrivate);
-    Global("param2", ty.f32(), ast::StorageClass::kPrivate);
+         ty.f32(), utils::Vector{Return(1.23_f)});
+    GlobalVar("param1", ty.f32(), ast::StorageClass::kPrivate);
+    GlobalVar("param2", ty.f32(), ast::StorageClass::kPrivate);
 
     auto* call = Call("my_func", "param1", "param2");
     WrapInFunction(call);
@@ -55,13 +57,13 @@ TEST_F(GlslGeneratorImplTest_Call, EmitExpression_Call_WithParams) {
 
 TEST_F(GlslGeneratorImplTest_Call, EmitStatement_Call) {
     Func("my_func",
-         {
+         utils::Vector{
              Param(Sym(), ty.f32()),
              Param(Sym(), ty.f32()),
          },
-         ty.void_(), ast::StatementList{}, ast::AttributeList{});
-    Global("param1", ty.f32(), ast::StorageClass::kPrivate);
-    Global("param2", ty.f32(), ast::StorageClass::kPrivate);
+         ty.void_(), utils::Empty, utils::Empty);
+    GlobalVar("param1", ty.f32(), ast::StorageClass::kPrivate);
+    GlobalVar("param2", ty.f32(), ast::StorageClass::kPrivate);
 
     auto* call = CallStmt(Call("my_func", "param1", "param2"));
     WrapInFunction(call);

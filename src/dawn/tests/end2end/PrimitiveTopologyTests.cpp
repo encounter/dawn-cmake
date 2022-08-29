@@ -155,13 +155,13 @@ class PrimitiveTopologyTest : public DawnTest {
         renderPass = utils::CreateBasicRenderPass(device, kRTSize, kRTSize);
 
         vsModule = utils::CreateShaderModule(device, R"(
-            @stage(vertex)
+            @vertex
             fn main(@location(0) pos : vec4<f32>) -> @builtin(position) vec4<f32> {
                 return pos;
             })");
 
         fsModule = utils::CreateShaderModule(device, R"(
-            @stage(fragment) fn main() -> @location(0) vec4<f32> {
+            @fragment fn main() -> @location(0) vec4<f32> {
                 return vec4<f32>(0.0, 1.0, 0.0, 1.0);
             })");
 
@@ -218,7 +218,8 @@ class PrimitiveTopologyTest : public DawnTest {
             for (size_t i = 0; i < locationSpec.count; ++i) {
                 // If this pixel is included, check that it is green. Otherwise, check that it is
                 // black
-                RGBA8 color = locationSpec.include ? RGBA8::kGreen : RGBA8::kZero;
+                utils::RGBA8 color =
+                    locationSpec.include ? utils::RGBA8::kGreen : utils::RGBA8::kZero;
                 EXPECT_PIXEL_RGBA8_EQ(color, renderPass.color, locationSpec.locations[i].x,
                                       locationSpec.locations[i].y)
                     << "Expected (" << locationSpec.locations[i].x << ", "

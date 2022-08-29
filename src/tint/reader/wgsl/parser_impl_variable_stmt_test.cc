@@ -19,7 +19,7 @@ namespace {
 
 TEST_F(ParserImplTest, VariableStmt_VariableDecl) {
     auto p = parser("var a : i32;");
-    auto e = p->variable_stmt();
+    auto e = p->variable_statement();
     EXPECT_TRUE(e.matched);
     EXPECT_FALSE(e.errored);
     EXPECT_FALSE(p->has_error()) << p->error();
@@ -38,7 +38,7 @@ TEST_F(ParserImplTest, VariableStmt_VariableDecl) {
 
 TEST_F(ParserImplTest, VariableStmt_VariableDecl_WithInit) {
     auto p = parser("var a : i32 = 1;");
-    auto e = p->variable_stmt();
+    auto e = p->variable_statement();
     EXPECT_TRUE(e.matched);
     EXPECT_FALSE(e.errored);
     EXPECT_FALSE(p->has_error()) << p->error();
@@ -58,17 +58,17 @@ TEST_F(ParserImplTest, VariableStmt_VariableDecl_WithInit) {
 
 TEST_F(ParserImplTest, VariableStmt_VariableDecl_ConstructorInvalid) {
     auto p = parser("var a : i32 = if(a) {}");
-    auto e = p->variable_stmt();
+    auto e = p->variable_statement();
     EXPECT_FALSE(e.matched);
     EXPECT_TRUE(e.errored);
     EXPECT_EQ(e.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:15: missing constructor for variable declaration");
+    EXPECT_EQ(p->error(), "1:15: missing initializer for 'var' declaration");
 }
 
 TEST_F(ParserImplTest, VariableStmt_VariableDecl_ArrayInit) {
     auto p = parser("var a : array<i32> = array<i32>();");
-    auto e = p->variable_stmt();
+    auto e = p->variable_statement();
     EXPECT_TRUE(e.matched);
     EXPECT_FALSE(e.errored);
     EXPECT_FALSE(p->has_error()) << p->error();
@@ -86,7 +86,7 @@ TEST_F(ParserImplTest, VariableStmt_VariableDecl_ArrayInit) {
 
 TEST_F(ParserImplTest, VariableStmt_VariableDecl_ArrayInit_NoSpace) {
     auto p = parser("var a : array<i32>=array<i32>();");
-    auto e = p->variable_stmt();
+    auto e = p->variable_statement();
     EXPECT_TRUE(e.matched);
     EXPECT_FALSE(e.errored);
     EXPECT_FALSE(p->has_error()) << p->error();
@@ -104,7 +104,7 @@ TEST_F(ParserImplTest, VariableStmt_VariableDecl_ArrayInit_NoSpace) {
 
 TEST_F(ParserImplTest, VariableStmt_VariableDecl_VecInit) {
     auto p = parser("var a : vec2<i32> = vec2<i32>();");
-    auto e = p->variable_stmt();
+    auto e = p->variable_statement();
     EXPECT_TRUE(e.matched);
     EXPECT_FALSE(e.errored);
     EXPECT_FALSE(p->has_error()) << p->error();
@@ -122,7 +122,7 @@ TEST_F(ParserImplTest, VariableStmt_VariableDecl_VecInit) {
 
 TEST_F(ParserImplTest, VariableStmt_VariableDecl_VecInit_NoSpace) {
     auto p = parser("var a : vec2<i32>=vec2<i32>();");
-    auto e = p->variable_stmt();
+    auto e = p->variable_statement();
     EXPECT_TRUE(e.matched);
     EXPECT_FALSE(e.errored);
     EXPECT_FALSE(p->has_error()) << p->error();
@@ -140,7 +140,7 @@ TEST_F(ParserImplTest, VariableStmt_VariableDecl_VecInit_NoSpace) {
 
 TEST_F(ParserImplTest, VariableStmt_Let) {
     auto p = parser("let a : i32 = 1");
-    auto e = p->variable_stmt();
+    auto e = p->variable_statement();
     EXPECT_TRUE(e.matched);
     EXPECT_FALSE(e.errored);
     EXPECT_FALSE(p->has_error()) << p->error();
@@ -153,34 +153,60 @@ TEST_F(ParserImplTest, VariableStmt_Let) {
     ASSERT_EQ(e->source.range.end.column, 6u);
 }
 
+TEST_F(ParserImplTest, VariableStmt_Let_ComplexExpression) {
+    auto p = parser("let x = collide + collide_1;");
+    // Parse as `statement` to validate the `;` at the end so we know we parsed the whole expression
+    auto e = p->statement();
+    EXPECT_TRUE(e.matched);
+    EXPECT_FALSE(e.errored);
+    EXPECT_FALSE(p->has_error()) << p->error();
+    ASSERT_NE(e.value, nullptr);
+    ASSERT_TRUE(e->Is<ast::VariableDeclStatement>());
+
+    auto* decl = e->As<ast::VariableDeclStatement>();
+    ASSERT_NE(decl->variable->constructor, nullptr);
+
+    ASSERT_TRUE(decl->variable->constructor->Is<ast::BinaryExpression>());
+    auto* expr = decl->variable->constructor->As<ast::BinaryExpression>();
+    EXPECT_EQ(expr->op, ast::BinaryOp::kAdd);
+
+    ASSERT_TRUE(expr->lhs->Is<ast::IdentifierExpression>());
+    auto* ident = expr->lhs->As<ast::IdentifierExpression>();
+    EXPECT_EQ(ident->symbol, p->builder().Symbols().Get("collide"));
+
+    ASSERT_TRUE(expr->rhs->Is<ast::IdentifierExpression>());
+    ident = expr->rhs->As<ast::IdentifierExpression>();
+    EXPECT_EQ(ident->symbol, p->builder().Symbols().Get("collide_1"));
+}
+
 TEST_F(ParserImplTest, VariableStmt_Let_MissingEqual) {
     auto p = parser("let a : i32 1");
-    auto e = p->variable_stmt();
+    auto e = p->variable_statement();
     EXPECT_FALSE(e.matched);
     EXPECT_TRUE(e.errored);
     EXPECT_EQ(e.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:13: expected '=' for let declaration");
+    EXPECT_EQ(p->error(), "1:13: expected '=' for 'let' declaration");
 }
 
 TEST_F(ParserImplTest, VariableStmt_Let_MissingConstructor) {
     auto p = parser("let a : i32 =");
-    auto e = p->variable_stmt();
+    auto e = p->variable_statement();
     EXPECT_FALSE(e.matched);
     EXPECT_TRUE(e.errored);
     EXPECT_EQ(e.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:14: missing constructor for let declaration");
+    EXPECT_EQ(p->error(), "1:14: missing initializer for 'let' declaration");
 }
 
 TEST_F(ParserImplTest, VariableStmt_Let_InvalidConstructor) {
     auto p = parser("let a : i32 = if (a) {}");
-    auto e = p->variable_stmt();
+    auto e = p->variable_statement();
     EXPECT_FALSE(e.matched);
     EXPECT_TRUE(e.errored);
     EXPECT_EQ(e.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:15: missing constructor for let declaration");
+    EXPECT_EQ(p->error(), "1:15: missing initializer for 'let' declaration");
 }
 
 }  // namespace

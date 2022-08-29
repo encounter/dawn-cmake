@@ -39,7 +39,7 @@ class DAWN_WIRE_EXPORT WireServer : public CommandHandler {
     explicit WireServer(const WireServerDescriptor& descriptor);
     ~WireServer() override;
 
-    const volatile char* HandleCommands(const volatile char* commands, size_t size) final;
+    const volatile char* HandleCommands(const volatile char* commands, size_t size) override;
 
     bool InjectTexture(WGPUTexture texture,
                        uint32_t id,
@@ -64,6 +64,11 @@ class DAWN_WIRE_EXPORT WireServer : public CommandHandler {
     // work is made. Getting this list can be done by tracking the (id, generation) of
     // previously injected devices, and observing if GetDevice(id, generation) returns non-null.
     WGPUDevice GetDevice(uint32_t id, uint32_t generation);
+
+    // Check if a device handle is known by the wire.
+    // In Chrome, we need to know the list of live devices so we can call device.Tick() on all of
+    // them periodically to ensure progress on asynchronous work is made.
+    bool IsDeviceKnown(WGPUDevice device) const;
 
   private:
     std::unique_ptr<server::Server> mImpl;

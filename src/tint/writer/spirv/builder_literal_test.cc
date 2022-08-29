@@ -72,7 +72,7 @@ TEST_F(BuilderTest, Literal_Bool_Dedup) {
 }
 
 TEST_F(BuilderTest, Literal_I32) {
-    auto* i = Expr(i32(-23));
+    auto* i = Expr(-23_i);
     WrapInFunction(i);
     spirv::Builder& b = Build();
 
@@ -86,8 +86,8 @@ TEST_F(BuilderTest, Literal_I32) {
 }
 
 TEST_F(BuilderTest, Literal_I32_Dedup) {
-    auto* i1 = Expr(i32(-23));
-    auto* i2 = Expr(i32(-23));
+    auto* i1 = Expr(-23_i);
+    auto* i2 = Expr(-23_i);
     WrapInFunction(i1, i2);
 
     spirv::Builder& b = Build();
@@ -133,7 +133,7 @@ TEST_F(BuilderTest, Literal_U32_Dedup) {
 }
 
 TEST_F(BuilderTest, Literal_F32) {
-    auto* i = create<ast::FloatLiteralExpression>(23.245f);
+    auto* i = create<ast::FloatLiteralExpression>(23.245, ast::FloatLiteralExpression::Suffix::kF);
     WrapInFunction(i);
 
     spirv::Builder& b = Build();
@@ -148,8 +148,8 @@ TEST_F(BuilderTest, Literal_F32) {
 }
 
 TEST_F(BuilderTest, Literal_F32_Dedup) {
-    auto* i1 = create<ast::FloatLiteralExpression>(23.245f);
-    auto* i2 = create<ast::FloatLiteralExpression>(23.245f);
+    auto* i1 = create<ast::FloatLiteralExpression>(23.245, ast::FloatLiteralExpression::Suffix::kF);
+    auto* i2 = create<ast::FloatLiteralExpression>(23.245, ast::FloatLiteralExpression::Suffix::kF);
     WrapInFunction(i1, i2);
 
     spirv::Builder& b = Build();
@@ -160,6 +160,41 @@ TEST_F(BuilderTest, Literal_F32_Dedup) {
 
     EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeFloat 32
 %2 = OpConstant %1 23.2450008
+)");
+}
+
+TEST_F(BuilderTest, Literal_F16) {
+    Enable(ast::Extension::kF16);
+
+    auto* i = create<ast::FloatLiteralExpression>(23.245, ast::FloatLiteralExpression::Suffix::kH);
+    WrapInFunction(i);
+
+    spirv::Builder& b = Build();
+
+    auto id = b.GenerateLiteralIfNeeded(nullptr, i);
+    ASSERT_FALSE(b.has_error()) << b.error();
+    EXPECT_EQ(2u, id);
+
+    EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeFloat 16
+%2 = OpConstant %1 0x1.73cp+4
+)");
+}
+
+TEST_F(BuilderTest, Literal_F16_Dedup) {
+    Enable(ast::Extension::kF16);
+
+    auto* i1 = create<ast::FloatLiteralExpression>(23.245, ast::FloatLiteralExpression::Suffix::kH);
+    auto* i2 = create<ast::FloatLiteralExpression>(23.245, ast::FloatLiteralExpression::Suffix::kH);
+    WrapInFunction(i1, i2);
+
+    spirv::Builder& b = Build();
+
+    ASSERT_NE(b.GenerateLiteralIfNeeded(nullptr, i1), 0u);
+    ASSERT_NE(b.GenerateLiteralIfNeeded(nullptr, i2), 0u);
+    ASSERT_FALSE(b.has_error()) << b.error();
+
+    EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeFloat 16
+%2 = OpConstant %1 0x1.73cp+4
 )");
 }
 

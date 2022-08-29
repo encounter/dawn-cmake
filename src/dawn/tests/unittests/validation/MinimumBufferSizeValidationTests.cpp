@@ -118,21 +118,21 @@ static const std::string kStructs = "struct ThreeFloats {f1 : f32, f2 : f32, f3 
 // Creates a compute shader with given bindings
 std::string CreateComputeShaderWithBindings(const std::vector<BindingDescriptor>& bindings) {
     return kStructs + GenerateBindingString(bindings) +
-           "@stage(compute) @workgroup_size(1,1,1) fn main() {\n" +
+           "@compute @workgroup_size(1,1,1) fn main() {\n" +
            GenerateReferenceString(bindings, wgpu::ShaderStage::Compute) + "}";
 }
 
 // Creates a vertex shader with given bindings
 std::string CreateVertexShaderWithBindings(const std::vector<BindingDescriptor>& bindings) {
     return kStructs + GenerateBindingString(bindings) +
-           "@stage(vertex) fn main() -> @builtin(position) vec4<f32> {\n" +
+           "@vertex fn main() -> @builtin(position) vec4<f32> {\n" +
            GenerateReferenceString(bindings, wgpu::ShaderStage::Vertex) +
            "\n   return vec4<f32>(); " + "}";
 }
 
 // Creates a fragment shader with given bindings
 std::string CreateFragmentShaderWithBindings(const std::vector<BindingDescriptor>& bindings) {
-    return kStructs + GenerateBindingString(bindings) + "@stage(fragment) fn main() {\n" +
+    return kStructs + GenerateBindingString(bindings) + "@fragment fn main() {\n" +
            GenerateReferenceString(bindings, wgpu::ShaderStage::Fragment) + "}";
 }
 
@@ -541,7 +541,7 @@ TEST_F(MinBufferSizeDefaultLayoutTests, DefaultLayoutVariousWGSLTypes) {
     CheckShaderBindingSizeReflection({{{0, 0, "a : f32,", "f32", "a", 4},
                                        {0, 1, "b : array<f32>,", "f32", "b[0]", 4},
                                        {0, 2, "c : mat2x2<f32>,", "mat2x2<f32>", "c", 16}}});
-    CheckShaderBindingSizeReflection({{{0, 3, "d : u32; e : array<f32>,", "u32", "d", 8},
+    CheckShaderBindingSizeReflection({{{0, 3, "d : u32, e : array<f32>,", "u32", "d", 8},
                                        {0, 4, "f : ThreeFloats,", "f32", "f.f1", 12},
                                        {0, 5, "g : array<ThreeFloats>,", "f32", "g[0].f1", 12}}});
 }

@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "dawn/common/Constants.h"
+#include "dawn/common/GPUInfo.h"
 #include "dawn/native/Device.h"
 #include "dawn/native/Instance.h"
 #include "dawn/native/ValidationUtils_autogen.h"
@@ -30,8 +31,12 @@ AdapterBase::AdapterBase(InstanceBase* instance, wgpu::BackendType backend)
     mSupportedFeatures.EnableFeature(Feature::DawnInternalUsages);
 }
 
+AdapterBase::~AdapterBase() = default;
+
 MaybeError AdapterBase::Initialize() {
     DAWN_TRY_CONTEXT(InitializeImpl(), "initializing adapter (backend=%s)", mBackend);
+    InitializeVendorArchitectureImpl();
+
     DAWN_TRY_CONTEXT(
         InitializeSupportedFeaturesImpl(),
         "gathering supported features for \"%s\" - \"%s\" (vendorId=%#06x deviceId=%#06x "
@@ -46,6 +51,8 @@ MaybeError AdapterBase::Initialize() {
     // Enforce internal Dawn constants.
     mLimits.v1.maxVertexBufferArrayStride =
         std::min(mLimits.v1.maxVertexBufferArrayStride, kMaxVertexBufferArrayStride);
+    mLimits.v1.maxColorAttachments =
+        std::min(mLimits.v1.maxColorAttachments, uint32_t(kMaxColorAttachments));
     mLimits.v1.maxBindGroups = std::min(mLimits.v1.maxBindGroups, kMaxBindGroups);
     mLimits.v1.maxVertexAttributes =
         std::min(mLimits.v1.maxVertexAttributes, uint32_t(kMaxVertexAttributes));
@@ -79,6 +86,8 @@ bool AdapterBase::APIGetLimits(SupportedLimits* limits) const {
 
 void AdapterBase::APIGetProperties(AdapterProperties* properties) const {
     properties->vendorID = mVendorId;
+    properties->vendorName = mVendorName.c_str();
+    properties->architecture = mArchitectureName.c_str();
     properties->deviceID = mDeviceId;
     properties->name = mName.c_str();
     properties->driverDescription = mDriverDescription.c_str();
@@ -132,6 +141,11 @@ void AdapterBase::APIRequestDevice(const DeviceDescriptor* descriptor,
     callback(status, ToAPI(device.Detach()), nullptr, userdata);
 }
 
+void AdapterBase::InitializeVendorArchitectureImpl() {
+    mVendorName = gpu_info::GetVendorName(mVendorId);
+    mArchitectureName = gpu_info::GetArchitectureName(mVendorId, mDeviceId);
+}
+
 uint32_t AdapterBase::GetVendorId() const {
     return mVendorId;
 }
@@ -145,7 +159,7 @@ wgpu::BackendType AdapterBase::GetBackendType() const {
 }
 
 InstanceBase* AdapterBase::GetInstance() const {
-    return mInstance;
+    return mInstance.Get();
 }
 
 FeaturesSet AdapterBase::GetSupportedFeatures() const {
@@ -160,22 +174,6 @@ bool AdapterBase::SupportsAllRequiredFeatures(
         }
     }
     return true;
-}
-
-WGPUDeviceProperties AdapterBase::GetAdapterProperties() const {
-    WGPUDeviceProperties adapterProperties = {};
-    adapterProperties.deviceID = mDeviceId;
-    adapterProperties.vendorID = mVendorId;
-    adapterProperties.adapterType = static_cast<WGPUAdapterType>(mAdapterType);
-
-    mSupportedFeatures.InitializeDeviceProperties(&adapterProperties);
-    // This is OK for now because there are no limit feature structs.
-    // If we add additional structs, the caller will need to provide memory
-    // to store them (ex. by calling GetLimits directly instead). Currently,
-    // we keep this function as it's only used internally in Chromium to
-    // send the adapter properties across the wire.
-    GetLimits(FromAPI(&adapterProperties.limits));
-    return adapterProperties;
 }
 
 bool AdapterBase::GetLimits(SupportedLimits* limits) const {

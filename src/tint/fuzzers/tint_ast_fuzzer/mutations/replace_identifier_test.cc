@@ -275,8 +275,8 @@ TEST(ReplaceIdentifierTest, NotApplicable5) {
     // (`read` for uniform storage class).
     std::string shader = R"(
 struct S {
-  a: i32;
-};
+  a: i32
+}
 
 var<private> a: S;
 @group(1) @binding(1) var<uniform> b: S;
@@ -310,8 +310,8 @@ TEST(ReplaceIdentifierTest, NotApplicable6) {
     // Can't replace `ptr_b` with `a` since the latter is not a pointer.
     std::string shader = R"(
 struct S {
-  a: i32;
-};
+  a: i32
+}
 
 var<private> a: S;
 @group(1) @binding(1) var<uniform> b: S;
@@ -346,12 +346,12 @@ TEST(ReplaceIdentifierTest, NotApplicable8) {
     // storage class.
     std::string shader = R"(
 struct S {
-  a: i32;
-};
+  a: i32
+}
 
 var<private> a: S;
 @group(1) @binding(1) var<uniform> b: S;
-@group(1) @binding(2) var<storage, write> c: S;
+@group(1) @binding(2) var<storage, read_write> c: S;
 fn f() {
   let ptr_b = &b;
   *&a = *ptr_b;
@@ -382,8 +382,8 @@ TEST(ReplaceIdentifierTest, NotApplicable9) {
     // Can't replace `b` with `e` since the latter is not a reference.
     std::string shader = R"(
 struct S {
-  a: i32;
-};
+  a: i32
+}
 
 var<private> a: S;
 let e = 3;
@@ -418,11 +418,11 @@ TEST(ReplaceIdentifierTest, NotApplicable10) {
     // Can't replace `b` with `e` since the latter has a wrong access mode.
     std::string shader = R"(
 struct S {
-  a: i32;
-};
+  a: i32
+}
 
 var<private> a: S;
-@group(0) @binding(0) var<storage, write> e: S;
+@group(0) @binding(0) var<storage, read_write> e: S;
 @group(1) @binding(1) var<uniform> b: S;
 fn f() {
   *&a = *&b;

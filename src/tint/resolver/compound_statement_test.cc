@@ -21,6 +21,7 @@
 #include "src/tint/sem/if_statement.h"
 #include "src/tint/sem/loop_statement.h"
 #include "src/tint/sem/switch_statement.h"
+#include "src/tint/sem/while_statement.h"
 
 using namespace tint::number_suffixes;  // NOLINT
 
@@ -34,7 +35,7 @@ TEST_F(ResolverCompoundStatementTest, FunctionBlock) {
     //   var x : 32;
     // }
     auto* stmt = Decl(Var("x", ty.i32()));
-    auto* f = Func("F", {}, ty.void_(), {stmt});
+    auto* f = Func("F", utils::Empty, ty.void_(), utils::Vector{stmt});
 
     ASSERT_TRUE(r()->Resolve()) << r()->error();
 
@@ -56,7 +57,7 @@ TEST_F(ResolverCompoundStatementTest, Block) {
     // }
     auto* stmt = Decl(Var("x", ty.i32()));
     auto* block = Block(stmt);
-    auto* f = Func("F", {}, ty.void_(), {block});
+    auto* f = Func("F", utils::Empty, ty.void_(), utils::Vector{block});
 
     ASSERT_TRUE(r()->Resolve()) << r()->error();
 
@@ -91,7 +92,7 @@ TEST_F(ResolverCompoundStatementTest, Loop) {
     auto* brk = Break();
     auto* stmt = Ignore(1_i);
     auto* loop = Loop(Block(brk), Block(stmt));
-    auto* f = Func("F", {}, ty.void_(), {loop});
+    auto* f = Func("F", utils::Empty, ty.void_(), utils::Vector{loop});
 
     ASSERT_TRUE(r()->Resolve()) << r()->error();
 
@@ -144,6 +145,35 @@ TEST_F(ResolverCompoundStatementTest, Loop) {
     }
 }
 
+TEST_F(ResolverCompoundStatementTest, Loop_EmptyContinuing) {
+    // fn F() {
+    //   loop {
+    //     break;
+    //     continuing {
+    //     }
+    //   }
+    // }
+    auto* brk = Break();
+    auto* loop = Loop(Block(brk), Block());
+    Func("F", utils::Empty, ty.void_(), utils::Vector{loop});
+
+    ASSERT_TRUE(r()->Resolve()) << r()->error();
+
+    {
+        auto* s = Sem().Get(loop);
+        ASSERT_NE(s, nullptr);
+        EXPECT_TRUE(s->Is<sem::LoopStatement>());
+        EXPECT_EQ(s->Parent(), s->FindFirstParent<sem::FunctionBlockStatement>());
+        EXPECT_EQ(s->Parent(), s->Block());
+    }
+    {
+        auto* s = Sem().Get(loop->continuing);
+        ASSERT_NE(s, nullptr);
+        EXPECT_TRUE(Is<sem::LoopContinuingBlockStatement>(s));
+        EXPECT_TRUE(Is<sem::LoopStatement>(s->Parent()->Parent()));
+    }
+}
+
 TEST_F(ResolverCompoundStatementTest, ForLoop) {
     // fn F() {
     //   for (var i : u32; true; i = i + 1u) {
@@ -156,7 +186,7 @@ TEST_F(ResolverCompoundStatementTest, ForLoop) {
     auto* stmt = Return();
     auto* body = Block(stmt);
     auto* for_ = For(init, cond, cont, body);
-    auto* f = Func("F", {}, ty.void_(), {for_});
+    auto* f = Func("F", utils::Empty, ty.void_(), utils::Vector{for_});
 
     ASSERT_TRUE(r()->Resolve()) << r()->error();
 
@@ -202,6 +232,55 @@ TEST_F(ResolverCompoundStatementTest, ForLoop) {
         EXPECT_EQ(s->Block(), s->FindFirstParent<sem::LoopBlockStatement>());
         EXPECT_TRUE(Is<sem::ForLoopStatement>(s->Parent()->Parent()));
         EXPECT_EQ(s->Block()->Parent(), s->FindFirstParent<sem::ForLoopStatement>());
+        ASSERT_TRUE(Is<sem::FunctionBlockStatement>(s->Block()->Parent()->Parent()));
+        EXPECT_EQ(s->Block()->Parent()->Parent(),
+                  s->FindFirstParent<sem::FunctionBlockStatement>());
+        EXPECT_EQ(s->Function()->Declaration(), f);
+        EXPECT_EQ(s->Block()->Parent()->Parent()->Parent(), nullptr);
+    }
+}
+
+TEST_F(ResolverCompoundStatementTest, While) {
+    // fn F() {
+    //   while (true) {
+    //     return;
+    //   }
+    // }
+    auto* cond = Expr(true);
+    auto* stmt = Return();
+    auto* body = Block(stmt);
+    auto* while_ = While(cond, body);
+    auto* f = Func("W", utils::Empty, ty.void_(), utils::Vector{while_});
+
+    ASSERT_TRUE(r()->Resolve()) << r()->error();
+
+    {
+        auto* s = Sem().Get(while_);
+        ASSERT_NE(s, nullptr);
+        EXPECT_EQ(Sem().Get(body)->Parent(), s);
+        EXPECT_TRUE(s->Is<sem::WhileStatement>());
+        EXPECT_EQ(s->Parent(), s->FindFirstParent<sem::FunctionBlockStatement>());
+        EXPECT_EQ(s->Parent(), s->Block());
+    }
+    {  // Condition expression's statement is the while itself
+        auto* e = Sem().Get(cond);
+        ASSERT_NE(e, nullptr);
+        auto* s = e->Stmt();
+        ASSERT_NE(s, nullptr);
+        ASSERT_TRUE(Is<sem::WhileStatement>(s));
+        ASSERT_NE(s->Parent(), nullptr);
+        EXPECT_EQ(s->Parent(), s->Block());
+        EXPECT_EQ(s->Parent(), s->FindFirstParent<sem::FunctionBlockStatement>());
+        EXPECT_TRUE(Is<sem::FunctionBlockStatement>(s->Block()));
+    }
+    {
+        auto* s = Sem().Get(stmt);
+        ASSERT_NE(s, nullptr);
+        ASSERT_NE(s->Block(), nullptr);
+        EXPECT_EQ(s->Parent(), s->Block());
+        EXPECT_EQ(s->Block(), s->FindFirstParent<sem::LoopBlockStatement>());
+        EXPECT_TRUE(Is<sem::WhileStatement>(s->Parent()->Parent()));
+        EXPECT_EQ(s->Block()->Parent(), s->FindFirstParent<sem::WhileStatement>());
         ASSERT_TRUE(Is<sem::FunctionBlockStatement>(s->Block()->Parent()->Parent()));
         EXPECT_EQ(s->Block()->Parent()->Parent(),
                   s->FindFirstParent<sem::FunctionBlockStatement>());

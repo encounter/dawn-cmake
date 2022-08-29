@@ -31,13 +31,13 @@ class DestroyTest : public DawnTest {
         renderPass = utils::CreateBasicRenderPass(device, kRTSize, kRTSize);
 
         wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-              @stage(vertex)
+              @vertex
               fn main(@location(0) pos : vec4<f32>) -> @builtin(position) vec4<f32> {
                   return pos;
               })");
 
         wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
-              @stage(fragment) fn main() -> @location(0) vec4<f32> {
+              @fragment fn main() -> @location(0) vec4<f32> {
                   return vec4<f32>(0.0, 1.0, 0.0, 1.0);
               })");
 
@@ -84,7 +84,7 @@ class DestroyTest : public DawnTest {
 
 // Destroy before submit will result in error, and nothing drawn
 TEST_P(DestroyTest, BufferDestroyBeforeSubmit) {
-    RGBA8 notFilled(0, 0, 0, 0);
+    utils::RGBA8 notFilled(0, 0, 0, 0);
 
     wgpu::CommandBuffer commands = CreateTriangleCommandBuffer();
     vertexBuffer.Destroy();
@@ -95,7 +95,7 @@ TEST_P(DestroyTest, BufferDestroyBeforeSubmit) {
 
 // Destroy after submit will draw successfully
 TEST_P(DestroyTest, BufferDestroyAfterSubmit) {
-    RGBA8 filled(0, 255, 0, 255);
+    utils::RGBA8 filled(0, 255, 0, 255);
 
     wgpu::CommandBuffer commands = CreateTriangleCommandBuffer();
     queue.Submit(1, &commands);
@@ -107,7 +107,7 @@ TEST_P(DestroyTest, BufferDestroyAfterSubmit) {
 // First submit succeeds, draws triangle, second submit fails
 // after destroy is called on the buffer, pixel does not change
 TEST_P(DestroyTest, BufferSubmitDestroySubmit) {
-    RGBA8 filled(0, 255, 0, 255);
+    utils::RGBA8 filled(0, 255, 0, 255);
 
     wgpu::CommandBuffer commands = CreateTriangleCommandBuffer();
     queue.Submit(1, &commands);
@@ -131,7 +131,7 @@ TEST_P(DestroyTest, TextureDestroyBeforeSubmit) {
 
 // Destroy after submit will draw successfully
 TEST_P(DestroyTest, TextureDestroyAfterSubmit) {
-    RGBA8 filled(0, 255, 0, 255);
+    utils::RGBA8 filled(0, 255, 0, 255);
 
     wgpu::CommandBuffer commands = CreateTriangleCommandBuffer();
     queue.Submit(1, &commands);
@@ -143,7 +143,7 @@ TEST_P(DestroyTest, TextureDestroyAfterSubmit) {
 // First submit succeeds, draws triangle, second submit fails
 // after destroy is called on the texture
 TEST_P(DestroyTest, TextureSubmitDestroySubmit) {
-    RGBA8 filled(0, 255, 0, 255);
+    utils::RGBA8 filled(0, 255, 0, 255);
 
     wgpu::CommandBuffer commands = CreateTriangleCommandBuffer();
     queue.Submit(1, &commands);
@@ -188,6 +188,20 @@ TEST_P(DestroyTest, DestroyDeviceLingeringBGL) {
     utils::MakeBindGroup(device, layout, {{0, device.CreateSampler()}});
 
     DestroyDevice();
+}
+
+// Regression test for crbug.com/1327865 where the device set the queue to null
+// inside Destroy() such that it could no longer return it to a call to GetQueue().
+TEST_P(DestroyTest, GetQueueAfterDeviceDestroy) {
+    DestroyDevice();
+
+    wgpu::Queue queue = device.GetQueue();
+    ASSERT_DEVICE_ERROR(queue.OnSubmittedWorkDone(
+        0u,
+        [](WGPUQueueWorkDoneStatus status, void* userdata) {
+            EXPECT_EQ(status, WGPUQueueWorkDoneStatus_DeviceLost);
+        },
+        nullptr));
 }
 
 DAWN_INSTANTIATE_TEST(DestroyTest,

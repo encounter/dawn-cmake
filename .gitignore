@@ -4,6 +4,7 @@
 /.cipd
 /.gclient
 /.gclient_entries
+/.gclient_previous_sync_commits
 /build
 /buildtools
 /testing
@@ -97,4 +98,9 @@ coverage.summary
 default.profraw
 lcov.info
 /cmake-build-*/
+/build-*/
 /testing
+
+### Clang-Tidy files
+all_findings.json
+

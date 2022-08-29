@@ -27,6 +27,7 @@
 #include "dawn/native/BackendConnection.h"
 #include "dawn/native/BlobCache.h"
 #include "dawn/native/Features.h"
+#include "dawn/native/RefCountedWithExternalCount.h"
 #include "dawn/native/Toggles.h"
 #include "dawn/native/dawn_platform.h"
 
@@ -45,7 +46,7 @@ InstanceBase* APICreateInstance(const InstanceDescriptor* descriptor);
 
 // This is called InstanceBase for consistency across the frontend, even if the backends don't
 // specialize this class.
-class InstanceBase final : public RefCounted {
+class InstanceBase final : public RefCountedWithExternalCount {
   public:
     static Ref<InstanceBase> Create(const InstanceDescriptor* descriptor = nullptr);
 
@@ -60,6 +61,16 @@ class InstanceBase final : public RefCounted {
 
     // Used to handle error that happen up to device creation.
     bool ConsumedError(MaybeError maybeError);
+
+    template <typename T>
+    bool ConsumedError(ResultOrError<T> resultOrError, T* result) {
+        if (resultOrError.IsError()) {
+            ConsumeError(resultOrError.AcquireError());
+            return true;
+        }
+        *result = resultOrError.AcquireSuccess();
+        return false;
+    }
 
     // Used to query the details of a toggle. Return nullptr if toggleName is not a valid name
     // of a toggle supported in Dawn.
@@ -84,6 +95,10 @@ class InstanceBase final : public RefCounted {
     dawn::platform::Platform* GetPlatform();
     BlobCache* GetBlobCache();
 
+    uint64_t GetDeviceCountForTesting() const;
+    void IncrementDeviceCountForTesting();
+    void DecrementDeviceCountForTesting();
+
     const std::vector<std::string>& GetRuntimeSearchPaths() const;
 
     // Get backend-independent libraries that need to be loaded dynamically.
@@ -93,8 +108,10 @@ class InstanceBase final : public RefCounted {
     Surface* APICreateSurface(const SurfaceDescriptor* descriptor);
 
   private:
-    InstanceBase() = default;
-    ~InstanceBase() = default;
+    InstanceBase();
+    ~InstanceBase() override;
+
+    void WillDropLastExternalRef() override;
 
     InstanceBase(const InstanceBase& other) = delete;
     InstanceBase& operator=(const InstanceBase& other) = delete;
@@ -107,6 +124,8 @@ class InstanceBase final : public RefCounted {
     MaybeError DiscoverAdaptersInternal(const AdapterDiscoveryOptionsBase* options);
 
     ResultOrError<Ref<AdapterBase>> RequestAdapterInternal(const RequestAdapterOptions* options);
+
+    void ConsumeError(std::unique_ptr<ErrorData> error);
 
     std::vector<std::string> mRuntimeSearchPaths;
 
@@ -130,6 +149,8 @@ class InstanceBase final : public RefCounted {
 #if defined(DAWN_USE_X11)
     std::unique_ptr<XlibXcbFunctions> mXlibXcbFunctions;
 #endif  // defined(DAWN_USE_X11)
+
+    std::atomic_uint64_t mDeviceCountForTesting{0};
 };
 
 }  // namespace dawn::native

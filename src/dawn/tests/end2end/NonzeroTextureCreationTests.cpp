@@ -68,9 +68,6 @@ class ExpectNonZero : public detail::CustomTextureExpectation {
     }
 };
 
-#define EXPECT_TEXTURE_NONZERO(T, ...) \
-    AddTextureExpectation(__FILE__, __LINE__, new ExpectNonZero<T>(), __VA_ARGS__)
-
 class NonzeroTextureCreationTests : public DawnTestWithParams<Params> {
   protected:
     constexpr static uint32_t kSize = 128;
@@ -417,8 +414,7 @@ DAWN_INSTANTIATE_TEST_P(
                    {"lazy_clear_resource_on_first_use"})},
     {wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::RG8Unorm, wgpu::TextureFormat::RGBA8Unorm},
     {wgpu::TextureAspect::All},
-    {wgpu::TextureUsage(wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding),
-     wgpu::TextureUsage::TextureBinding},
+    {wgpu::TextureUsage(wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding)},
     {wgpu::TextureDimension::e2D},
     {1u},  // depth or array layers
     {1u},  // mip count

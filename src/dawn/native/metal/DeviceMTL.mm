@@ -158,33 +158,33 @@ MaybeError Device::Initialize(const DeviceDescriptor* descriptor) {
 void Device::InitTogglesFromDriver() {
     {
         bool haveStoreAndMSAAResolve = false;
-#if defined(DAWN_PLATFORM_MACOS)
+#if DAWN_PLATFORM_IS(MACOS)
         if (@available(macOS 10.12, *)) {
             haveStoreAndMSAAResolve =
                 [*mMtlDevice supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v2];
         }
-#elif defined(DAWN_PLATFORM_TVOS)
+#elif DAWN_PLATFORM_IS(TVOS)
         haveStoreAndMSAAResolve = [*mMtlDevice supportsFeatureSet:MTLFeatureSet_tvOS_GPUFamily2_v1];
-#elif defined(DAWN_PLATFORM_IOS)
+#elif DAWN_PLATFORM_IS(IOS)
         haveStoreAndMSAAResolve = [*mMtlDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily3_v2];
 #endif
         // On tvOS, we would need MTLFeatureSet_tvOS_GPUFamily2_v1.
         SetToggle(Toggle::EmulateStoreAndMSAAResolve, !haveStoreAndMSAAResolve);
 
         bool haveSamplerCompare = true;
-#if defined(DAWN_PLATFORM_TVOS)
+#if DAWN_PLATFORM_IS(TVOS)
         haveSamplerCompare = [*mMtlDevice supportsFeatureSet:MTLFeatureSet_tvOS_GPUFamily2_v1];
-#elif defined(DAWN_PLATFORM_IOS)
+#elif DAWN_PLATFORM_IS(IOS)
         haveSamplerCompare = [*mMtlDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily3_v1];
 #endif
         // TODO(crbug.com/dawn/342): Investigate emulation -- possibly expensive.
         SetToggle(Toggle::MetalDisableSamplerCompare, !haveSamplerCompare);
 
         bool haveBaseVertexBaseInstance = true;
-#if defined(DAWN_PLATFORM_TVOS)
+#if DAWN_PLATFORM_IS(TVOS)
         haveBaseVertexBaseInstance =
             [*mMtlDevice supportsFeatureSet:MTLFeatureSet_tvOS_GPUFamily2_v1];
-#elif defined(DAWN_PLATFORM_IOS)
+#elif DAWN_PLATFORM_IS(IOS)
         haveBaseVertexBaseInstance =
             [*mMtlDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily3_v1];
 #endif
@@ -219,7 +219,7 @@ void Device::InitTogglesFromDriver() {
         SetToggle(Toggle::MetalRenderR8RG8UnormSmallMipToTempTexture, true);
     }
 
-    // On some Intel GPU vertex only render pipeline get wrong depth result if no fragment
+    // On some Intel GPUs vertex only render pipeline get wrong depth result if no fragment
     // shader provided. Create a placeholder fragment shader module to work around this issue.
     if (gpu_info::IsIntel(vendorId)) {
         bool usePlaceholderFragmentShader = true;
@@ -227,6 +227,14 @@ void Device::InitTogglesFromDriver() {
             usePlaceholderFragmentShader = false;
         }
         SetToggle(Toggle::UsePlaceholderFragmentInVertexOnlyPipeline, usePlaceholderFragmentShader);
+    }
+
+    // On some Intel GPUs using big integer values as clear values in render pass doesn't work
+    // correctly. Currently we have to add workaround for this issue by enabling the toggle
+    // "apply_clear_big_integer_color_value_with_draw". See https://crbug.com/dawn/1109 and
+    // https://crbug.com/dawn/1463 for more details.
+    if (gpu_info::IsIntel(vendorId)) {
+        SetToggle(Toggle::ApplyClearBigIntegerColorValueWithDraw, true);
     }
 }
 
@@ -302,13 +310,18 @@ void Device::InitializeRenderPipelineAsyncImpl(Ref<RenderPipelineBase> renderPip
 
 ResultOrError<ExecutionSerial> Device::CheckAndUpdateCompletedSerials() {
     uint64_t frontendCompletedSerial{GetCompletedCommandSerial()};
-    if (frontendCompletedSerial > mCompletedSerial) {
-        // sometimes we increase the serials, in which case the completed serial in
-        // the device base will surpass the completed serial we have in the metal backend, so we
-        // must update ours when we see that the completed serial from device base has
-        // increased.
-        mCompletedSerial = frontendCompletedSerial;
+    // sometimes we increase the serials, in which case the completed serial in
+    // the device base will surpass the completed serial we have in the metal backend, so we
+    // must update ours when we see that the completed serial from device base has
+    // increased.
+    //
+    // This update has to be atomic otherwise there is a race with the `addCompletedHandler`
+    // call below and this call could set the mCompletedSerial backwards.
+    uint64_t current = mCompletedSerial.load();
+    while (frontendCompletedSerial > current &&
+           !mCompletedSerial.compare_exchange_weak(current, frontendCompletedSerial)) {
     }
+
     return ExecutionSerial(mCompletedSerial.load());
 }
 

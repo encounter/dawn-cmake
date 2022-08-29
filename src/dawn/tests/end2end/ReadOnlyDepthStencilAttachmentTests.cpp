@@ -37,13 +37,6 @@ class ReadOnlyDepthStencilAttachmentTests
 
     std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
         switch (GetParam().mTextureFormat) {
-            case wgpu::TextureFormat::Depth24UnormStencil8:
-                if (SupportsFeatures({wgpu::FeatureName::Depth24UnormStencil8})) {
-                    mIsFormatSupported = true;
-                    return {wgpu::FeatureName::Depth24UnormStencil8};
-                }
-
-                return {};
             case wgpu::TextureFormat::Depth32FloatStencil8:
                 if (SupportsFeatures({wgpu::FeatureName::Depth32FloatStencil8})) {
                     mIsFormatSupported = true;
@@ -71,7 +64,7 @@ class ReadOnlyDepthStencilAttachmentTests
         // and pass the depth test, and sample from the depth buffer in fragment shader in the same
         // pipeline.
         pipelineDescriptor.vertex.module = utils::CreateShaderModule(device, R"(
-            @stage(vertex)
+            @vertex
             fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
                 var pos = array<vec3<f32>, 6>(
                     vec3<f32>(-1.0,  1.0, 0.4),
@@ -86,7 +79,7 @@ class ReadOnlyDepthStencilAttachmentTests
         if (!sampleFromAttachment) {
             // Draw a solid blue into color buffer if not sample from depth/stencil attachment.
             pipelineDescriptor.cFragment.module = utils::CreateShaderModule(device, R"(
-            @stage(fragment) fn main() -> @location(0) vec4<f32> {
+            @fragment fn main() -> @location(0) vec4<f32> {
                 return vec4<f32>(0.0, 0.0, 1.0, 0.0);
             })");
         } else {
@@ -96,7 +89,7 @@ class ReadOnlyDepthStencilAttachmentTests
                 @group(0) @binding(0) var samp : sampler;
                 @group(0) @binding(1) var tex : texture_depth_2d;
 
-                @stage(fragment)
+                @fragment
                 fn main(@builtin(position) FragCoord : vec4<f32>) -> @location(0) vec4<f32> {
                     return vec4<f32>(textureSample(tex, samp, FragCoord.xy), 0.0, 0.0, 0.0);
                 })");
@@ -105,7 +98,7 @@ class ReadOnlyDepthStencilAttachmentTests
                 pipelineDescriptor.cFragment.module = utils::CreateShaderModule(device, R"(
                 @group(0) @binding(0) var tex : texture_2d<u32>;
 
-                @stage(fragment)
+                @fragment
                 fn main(@builtin(position) FragCoord : vec4<f32>) -> @location(0) vec4<f32> {
                     var texel = textureLoad(tex, vec2<i32>(FragCoord.xy), 0);
                     return vec4<f32>(f32(texel[0]) / 255.0, 0.0, 0.0, 0.0);
@@ -231,11 +224,11 @@ TEST_P(ReadOnlyDepthAttachmentTests, SampleFromAttachment) {
 
     // The top part is not rendered by the pipeline. Its color is the default clear color for
     // color attachment.
-    const std::vector<RGBA8> kExpectedTopColors(kSize * kSize / 2, {0, 0, 0, 0});
+    const std::vector<utils::RGBA8> kExpectedTopColors(kSize * kSize / 2, {0, 0, 0, 0});
     // The bottom part is rendered, whose red channel is sampled from depth attachment, which
     // is initialized into 0.2.
-    const std::vector<RGBA8> kExpectedBottomColors(kSize * kSize / 2,
-                                                   {static_cast<uint8_t>(0.2 * 255), 0, 0, 0});
+    const std::vector<utils::RGBA8> kExpectedBottomColors(
+        kSize * kSize / 2, {static_cast<uint8_t>(0.2 * 255), 0, 0, 0});
     EXPECT_TEXTURE_EQ(kExpectedTopColors.data(), colorTexture, {0, 0}, {kSize, kSize / 2});
     EXPECT_TEXTURE_EQ(kExpectedBottomColors.data(), colorTexture, {0, kSize / 2},
                       {kSize, kSize / 2});
@@ -255,9 +248,9 @@ TEST_P(ReadOnlyDepthAttachmentTests, NotSampleFromAttachment) {
 
     // The top part is not rendered by the pipeline. Its color is the default clear color for
     // color attachment.
-    const std::vector<RGBA8> kExpectedTopColors(kSize * kSize / 2, {0, 0, 0, 0});
+    const std::vector<utils::RGBA8> kExpectedTopColors(kSize * kSize / 2, {0, 0, 0, 0});
     // The bottom part is rendered. Its color is set to blue.
-    const std::vector<RGBA8> kExpectedBottomColors(kSize * kSize / 2, {0, 0, 255, 0});
+    const std::vector<utils::RGBA8> kExpectedBottomColors(kSize * kSize / 2, {0, 0, 255, 0});
     EXPECT_TEXTURE_EQ(kExpectedTopColors.data(), colorTexture, {0, 0}, {kSize, kSize / 2});
     EXPECT_TEXTURE_EQ(kExpectedBottomColors.data(), colorTexture, {0, kSize / 2},
                       {kSize, kSize / 2});
@@ -284,14 +277,14 @@ TEST_P(ReadOnlyStencilAttachmentTests, SampleFromAttachment) {
     // stencilRefValue < stencilValue (stencilInitValue), so stencil test passes. The pipeline
     // samples from stencil buffer and writes into color buffer.
     DoTest(wgpu::TextureAspect::StencilOnly, stencilFormat, colorTexture, &values, true);
-    const std::vector<RGBA8> kSampledColors(kSize * kSize, {3, 0, 0, 0});
+    const std::vector<utils::RGBA8> kSampledColors(kSize * kSize, {3, 0, 0, 0});
     EXPECT_TEXTURE_EQ(kSampledColors.data(), colorTexture, {0, 0}, {kSize, kSize});
 
     values.stencilInitValue = 1;
     // stencilRefValue > stencilValue (stencilInitValue), so stencil test fails. The pipeline
     // doesn't change color buffer. Sampled data from stencil buffer is discarded.
     DoTest(wgpu::TextureAspect::StencilOnly, stencilFormat, colorTexture, &values, true);
-    const std::vector<RGBA8> kInitColors(kSize * kSize, {0, 0, 0, 0});
+    const std::vector<utils::RGBA8> kInitColors(kSize * kSize, {0, 0, 0, 0});
     EXPECT_TEXTURE_EQ(kInitColors.data(), colorTexture, {0, 0}, {kSize, kSize});
 }
 
@@ -308,14 +301,14 @@ TEST_P(ReadOnlyStencilAttachmentTests, NotSampleFromAttachment) {
     // stencilRefValue < stencilValue (stencilInitValue), so stencil test passes. The pipeline
     // draw solid blue into color buffer.
     DoTest(wgpu::TextureAspect::StencilOnly, stencilFormat, colorTexture, &values, false);
-    const std::vector<RGBA8> kSampledColors(kSize * kSize, {0, 0, 255, 0});
+    const std::vector<utils::RGBA8> kSampledColors(kSize * kSize, {0, 0, 255, 0});
     EXPECT_TEXTURE_EQ(kSampledColors.data(), colorTexture, {0, 0}, {kSize, kSize});
 
     values.stencilInitValue = 1;
     // stencilRefValue > stencilValue (stencilInitValue), so stencil test fails. The pipeline
     // doesn't change color buffer. drawing data is discarded.
     DoTest(wgpu::TextureAspect::StencilOnly, stencilFormat, colorTexture, &values, false);
-    const std::vector<RGBA8> kInitColors(kSize * kSize, {0, 0, 0, 0});
+    const std::vector<utils::RGBA8> kInitColors(kSize * kSize, {0, 0, 0, 0});
     EXPECT_TEXTURE_EQ(kInitColors.data(), colorTexture, {0, 0}, {kSize, kSize});
 }
 

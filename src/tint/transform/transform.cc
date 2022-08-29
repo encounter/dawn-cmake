@@ -87,6 +87,9 @@ const ast::Type* Transform::CreateASTTypeFor(CloneContext& ctx, const sem::Type*
     if (ty->Is<sem::U32>()) {
         return ctx.dst->create<ast::U32>();
     }
+    if (ty->Is<sem::F16>()) {
+        return ctx.dst->create<ast::F16>();
+    }
     if (ty->Is<sem::F32>()) {
         return ctx.dst->create<ast::F32>();
     }
@@ -103,9 +106,9 @@ const ast::Type* Transform::CreateASTTypeFor(CloneContext& ctx, const sem::Type*
     }
     if (auto* a = ty->As<sem::Array>()) {
         auto* el = CreateASTTypeFor(ctx, a->ElemType());
-        ast::AttributeList attrs;
+        utils::Vector<const ast::Attribute*, 1> attrs;
         if (!a->IsStrideImplicit()) {
-            attrs.emplace_back(ctx.dst->create<ast::StrideAttribute>(a->Stride()));
+            attrs.Push(ctx.dst->create<ast::StrideAttribute>(a->Stride()));
         }
         if (a->IsRuntimeSized()) {
             return ctx.dst->ty.array(el, nullptr, std::move(attrs));

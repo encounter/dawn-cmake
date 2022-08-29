@@ -70,6 +70,20 @@ static constexpr CommandBufferStateTracker::ValidationAspects kLazyAspects =
     1 << VALIDATION_ASPECT_BIND_GROUPS | 1 << VALIDATION_ASPECT_VERTEX_BUFFERS |
     1 << VALIDATION_ASPECT_INDEX_BUFFER;
 
+CommandBufferStateTracker::CommandBufferStateTracker() = default;
+
+CommandBufferStateTracker::CommandBufferStateTracker(const CommandBufferStateTracker&) = default;
+
+CommandBufferStateTracker::CommandBufferStateTracker(CommandBufferStateTracker&&) = default;
+
+CommandBufferStateTracker::~CommandBufferStateTracker() = default;
+
+CommandBufferStateTracker& CommandBufferStateTracker::operator=(const CommandBufferStateTracker&) =
+    default;
+
+CommandBufferStateTracker& CommandBufferStateTracker::operator=(CommandBufferStateTracker&&) =
+    default;
+
 MaybeError CommandBufferStateTracker::ValidateCanDispatch() {
     return ValidateOperation(kDispatchAspects);
 }
@@ -84,6 +98,13 @@ MaybeError CommandBufferStateTracker::ValidateCanDrawIndexed() {
 
 MaybeError CommandBufferStateTracker::ValidateBufferInRangeForVertexBuffer(uint32_t vertexCount,
                                                                            uint32_t firstVertex) {
+    uint64_t strideCount = static_cast<uint64_t>(firstVertex) + vertexCount;
+
+    if (strideCount == 0) {
+        // All vertex step mode buffers are always in range if stride count is zero
+        return {};
+    }
+
     RenderPipelineBase* lastRenderPipeline = GetRenderPipeline();
 
     const ityp::bitset<VertexBufferSlot, kMaxVertexBuffers>& vertexBufferSlotsUsedAsVertexBuffer =
@@ -101,23 +122,21 @@ MaybeError CommandBufferStateTracker::ValidateBufferInRangeForVertexBuffer(uint3
                             bufferSize, static_cast<uint8_t>(usedSlotVertex),
                             vertexBuffer.usedBytesInStride);
         } else {
-            uint64_t strideCount = static_cast<uint64_t>(firstVertex) + vertexCount;
-            if (strideCount != 0u) {
-                uint64_t requiredSize = (strideCount - 1u) * arrayStride + vertexBuffer.lastStride;
-                // firstVertex and vertexCount are in uint32_t,
-                // arrayStride must not be larger than kMaxVertexBufferArrayStride, which is
-                // currently 2048, and vertexBuffer.lastStride = max(attribute.offset +
-                // sizeof(attribute.format)) with attribute.offset being no larger than
-                // kMaxVertexBufferArrayStride, so by doing checks in uint64_t we avoid
-                // overflows.
-                DAWN_INVALID_IF(
-                    requiredSize > bufferSize,
-                    "Vertex range (first: %u, count: %u) requires a larger buffer (%u) than "
-                    "the "
-                    "bound buffer size (%u) of the vertex buffer at slot %u with stride %u.",
-                    firstVertex, vertexCount, requiredSize, bufferSize,
-                    static_cast<uint8_t>(usedSlotVertex), arrayStride);
-            }
+            DAWN_ASSERT(strideCount != 0u);
+            uint64_t requiredSize = (strideCount - 1u) * arrayStride + vertexBuffer.lastStride;
+            // firstVertex and vertexCount are in uint32_t,
+            // arrayStride must not be larger than kMaxVertexBufferArrayStride, which is
+            // currently 2048, and vertexBuffer.lastStride = max(attribute.offset +
+            // sizeof(attribute.format)) with attribute.offset being no larger than
+            // kMaxVertexBufferArrayStride, so by doing checks in uint64_t we avoid
+            // overflows.
+            DAWN_INVALID_IF(
+                requiredSize > bufferSize,
+                "Vertex range (first: %u, count: %u) requires a larger buffer (%u) than "
+                "the "
+                "bound buffer size (%u) of the vertex buffer at slot %u with stride %u.",
+                firstVertex, vertexCount, requiredSize, bufferSize,
+                static_cast<uint8_t>(usedSlotVertex), arrayStride);
         }
     }
 
@@ -127,6 +146,13 @@ MaybeError CommandBufferStateTracker::ValidateBufferInRangeForVertexBuffer(uint3
 MaybeError CommandBufferStateTracker::ValidateBufferInRangeForInstanceBuffer(
     uint32_t instanceCount,
     uint32_t firstInstance) {
+    uint64_t strideCount = static_cast<uint64_t>(firstInstance) + instanceCount;
+
+    if (strideCount == 0) {
+        // All instance step mode buffers are always in range if stride count is zero
+        return {};
+    }
+
     RenderPipelineBase* lastRenderPipeline = GetRenderPipeline();
 
     const ityp::bitset<VertexBufferSlot, kMaxVertexBuffers>& vertexBufferSlotsUsedAsInstanceBuffer =
@@ -144,23 +170,21 @@ MaybeError CommandBufferStateTracker::ValidateBufferInRangeForInstanceBuffer(
                             bufferSize, static_cast<uint8_t>(usedSlotInstance),
                             vertexBuffer.usedBytesInStride);
         } else {
-            uint64_t strideCount = static_cast<uint64_t>(firstInstance) + instanceCount;
-            if (strideCount != 0u) {
-                uint64_t requiredSize = (strideCount - 1u) * arrayStride + vertexBuffer.lastStride;
-                // firstInstance and instanceCount are in uint32_t,
-                // arrayStride must not be larger than kMaxVertexBufferArrayStride, which is
-                // currently 2048, and vertexBuffer.lastStride = max(attribute.offset +
-                // sizeof(attribute.format)) with attribute.offset being no larger than
-                // kMaxVertexBufferArrayStride, so by doing checks in uint64_t we avoid
-                // overflows.
-                DAWN_INVALID_IF(
-                    requiredSize > bufferSize,
-                    "Instance range (first: %u, count: %u) requires a larger buffer (%u) than "
-                    "the "
-                    "bound buffer size (%u) of the vertex buffer at slot %u with stride %u.",
-                    firstInstance, instanceCount, requiredSize, bufferSize,
-                    static_cast<uint8_t>(usedSlotInstance), arrayStride);
-            }
+            DAWN_ASSERT(strideCount != 0u);
+            uint64_t requiredSize = (strideCount - 1u) * arrayStride + vertexBuffer.lastStride;
+            // firstInstance and instanceCount are in uint32_t,
+            // arrayStride must not be larger than kMaxVertexBufferArrayStride, which is
+            // currently 2048, and vertexBuffer.lastStride = max(attribute.offset +
+            // sizeof(attribute.format)) with attribute.offset being no larger than
+            // kMaxVertexBufferArrayStride, so by doing checks in uint64_t we avoid
+            // overflows.
+            DAWN_INVALID_IF(
+                requiredSize > bufferSize,
+                "Instance range (first: %u, count: %u) requires a larger buffer (%u) than "
+                "the "
+                "bound buffer size (%u) of the vertex buffer at slot %u with stride %u.",
+                firstInstance, instanceCount, requiredSize, bufferSize,
+                static_cast<uint8_t>(usedSlotInstance), arrayStride);
         }
     }
 

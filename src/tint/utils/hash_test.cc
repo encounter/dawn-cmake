@@ -15,9 +15,11 @@
 #include "src/tint/utils/hash.h"
 
 #include <string>
+#include <tuple>
 #include <unordered_map>
 
 #include "gtest/gtest.h"
+#include "src/tint/utils/vector.h"
 
 namespace tint::utils {
 namespace {
@@ -34,11 +36,27 @@ TEST(HashTests, Basic) {
     EXPECT_NE(Hash(std::string("hello")), Hash(std::string("world")));
 }
 
-TEST(HashTests, Vector) {
+TEST(HashTests, StdVector) {
     EXPECT_EQ(Hash(std::vector<int>({})), Hash(std::vector<int>({})));
     EXPECT_EQ(Hash(std::vector<int>({1, 2, 3})), Hash(std::vector<int>({1, 2, 3})));
     EXPECT_NE(Hash(std::vector<int>({1, 2, 3})), Hash(std::vector<int>({1, 2, 4})));
     EXPECT_NE(Hash(std::vector<int>({1, 2, 3})), Hash(std::vector<int>({1, 2, 3, 4})));
+}
+
+TEST(HashTests, TintVector) {
+    EXPECT_EQ(Hash(Vector<int, 0>({})), Hash(Vector<int, 0>({})));
+    EXPECT_EQ(Hash(Vector<int, 0>({1, 2, 3})), Hash(Vector<int, 0>({1, 2, 3})));
+    EXPECT_NE(Hash(Vector<int, 0>({1, 2, 3})), Hash(Vector<int, 0>({1, 2, 4})));
+    EXPECT_NE(Hash(Vector<int, 0>({1, 2, 3})), Hash(Vector<int, 0>({1, 2, 3, 4})));
+    EXPECT_EQ(Hash(Vector<int, 3>({1, 2, 3})), Hash(Vector<int, 4>({1, 2, 3})));
+    EXPECT_EQ(Hash(Vector<int, 3>({1, 2, 3})), Hash(Vector<int, 2>({1, 2, 3})));
+}
+
+TEST(HashTests, Tuple) {
+    EXPECT_EQ(Hash(std::make_tuple(1)), Hash(std::make_tuple(1)));
+    EXPECT_EQ(Hash(std::make_tuple(1, 2, 3)), Hash(std::make_tuple(1, 2, 3)));
+    EXPECT_NE(Hash(std::make_tuple(1, 2, 3)), Hash(std::make_tuple(1, 2, 4)));
+    EXPECT_NE(Hash(std::make_tuple(1, 2, 3)), Hash(std::make_tuple(1, 2, 3, 4)));
 }
 
 TEST(HashTests, UnorderedKeyWrapper) {

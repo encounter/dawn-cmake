@@ -19,8 +19,17 @@ namespace {
 
 using GlslGeneratorImplTest = TestHelper;
 
+TEST_F(GlslGeneratorImplTest, InvalidProgram) {
+    Diagnostics().add_error(diag::System::Writer, "make the program invalid");
+    ASSERT_FALSE(IsValid());
+    auto program = std::make_unique<Program>(std::move(*this));
+    ASSERT_FALSE(program->IsValid());
+    auto result = Generate(program.get(), Options{}, "");
+    EXPECT_EQ(result.error, "input program is not valid");
+}
+
 TEST_F(GlslGeneratorImplTest, Generate) {
-    Func("my_func", ast::VariableList{}, ty.void_(), ast::StatementList{}, ast::AttributeList{});
+    Func("my_func", utils::Empty, ty.void_(), utils::Empty);
 
     GeneratorImpl& gen = Build();
 
@@ -34,7 +43,7 @@ void my_func() {
 }
 
 TEST_F(GlslGeneratorImplTest, GenerateDesktop) {
-    Func("my_func", ast::VariableList{}, ty.void_(), ast::StatementList{}, ast::AttributeList{});
+    Func("my_func", utils::Empty, ty.void_(), utils::Empty);
 
     GeneratorImpl& gen = Build(Version(Version::Standard::kDesktop, 4, 4));
 
@@ -48,11 +57,16 @@ void my_func() {
 }
 
 TEST_F(GlslGeneratorImplTest, GenerateSampleIndexES) {
-    Global("gl_SampleID", ty.i32(),
-           ast::AttributeList{Builtin(ast::Builtin::kSampleIndex),
-                              Disable(ast::DisabledValidation::kIgnoreStorageClass)},
-           ast::StorageClass::kInput);
-    Func("my_func", {}, ty.i32(), ast::StatementList{Return(Expr("gl_SampleID"))});
+    GlobalVar("gl_SampleID", ty.i32(),
+              utils::Vector{
+                  Builtin(ast::BuiltinValue::kSampleIndex),
+                  Disable(ast::DisabledValidation::kIgnoreStorageClass),
+              },
+              ast::StorageClass::kIn);
+    Func("my_func", utils::Empty, ty.i32(),
+         utils::Vector{
+             Return(Expr("gl_SampleID")),
+         });
 
     GeneratorImpl& gen = Build(Version(Version::Standard::kES, 3, 1));
 
@@ -68,11 +82,16 @@ int my_func() {
 }
 
 TEST_F(GlslGeneratorImplTest, GenerateSampleIndexDesktop) {
-    Global("gl_SampleID", ty.i32(),
-           ast::AttributeList{Builtin(ast::Builtin::kSampleIndex),
-                              Disable(ast::DisabledValidation::kIgnoreStorageClass)},
-           ast::StorageClass::kInput);
-    Func("my_func", {}, ty.i32(), ast::StatementList{Return(Expr("gl_SampleID"))});
+    GlobalVar("gl_SampleID", ty.i32(),
+              utils::Vector{
+                  Builtin(ast::BuiltinValue::kSampleIndex),
+                  Disable(ast::DisabledValidation::kIgnoreStorageClass),
+              },
+              ast::StorageClass::kIn);
+    Func("my_func", utils::Empty, ty.i32(),
+         utils::Vector{
+             Return(Expr("gl_SampleID")),
+         });
 
     GeneratorImpl& gen = Build(Version(Version::Standard::kDesktop, 4, 4));
 

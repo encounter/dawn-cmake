@@ -72,6 +72,9 @@ ResultOrError<Ref<SwapChain>> SwapChain::Create(Device* device,
     return swapchain;
 }
 
+SwapChain::SwapChain(DeviceBase* dev, Surface* sur, const SwapChainDescriptor* desc)
+    : NewSwapChainBase(dev, sur, desc) {}
+
 SwapChain::~SwapChain() = default;
 
 void SwapChain::DestroyImpl() {
@@ -105,11 +108,11 @@ MaybeError SwapChain::Initialize(NewSwapChainBase* previousSwapChain) {
     [*mLayer setDevice:ToBackend(GetDevice())->GetMTLDevice()];
     [*mLayer setPixelFormat:MetalPixelFormat(GetFormat())];
 
-#if defined(DAWN_PLATFORM_MACOS)
+#if DAWN_PLATFORM_IS(MACOS)
     if (@available(macos 10.13, *)) {
         [*mLayer setDisplaySyncEnabled:(GetPresentMode() != wgpu::PresentMode::Immediate)];
     }
-#endif  // defined(DAWN_PLATFORM_MACOS)
+#endif  // DAWN_PLATFORM_IS(MACOS)
 
     // There is no way to control Fifo vs. Mailbox in Metal.
 

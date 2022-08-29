@@ -95,8 +95,7 @@ BackendsBitset GetEnabledBackends() {
 
 dawn::platform::CachingInterface* GetCachingInterface(dawn::platform::Platform* platform) {
     if (platform != nullptr) {
-        return platform->GetCachingInterface(/*fingerprint*/ nullptr,
-                                             /*fingerprintSize*/ 0);
+        return platform->GetCachingInterface();
     }
     return nullptr;
 }
@@ -104,7 +103,7 @@ dawn::platform::CachingInterface* GetCachingInterface(dawn::platform::Platform* 
 }  // anonymous namespace
 
 InstanceBase* APICreateInstance(const InstanceDescriptor* descriptor) {
-    return InstanceBase::Create().Detach();
+    return InstanceBase::Create(descriptor).Detach();
 }
 
 // InstanceBase
@@ -120,6 +119,21 @@ Ref<InstanceBase> InstanceBase::Create(const InstanceDescriptor* descriptor) {
         return nullptr;
     }
     return instance;
+}
+
+InstanceBase::InstanceBase() = default;
+
+InstanceBase::~InstanceBase() = default;
+
+void InstanceBase::WillDropLastExternalRef() {
+    // InstanceBase uses RefCountedWithExternalCount to break refcycles.
+    //
+    // InstanceBase holds Refs to AdapterBases it has discovered, which hold Refs back to the
+    // InstanceBase.
+    // In order to break this cycle and prevent leaks, when the application drops the last external
+    // ref and WillDropLastExternalRef is called, the instance clears out any member refs to
+    // adapters that hold back-refs to the instance - thus breaking any reference cycles.
+    mAdapters.clear();
 }
 
 // TODO(crbug.com/dawn/832): make the platform an initialization parameter of the instance.
@@ -177,7 +191,14 @@ ResultOrError<Ref<AdapterBase>> InstanceBase::RequestAdapterInternal(
         if (GetEnabledBackends()[wgpu::BackendType::Vulkan]) {
             dawn_native::vulkan::AdapterDiscoveryOptions vulkanOptions;
             vulkanOptions.forceSwiftShader = true;
-            DAWN_TRY(DiscoverAdaptersInternal(&vulkanOptions));
+
+            MaybeError result = DiscoverAdaptersInternal(&vulkanOptions);
+            if (result.IsError()) {
+                dawn::WarningLog() << absl::StrFormat(
+                    "Skipping Vulkan Swiftshader adapter because initialization failed: %s",
+                    result.AcquireError()->GetFormattedMessage());
+                return Ref<AdapterBase>(nullptr);
+            }
         }
 #else
         return Ref<AdapterBase>(nullptr);
@@ -207,7 +228,7 @@ ResultOrError<Ref<AdapterBase>> InstanceBase::RequestAdapterInternal(
         mAdapters[i]->APIGetProperties(&properties);
 
         if (options->forceFallbackAdapter) {
-            if (!gpu_info::IsSwiftshader(properties.vendorID, properties.deviceID)) {
+            if (!gpu_info::IsGoogleSwiftshader(properties.vendorID, properties.deviceID)) {
                 continue;
             }
             return mAdapters[i];
@@ -273,7 +294,16 @@ void InstanceBase::DiscoverDefaultAdapters() {
 
 // This is just a wrapper around the real logic that uses Error.h error handling.
 bool InstanceBase::DiscoverAdapters(const AdapterDiscoveryOptionsBase* options) {
-    return !ConsumedError(DiscoverAdaptersInternal(options));
+    MaybeError result = DiscoverAdaptersInternal(options);
+
+    if (result.IsError()) {
+        dawn::WarningLog() << absl::StrFormat(
+            "Skipping %s adapter because initialization failed: %s", FromAPI(options->backendType),
+            result.AcquireError()->GetFormattedMessage());
+        return false;
+    }
+
+    return true;
 }
 
 const ToggleInfo* InstanceBase::GetToggleInfo(const char* toggleName) {
@@ -383,10 +413,7 @@ MaybeError InstanceBase::DiscoverAdaptersInternal(const AdapterDiscoveryOptionsB
 
 bool InstanceBase::ConsumedError(MaybeError maybeError) {
     if (maybeError.IsError()) {
-        std::unique_ptr<ErrorData> error = maybeError.AcquireError();
-
-        ASSERT(error != nullptr);
-        dawn::ErrorLog() << error->GetFormattedMessage();
+        ConsumeError(maybeError.AcquireError());
         return true;
     }
     return false;
@@ -433,8 +460,25 @@ BlobCache* InstanceBase::GetBlobCache() {
     return mBlobCache.get();
 }
 
+uint64_t InstanceBase::GetDeviceCountForTesting() const {
+    return mDeviceCountForTesting.load();
+}
+
+void InstanceBase::IncrementDeviceCountForTesting() {
+    mDeviceCountForTesting++;
+}
+
+void InstanceBase::DecrementDeviceCountForTesting() {
+    mDeviceCountForTesting--;
+}
+
 const std::vector<std::string>& InstanceBase::GetRuntimeSearchPaths() const {
     return mRuntimeSearchPaths;
+}
+
+void InstanceBase::ConsumeError(std::unique_ptr<ErrorData> error) {
+    ASSERT(error != nullptr);
+    dawn::ErrorLog() << error->GetFormattedMessage();
 }
 
 const XlibXcbFunctions* InstanceBase::GetOrCreateXlibXcbFunctions() {
@@ -450,7 +494,7 @@ const XlibXcbFunctions* InstanceBase::GetOrCreateXlibXcbFunctions() {
 
 Surface* InstanceBase::APICreateSurface(const SurfaceDescriptor* descriptor) {
     if (ConsumedError(ValidateSurfaceDescriptor(this, descriptor))) {
-        return nullptr;
+        return Surface::MakeError(this);
     }
 
     return new Surface(this, descriptor);

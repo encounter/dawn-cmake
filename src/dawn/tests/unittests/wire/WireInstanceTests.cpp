@@ -109,6 +109,8 @@ TEST_F(WireInstanceTests, RequestAdapterSuccess) {
 
     wgpu::AdapterProperties fakeProperties = {};
     fakeProperties.vendorID = 0x134;
+    fakeProperties.vendorName = "fake-vendor";
+    fakeProperties.architecture = "fake-architecture";
     fakeProperties.deviceID = 0x918;
     fakeProperties.name = "fake adapter";
     fakeProperties.driverDescription = "hello world";
@@ -161,6 +163,8 @@ TEST_F(WireInstanceTests, RequestAdapterSuccess) {
             wgpu::AdapterProperties properties;
             adapter.GetProperties(&properties);
             EXPECT_EQ(properties.vendorID, fakeProperties.vendorID);
+            EXPECT_STREQ(properties.vendorName, fakeProperties.vendorName);
+            EXPECT_STREQ(properties.architecture, fakeProperties.architecture);
             EXPECT_EQ(properties.deviceID, fakeProperties.deviceID);
             EXPECT_STREQ(properties.name, fakeProperties.name);
             EXPECT_STREQ(properties.driverDescription, fakeProperties.driverDescription);
@@ -194,7 +198,7 @@ TEST_F(WireInstanceTests, RequestAdapterWireLacksFeatureSupport) {
     instance.RequestAdapter(&options, cb.Callback(), userdata);
 
     std::initializer_list<wgpu::FeatureName> fakeFeatures = {
-        wgpu::FeatureName::Depth24UnormStencil8,
+        wgpu::FeatureName::Depth32FloatStencil8,
         // Some value that is not a valid feature
         static_cast<wgpu::FeatureName>(-2),
     };
@@ -206,6 +210,8 @@ TEST_F(WireInstanceTests, RequestAdapterWireLacksFeatureSupport) {
             EXPECT_CALL(api, AdapterGetProperties(apiAdapter, NotNull()))
                 .WillOnce(WithArg<1>(Invoke([&](WGPUAdapterProperties* properties) {
                     *properties = {};
+                    properties->vendorName = "";
+                    properties->architecture = "";
                     properties->name = "";
                     properties->driverDescription = "";
                 })));
@@ -240,7 +246,7 @@ TEST_F(WireInstanceTests, RequestAdapterWireLacksFeatureSupport) {
             ASSERT_EQ(adapter.EnumerateFeatures(nullptr), 1u);
             adapter.EnumerateFeatures(&feature);
 
-            EXPECT_EQ(feature, wgpu::FeatureName::Depth24UnormStencil8);
+            EXPECT_EQ(feature, wgpu::FeatureName::Depth32FloatStencil8);
         })));
     FlushServer();
 }
@@ -290,7 +296,5 @@ TEST_F(WireInstanceTests, RequestAdapterWireDisconnectBeforeCallback) {
     GetWireClient()->Disconnect();
 }
 
-// TODO(https://crbug.com/dawn/1381) Remove when namespaces are not indented.
-// NOLINTNEXTLINE(readability/namespace)
 }  // namespace
 }  // namespace dawn::wire

@@ -1,3 +1,6 @@
+warning: parameter 'dimInner' of 'mm_matMul_i1_i1_i1_' must be uniform
+note: 'workgroupBarrier' must only be called from uniform control flow
+note: reading from module-scope private variable 'dimInner_1' may result in a non-uniform value
 struct Uniforms {
   NAN : f32,
   @size(12)
@@ -96,7 +99,7 @@ fn mm_readA_i1_i1_(row : ptr<function, i32>, col : ptr<function, i32>) -> f32 {
     let x_448 : f32 = x_165.A[(((x_438 * x_439) + (x_441 * x_442)) + x_445)];
     x_430 = x_448;
   } else {
-    x_430 = 0.0;
+    x_430 = 0.0f;
   }
   let x_450 : f32 = x_430;
   return x_450;
@@ -126,7 +129,7 @@ fn mm_readB_i1_i1_(row_1 : ptr<function, i32>, col_1 : ptr<function, i32>) -> f3
     let x_485 : f32 = x_185.B[(((x_475 * x_476) + (x_478 * x_479)) + x_482)];
     x_468 = x_485;
   } else {
-    x_468 = 0.0;
+    x_468 = 0.0f;
   }
   let x_487 : f32 = x_468;
   return x_487;
@@ -248,7 +251,7 @@ fn mm_matMul_i1_i1_i1_(dimAOuter : ptr<function, i32>, dimInner : ptr<function, 
       }
       let x_177 : i32 = innerRow;
       let x_178 : i32 = innerCol;
-      acc[x_177][x_178] = 0.0;
+      acc[x_177][x_178] = 0.0f;
 
       continuing {
         let x_181 : i32 = innerCol;
@@ -514,7 +517,7 @@ fn main_1() {
   return;
 }
 
-@stage(compute) @workgroup_size(1i, 64i, 1i)
+@compute @workgroup_size(1i, 64i, 1i)
 fn main(@builtin(local_invocation_id) gl_LocalInvocationID_param : vec3<u32>, @builtin(global_invocation_id) gl_GlobalInvocationID_param : vec3<u32>) {
   gl_LocalInvocationID = gl_LocalInvocationID_param;
   gl_GlobalInvocationID = gl_GlobalInvocationID_param;

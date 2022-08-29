@@ -86,22 +86,19 @@ inline const ast::Type* ty_mat4x4(const ProgramBuilder::TypesBuilder& ty) {
 template <typename BASE>
 class GlslGeneratorImplTest_MemberAccessorBase : public BASE {
   public:
-    void SetupStorageBuffer(ast::StructMemberList members) {
+    void SetupStorageBuffer(utils::VectorRef<const ast::StructMember*> members) {
         ProgramBuilder& b = *this;
 
         auto* s = b.Structure("Data", members);
 
-        b.Global("data", b.ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-                 ast::AttributeList{
-                     b.create<ast::BindingAttribute>(0),
-                     b.create<ast::GroupAttribute>(1),
-                 });
+        b.GlobalVar("data", b.ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite,
+                    b.Group(1), b.Binding(0));
     }
 
-    void SetupFunction(ast::StatementList statements) {
+    void SetupFunction(utils::VectorRef<const ast::Statement*> statements) {
         ProgramBuilder& b = *this;
-        b.Func("main", ast::VariableList{}, b.ty.void_(), statements,
-               ast::AttributeList{
+        b.Func("main", utils::Empty, b.ty.void_(), statements,
+               utils::Vector<const ast::Attribute*, 1>{
                    b.Stage(ast::PipelineStage::kFragment),
                });
     }
@@ -114,11 +111,11 @@ using GlslGeneratorImplTest_MemberAccessorWithParam =
     GlslGeneratorImplTest_MemberAccessorBase<TestParamHelper<T>>;
 
 TEST_F(GlslGeneratorImplTest_MemberAccessor, EmitExpression_MemberAccessor) {
-    auto* s = Structure("Data", {Member("mem", ty.f32())});
-    Global("str", ty.Of(s), ast::StorageClass::kPrivate);
+    auto* s = Structure("Data", utils::Vector{Member("mem", ty.f32())});
+    GlobalVar("str", ty.Of(s), ast::StorageClass::kPrivate);
 
     auto* expr = MemberAccessor("str", "mem");
-    WrapInFunction(Var("expr", ty.f32(), ast::StorageClass::kNone, expr));
+    WrapInFunction(Var("expr", ty.f32(), expr));
 
     GeneratorImpl& gen = SanitizeAndBuild();
 
@@ -165,13 +162,13 @@ TEST_P(GlslGeneratorImplTest_MemberAccessor_StorageBufferLoad, Test) {
 
     auto p = GetParam();
 
-    SetupStorageBuffer({
+    SetupStorageBuffer(utils::Vector{
         Member("a", ty.i32()),
         Member("b", p.member_type(ty)),
     });
 
-    SetupFunction({
-        Decl(Var("x", nullptr, ast::StorageClass::kNone, MemberAccessor("data", "b"))),
+    SetupFunction(utils::Vector{
+        Decl(Var("x", MemberAccessor("data", "b"))),
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
@@ -216,14 +213,13 @@ TEST_P(GlslGeneratorImplTest_MemberAccessor_StorageBufferStore, Test) {
 
     auto p = GetParam();
 
-    SetupStorageBuffer({
+    SetupStorageBuffer(utils::Vector{
         Member("a", ty.i32()),
         Member("b", p.member_type(ty)),
     });
 
-    SetupFunction({
-        Decl(Var("value", p.member_type(ty), ast::StorageClass::kNone,
-                 Construct(p.member_type(ty)))),
+    SetupFunction(utils::Vector{
+        Decl(Var("value", p.member_type(ty), Construct(p.member_type(ty)))),
         Assign(MemberAccessor("data", "b"), Expr("value")),
     });
 
@@ -265,13 +261,13 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Store_Matrix_Empty) {
     // var<storage> data : Data;
     // data.a = mat2x3<f32>();
 
-    SetupStorageBuffer({
+    SetupStorageBuffer(utils::Vector{
         Member("a", ty.i32()),
         Member("b", ty.mat2x3<f32>()),
     });
 
-    SetupFunction({
-        Assign(MemberAccessor("data", "b"), Construct(ty.mat2x3<f32>(), ast::ExpressionList{})),
+    SetupFunction(utils::Vector{
+        Assign(MemberAccessor("data", "b"), Construct(ty.mat2x3<f32>())),
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
@@ -291,7 +287,7 @@ layout(binding = 0, std430) buffer Data_1 {
   mat2x3 b;
 } data;
 void tint_symbol() {
-  data.b = mat2x3(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+  data.b = mat2x3(vec3(0.0f), vec3(0.0f));
 }
 
 void main() {
@@ -310,14 +306,13 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Load_Matrix_Single_El
     // var<storage> data : Data;
     // data.a[2i][1i];
 
-    SetupStorageBuffer({
+    SetupStorageBuffer(utils::Vector{
         Member("z", ty.f32()),
         Member("a", ty.mat4x3<f32>()),
     });
 
-    SetupFunction({
-        Decl(Var("x", nullptr, ast::StorageClass::kNone,
-                 IndexAccessor(IndexAccessor(MemberAccessor("data", "a"), 2_i), 1_i))),
+    SetupFunction(utils::Vector{
+        Decl(Var("x", IndexAccessor(IndexAccessor(MemberAccessor("data", "a"), 2_i), 1_i))),
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
@@ -356,14 +351,13 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor,
     // var<storage> data : Data;
     // data.a[2];
 
-    SetupStorageBuffer({
+    SetupStorageBuffer(utils::Vector{
         Member("z", ty.f32()),
         Member("a", ty.array<i32, 5>(4)),
     });
 
-    SetupFunction({
-        Decl(Var("x", nullptr, ast::StorageClass::kNone,
-                 IndexAccessor(MemberAccessor("data", "a"), 2_i))),
+    SetupFunction(utils::Vector{
+        Decl(Var("x", IndexAccessor(MemberAccessor("data", "a"), 2_i))),
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
@@ -402,14 +396,16 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor,
     // var<storage> data : Data;
     // data.a[(2i + 4i) - 3i];
 
-    SetupStorageBuffer({
+    SetupStorageBuffer(utils::Vector{
         Member("z", ty.f32()),
         Member("a", ty.array<i32, 5>(4)),
     });
 
-    SetupFunction({
-        Decl(Var("x", nullptr, ast::StorageClass::kNone,
-                 IndexAccessor(MemberAccessor("data", "a"), Sub(Add(2_i, 4_i), 3_i)))),
+    SetupFunction(utils::Vector{
+        Decl(Var("a", Expr(2_i))),
+        Decl(Var("b", Expr(4_i))),
+        Decl(Var("c", Expr(3_i))),
+        Decl(Var("x", IndexAccessor(MemberAccessor("data", "a"), Sub(Add("a", "b"), "c")))),
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
@@ -429,7 +425,10 @@ layout(binding = 0, std430) buffer Data_1 {
   int a[5];
 } data;
 void tint_symbol() {
-  int x = data.a[((2 + 4) - 3)];
+  int a = 2;
+  int b = 4;
+  int c = 3;
+  int x = data.a[((a + b) - c)];
 }
 
 void main() {
@@ -447,12 +446,12 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Store_ToArray) {
     // var<storage> data : Data;
     // data.a[2i] = 2i;
 
-    SetupStorageBuffer({
+    SetupStorageBuffer(utils::Vector{
         Member("z", ty.f32()),
         Member("a", ty.array<i32, 5>(4)),
     });
 
-    SetupFunction({
+    SetupFunction(utils::Vector{
         Assign(IndexAccessor(MemberAccessor("data", "a"), 2_i), 2_i),
     });
 
@@ -496,18 +495,17 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Load_MultiLevel) {
     // var<storage> data : Pre;
     // data.c[2i].b
 
-    auto* inner = Structure("Inner", {
+    auto* inner = Structure("Inner", utils::Vector{
                                          Member("a", ty.vec3<f32>()),
                                          Member("b", ty.vec3<f32>()),
                                      });
 
-    SetupStorageBuffer({
+    SetupStorageBuffer(utils::Vector{
         Member("c", ty.array(ty.Of(inner), 4_u, 32)),
     });
 
-    SetupFunction({
-        Decl(Var("x", nullptr, ast::StorageClass::kNone,
-                 MemberAccessor(IndexAccessor(MemberAccessor("data", "c"), 2_i), "b"))),
+    SetupFunction(utils::Vector{
+        Decl(Var("x", MemberAccessor(IndexAccessor(MemberAccessor("data", "c"), 2_i), "b"))),
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
@@ -553,17 +551,17 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Load_MultiLevel_Swizz
     // var<storage> data : Pre;
     // data.c[2i].b.xy
 
-    auto* inner = Structure("Inner", {
+    auto* inner = Structure("Inner", utils::Vector{
                                          Member("a", ty.vec3<f32>()),
                                          Member("b", ty.vec3<f32>()),
                                      });
 
-    SetupStorageBuffer({
+    SetupStorageBuffer(utils::Vector{
         Member("c", ty.array(ty.Of(inner), 4_u, 32)),
     });
 
-    SetupFunction({
-        Decl(Var("x", nullptr, ast::StorageClass::kNone,
+    SetupFunction(utils::Vector{
+        Decl(Var("x",
                  MemberAccessor(
                      MemberAccessor(IndexAccessor(MemberAccessor("data", "c"), 2_i), "b"), "xy"))),
     });
@@ -612,17 +610,17 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor,
     // var<storage> data : Pre;
     // data.c[2i].b.g
 
-    auto* inner = Structure("Inner", {
+    auto* inner = Structure("Inner", utils::Vector{
                                          Member("a", ty.vec3<f32>()),
                                          Member("b", ty.vec3<f32>()),
                                      });
 
-    SetupStorageBuffer({
+    SetupStorageBuffer(utils::Vector{
         Member("c", ty.array(ty.Of(inner), 4_u, 32)),
     });
 
-    SetupFunction({
-        Decl(Var("x", nullptr, ast::StorageClass::kNone,
+    SetupFunction(utils::Vector{
+        Decl(Var("x",
                  MemberAccessor(
                      MemberAccessor(IndexAccessor(MemberAccessor("data", "c"), 2_i), "b"), "g"))),
     });
@@ -670,17 +668,17 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Load_MultiLevel_Index
     // var<storage> data : Pre;
     // data.c[2i].b[1i]
 
-    auto* inner = Structure("Inner", {
+    auto* inner = Structure("Inner", utils::Vector{
                                          Member("a", ty.vec3<f32>()),
                                          Member("b", ty.vec3<f32>()),
                                      });
 
-    SetupStorageBuffer({
+    SetupStorageBuffer(utils::Vector{
         Member("c", ty.array(ty.Of(inner), 4_u, 32)),
     });
 
-    SetupFunction({
-        Decl(Var("x", nullptr, ast::StorageClass::kNone,
+    SetupFunction(utils::Vector{
+        Decl(Var("x",
                  IndexAccessor(MemberAccessor(IndexAccessor(MemberAccessor("data", "c"), 2_i), "b"),
                                1_i))),
     });
@@ -728,18 +726,18 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Store_MultiLevel) {
     // var<storage> data : Pre;
     // data.c[2i].b = vec3<f32>(1.f, 2.f, 3.f);
 
-    auto* inner = Structure("Inner", {
+    auto* inner = Structure("Inner", utils::Vector{
                                          Member("a", ty.vec3<f32>()),
                                          Member("b", ty.vec3<f32>()),
                                      });
 
-    SetupStorageBuffer({
+    SetupStorageBuffer(utils::Vector{
         Member("c", ty.array(ty.Of(inner), 4_u, 32)),
     });
 
-    SetupFunction({
+    SetupFunction(utils::Vector{
         Assign(MemberAccessor(IndexAccessor(MemberAccessor("data", "c"), 2_i), "b"),
-               vec3<f32>(1.f, 2.f, 3.f)),
+               vec3<f32>(1_f, 2_f, 3_f)),
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
@@ -785,19 +783,19 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Store_Swizzle_SingleL
     // var<storage> data : Pre;
     // data.c[2i].b.y = 1.f;
 
-    auto* inner = Structure("Inner", {
+    auto* inner = Structure("Inner", utils::Vector{
                                          Member("a", ty.vec3<i32>()),
                                          Member("b", ty.vec3<f32>()),
                                      });
 
-    SetupStorageBuffer({
+    SetupStorageBuffer(utils::Vector{
         Member("c", ty.array(ty.Of(inner), 4_u, 32)),
     });
 
-    SetupFunction({
+    SetupFunction(utils::Vector{
         Assign(MemberAccessor(MemberAccessor(IndexAccessor(MemberAccessor("data", "c"), 2_i), "b"),
                               "y"),
-               Expr(1.f)),
+               Expr(1_f)),
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
@@ -832,8 +830,7 @@ void main() {
 }
 
 TEST_F(GlslGeneratorImplTest_MemberAccessor, Swizzle_xyz) {
-    auto* var =
-        Var("my_vec", ty.vec4<f32>(), ast::StorageClass::kNone, vec4<f32>(1.f, 2.f, 3.f, 4.f));
+    auto* var = Var("my_vec", ty.vec4<f32>(), vec4<f32>(1_f, 2_f, 3_f, 4_f));
     auto* expr = MemberAccessor("my_vec", "xyz");
     WrapInFunction(var, expr);
 
@@ -843,8 +840,7 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, Swizzle_xyz) {
 }
 
 TEST_F(GlslGeneratorImplTest_MemberAccessor, Swizzle_gbr) {
-    auto* var =
-        Var("my_vec", ty.vec4<f32>(), ast::StorageClass::kNone, vec4<f32>(1.f, 2.f, 3.f, 4.f));
+    auto* var = Var("my_vec", ty.vec4<f32>(), vec4<f32>(1_f, 2_f, 3_f, 4_f));
     auto* expr = MemberAccessor("my_vec", "gbr");
     WrapInFunction(var, expr);
 

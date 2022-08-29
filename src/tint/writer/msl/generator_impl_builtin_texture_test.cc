@@ -184,7 +184,7 @@ std::string expected_texture_overload(ast::builtin::test::ValidTextureOverload o
         case ValidTextureOverload::kSampleGrad2dF32:
             return R"(texture.sample(sampler, float2(1.0f, 2.0f), gradient2d(float2(3.0f, 4.0f), float2(5.0f, 6.0f))))";
         case ValidTextureOverload::kSampleGrad2dOffsetF32:
-            return R"(texture.sample(sampler, float2(1.0f, 2.0f), gradient2d(float2(3.0f, 4.0f), float2(5.0f, 6.0f)), int2(7, 7)))";
+            return R"(texture.sample(sampler, float2(1.0f, 2.0f), gradient2d(float2(3.0f, 4.0f), float2(5.0f, 6.0f)), int2(7)))";
         case ValidTextureOverload::kSampleGrad2dArrayF32:
             return R"(texture.sample(sampler, float2(1.0f, 2.0f), 3, gradient2d(float2(4.0f, 5.0f), float2(6.0f, 7.0f))))";
         case ValidTextureOverload::kSampleGrad2dArrayOffsetF32:
@@ -280,7 +280,8 @@ TEST_P(MslGeneratorBuiltinTextureTest, Call) {
     auto* call = Call(Expr(param.function), param.args(this));
     auto* stmt = CallStmt(call);
 
-    Func("main", {}, ty.void_(), {stmt}, {Stage(ast::PipelineStage::kFragment)});
+    Func("main", utils::Empty, ty.void_(), utils::Vector{stmt},
+         utils::Vector{Stage(ast::PipelineStage::kFragment)});
 
     GeneratorImpl& gen = Build();
 

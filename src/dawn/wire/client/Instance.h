@@ -27,8 +27,8 @@ namespace dawn::wire::client {
 class Instance final : public ObjectBase {
   public:
     using ObjectBase::ObjectBase;
+    ~Instance() override;
 
-    ~Instance();
     void CancelCallbacksForDisconnect() override;
 
     void RequestAdapter(const WGPURequestAdapterOptions* options,

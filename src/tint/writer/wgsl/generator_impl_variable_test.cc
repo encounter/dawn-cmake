@@ -14,13 +14,15 @@
 
 #include "src/tint/writer/wgsl/test_helper.h"
 
+using namespace tint::number_suffixes;  // NOLINT
+
 namespace tint::writer::wgsl {
 namespace {
 
 using WgslGeneratorImplTest = TestHelper;
 
 TEST_F(WgslGeneratorImplTest, EmitVariable) {
-    auto* v = Global("a", ty.f32(), ast::StorageClass::kPrivate);
+    auto* v = GlobalVar("a", ty.f32(), ast::StorageClass::kPrivate);
 
     GeneratorImpl& gen = Build();
 
@@ -30,7 +32,7 @@ TEST_F(WgslGeneratorImplTest, EmitVariable) {
 }
 
 TEST_F(WgslGeneratorImplTest, EmitVariable_StorageClass) {
-    auto* v = Global("a", ty.f32(), ast::StorageClass::kPrivate);
+    auto* v = GlobalVar("a", ty.f32(), ast::StorageClass::kPrivate);
 
     GeneratorImpl& gen = Build();
 
@@ -40,12 +42,9 @@ TEST_F(WgslGeneratorImplTest, EmitVariable_StorageClass) {
 }
 
 TEST_F(WgslGeneratorImplTest, EmitVariable_Access_Read) {
-    auto* s = Structure("S", {Member("a", ty.i32())});
-    auto* v = Global("a", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead,
-                     ast::AttributeList{
-                         create<ast::BindingAttribute>(0),
-                         create<ast::GroupAttribute>(0),
-                     });
+    auto* s = Structure("S", utils::Vector{Member("a", ty.i32())});
+    auto* v = GlobalVar("a", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead, Binding(0),
+                        Group(0));
 
     GeneratorImpl& gen = Build();
 
@@ -54,28 +53,10 @@ TEST_F(WgslGeneratorImplTest, EmitVariable_Access_Read) {
     EXPECT_EQ(out.str(), R"(@binding(0) @group(0) var<storage, read> a : S;)");
 }
 
-TEST_F(WgslGeneratorImplTest, EmitVariable_Access_Write) {
-    auto* s = Structure("S", {Member("a", ty.i32())});
-    auto* v = Global("a", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kWrite,
-                     ast::AttributeList{
-                         create<ast::BindingAttribute>(0),
-                         create<ast::GroupAttribute>(0),
-                     });
-
-    GeneratorImpl& gen = Build();
-
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitVariable(out, v)) << gen.error();
-    EXPECT_EQ(out.str(), R"(@binding(0) @group(0) var<storage, write> a : S;)");
-}
-
 TEST_F(WgslGeneratorImplTest, EmitVariable_Access_ReadWrite) {
-    auto* s = Structure("S", {Member("a", ty.i32())});
-    auto* v = Global("a", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-                     ast::AttributeList{
-                         create<ast::BindingAttribute>(0),
-                         create<ast::GroupAttribute>(0),
-                     });
+    auto* s = Structure("S", utils::Vector{Member("a", ty.i32())});
+    auto* v = GlobalVar("a", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite,
+                        Binding(0), Group(0));
 
     GeneratorImpl& gen = Build();
 
@@ -85,11 +66,7 @@ TEST_F(WgslGeneratorImplTest, EmitVariable_Access_ReadWrite) {
 }
 
 TEST_F(WgslGeneratorImplTest, EmitVariable_Decorated) {
-    auto* v = Global("a", ty.sampler(ast::SamplerKind::kSampler), ast::StorageClass::kNone, nullptr,
-                     ast::AttributeList{
-                         create<ast::GroupAttribute>(1),
-                         create<ast::BindingAttribute>(2),
-                     });
+    auto* v = GlobalVar("a", ty.sampler(ast::SamplerKind::kSampler), Group(1), Binding(2));
 
     GeneratorImpl& gen = Build();
 
@@ -99,24 +76,57 @@ TEST_F(WgslGeneratorImplTest, EmitVariable_Decorated) {
 }
 
 TEST_F(WgslGeneratorImplTest, EmitVariable_Constructor) {
-    auto* v = Global("a", ty.f32(), ast::StorageClass::kPrivate, Expr(1.0f));
+    auto* v = GlobalVar("a", ty.f32(), ast::StorageClass::kPrivate, Expr(1_f));
 
     GeneratorImpl& gen = Build();
 
     std::stringstream out;
     ASSERT_TRUE(gen.EmitVariable(out, v)) << gen.error();
-    EXPECT_EQ(out.str(), R"(var<private> a : f32 = 1.0;)");
+    EXPECT_EQ(out.str(), R"(var<private> a : f32 = 1.0f;)");
 }
 
-TEST_F(WgslGeneratorImplTest, EmitVariable_Const) {
-    auto* v = Let("a", ty.f32(), Expr(1.0f));
-    WrapInFunction(Decl(v));
+TEST_F(WgslGeneratorImplTest, EmitVariable_Let_Explicit) {
+    auto* v = Let("a", ty.f32(), Expr(1_f));
+    WrapInFunction(v);
 
     GeneratorImpl& gen = Build();
 
     std::stringstream out;
     ASSERT_TRUE(gen.EmitVariable(out, v)) << gen.error();
-    EXPECT_EQ(out.str(), R"(let a : f32 = 1.0;)");
+    EXPECT_EQ(out.str(), R"(let a : f32 = 1.0f;)");
+}
+
+TEST_F(WgslGeneratorImplTest, EmitVariable_Let_Inferred) {
+    auto* v = Let("a", Expr(1_f));
+    WrapInFunction(v);
+
+    GeneratorImpl& gen = Build();
+
+    std::stringstream out;
+    ASSERT_TRUE(gen.EmitVariable(out, v)) << gen.error();
+    EXPECT_EQ(out.str(), R"(let a = 1.0f;)");
+}
+
+TEST_F(WgslGeneratorImplTest, EmitVariable_Const_Explicit) {
+    auto* v = Const("a", ty.f32(), Expr(1_f));
+    WrapInFunction(v);
+
+    GeneratorImpl& gen = Build();
+
+    std::stringstream out;
+    ASSERT_TRUE(gen.EmitVariable(out, v)) << gen.error();
+    EXPECT_EQ(out.str(), R"(const a : f32 = 1.0f;)");
+}
+
+TEST_F(WgslGeneratorImplTest, EmitVariable_Const_Inferred) {
+    auto* v = Const("a", Expr(1_f));
+    WrapInFunction(v);
+
+    GeneratorImpl& gen = Build();
+
+    std::stringstream out;
+    ASSERT_TRUE(gen.EmitVariable(out, v)) << gen.error();
+    EXPECT_EQ(out.str(), R"(const a = 1.0f;)");
 }
 
 }  // namespace

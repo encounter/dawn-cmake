@@ -41,7 +41,7 @@ wgpu::Texture Create2DArrayTexture(wgpu::Device& device,
     descriptor.sampleCount = sampleCount;
     descriptor.format = kDefaultTextureFormat;
     descriptor.mipLevelCount = mipLevelCount;
-    descriptor.usage = wgpu::TextureUsage::TextureBinding;
+    descriptor.usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment;
     return device.CreateTexture(&descriptor);
 }
 
@@ -487,10 +487,15 @@ TEST_F(TextureViewValidationTest, TextureViewDescriptorDefaults2DArray) {
     {
         wgpu::TextureViewDescriptor descriptor;
 
-        // Setting array layers to non-0 means the dimensionality will
-        // default to 2D so by itself it causes an error.
+        // Setting array layers to > 1 with an explicit dimensionality of 2D will
+        // causes an error.
         descriptor.arrayLayerCount = kDefaultArrayLayers;
+        descriptor.dimension = wgpu::TextureViewDimension::e2D;
         ASSERT_DEVICE_ERROR(texture.CreateView(&descriptor));
+        // Setting view dimension to Undefined will result in a dimension of 2DArray because the
+        // underlying texture has > 1 array layers.
+        descriptor.dimension = wgpu::TextureViewDimension::Undefined;
+        texture.CreateView(&descriptor);
         descriptor.dimension = wgpu::TextureViewDimension::e2DArray;
         texture.CreateView(&descriptor);
 
@@ -741,15 +746,6 @@ TEST_F(TextureViewValidationTest, TextureViewFormatCompatibility) {
         ASSERT_DEVICE_ERROR(texture.CreateView(&viewDesc));
     }
 
-    // Regression test for crbug.com/1312780.
-    // viewFormat is not supported (Null backend does not support any optional features).
-    {
-        textureDesc.format = wgpu::TextureFormat::Depth24PlusStencil8;
-        viewDesc.format = wgpu::TextureFormat::Depth24UnormStencil8;
-        wgpu::Texture texture = device.CreateTexture(&textureDesc);
-        ASSERT_DEVICE_ERROR(texture.CreateView(&viewDesc), testing::HasSubstr("Unsupported"));
-    }
-
     // It is valid to create a texture view with a depth format of a depth-stencil texture
     // if the depth only aspect is selected.
     {
@@ -918,60 +914,14 @@ TEST_F(TextureViewValidationTest, AspectMustExist) {
     }
 }
 
-class D24S8TextureViewValidationTests : public ValidationTest {
-  protected:
-    WGPUDevice CreateTestDevice() override {
-        wgpu::DeviceDescriptor descriptor;
-        wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::Depth24UnormStencil8};
-        descriptor.requiredFeatures = requiredFeatures;
-        descriptor.requiredFeaturesCount = 1;
-        return adapter.CreateDevice(&descriptor);
-    }
-};
-
-// Test that the selected TextureAspects must exist in the Depth24UnormStencil8 texture format
-TEST_F(D24S8TextureViewValidationTests, AspectMustExist) {
-    wgpu::Texture texture =
-        CreateDepthStencilTexture(device, wgpu::TextureFormat::Depth24UnormStencil8);
-
-    // Can select: All, DepthOnly, and StencilOnly from Depth24UnormStencil8
-    {
-        wgpu::TextureViewDescriptor viewDescriptor = {};
-        viewDescriptor.aspect = wgpu::TextureAspect::All;
-        texture.CreateView(&viewDescriptor);
-
-        viewDescriptor.aspect = wgpu::TextureAspect::DepthOnly;
-        texture.CreateView(&viewDescriptor);
-
-        viewDescriptor.aspect = wgpu::TextureAspect::StencilOnly;
-        texture.CreateView(&viewDescriptor);
-    }
-}
-
-// Test the format compatibility rules when creating a texture view.
-TEST_F(D24S8TextureViewValidationTests, TextureViewFormatCompatibility) {
-    wgpu::Texture texture =
-        CreateDepthStencilTexture(device, wgpu::TextureFormat::Depth24UnormStencil8);
-
-    wgpu::TextureViewDescriptor base2DTextureViewDescriptor =
-        CreateDefaultViewDescriptor(wgpu::TextureViewDimension::e2D);
-
-    // It is an error to create a texture view in color format on a depth-stencil texture.
-    {
-        wgpu::TextureViewDescriptor descriptor = base2DTextureViewDescriptor;
-        descriptor.format = wgpu::TextureFormat::RGBA8Unorm;
-        ASSERT_DEVICE_ERROR(texture.CreateView(&descriptor));
-    }
-}
-
 class D32S8TextureViewValidationTests : public ValidationTest {
   protected:
-    WGPUDevice CreateTestDevice() override {
+    WGPUDevice CreateTestDevice(dawn::native::Adapter dawnAdapter) override {
         wgpu::DeviceDescriptor descriptor;
         wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::Depth32FloatStencil8};
         descriptor.requiredFeatures = requiredFeatures;
         descriptor.requiredFeaturesCount = 1;
-        return adapter.CreateDevice(&descriptor);
+        return dawnAdapter.CreateDevice(&descriptor);
     }
 };
 

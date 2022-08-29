@@ -56,7 +56,7 @@ class SamplerTest : public DawnTest {
         mRenderPass = utils::CreateBasicRenderPass(device, kRTSize, kRTSize);
 
         auto vsModule = utils::CreateShaderModule(device, R"(
-            @stage(vertex)
+            @vertex
             fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
                 var pos = array<vec2<f32>, 6>(
                     vec2<f32>(-2.0, -2.0),
@@ -72,7 +72,7 @@ class SamplerTest : public DawnTest {
             @group(0) @binding(0) var sampler0 : sampler;
             @group(0) @binding(1) var texture0 : texture_2d<f32>;
 
-            @stage(fragment)
+            @fragment
             fn main(@builtin(position) FragCoord : vec4<f32>) -> @location(0) vec4<f32> {
                 return textureSample(texture0, sampler0, FragCoord.xy / vec2<f32>(2.0, 2.0));
             })");
@@ -97,13 +97,14 @@ class SamplerTest : public DawnTest {
         wgpu::Texture texture = device.CreateTexture(&descriptor);
 
         // Create a 2x2 checkerboard texture, with black in the top left and bottom right corners.
-        const uint32_t rowPixels = kTextureBytesPerRowAlignment / sizeof(RGBA8);
-        std::array<RGBA8, rowPixels * 2> pixels;
-        pixels[0] = pixels[rowPixels + 1] = RGBA8::kBlack;
-        pixels[1] = pixels[rowPixels] = RGBA8::kWhite;
+        const uint32_t rowPixels = kTextureBytesPerRowAlignment / sizeof(utils::RGBA8);
+        std::array<utils::RGBA8, rowPixels * 2> pixels;
+        pixels[0] = pixels[rowPixels + 1] = utils::RGBA8::kBlack;
+        pixels[1] = pixels[rowPixels] = utils::RGBA8::kWhite;
 
-        wgpu::Buffer stagingBuffer = utils::CreateBufferFromData(
-            device, pixels.data(), pixels.size() * sizeof(RGBA8), wgpu::BufferUsage::CopySrc);
+        wgpu::Buffer stagingBuffer =
+            utils::CreateBufferFromData(device, pixels.data(), pixels.size() * sizeof(utils::RGBA8),
+                                        wgpu::BufferUsage::CopySrc);
         wgpu::ImageCopyBuffer imageCopyBuffer = utils::CreateImageCopyBuffer(stagingBuffer, 0, 256);
         wgpu::ImageCopyTexture imageCopyTexture =
             utils::CreateImageCopyTexture(texture, 0, {0, 0, 0});
@@ -146,14 +147,14 @@ class SamplerTest : public DawnTest {
         wgpu::CommandBuffer commands = encoder.Finish();
         queue.Submit(1, &commands);
 
-        RGBA8 expectedU2(u.mExpected2, u.mExpected2, u.mExpected2, 255);
-        RGBA8 expectedU3(u.mExpected3, u.mExpected3, u.mExpected3, 255);
-        RGBA8 expectedV2(v.mExpected2, v.mExpected2, v.mExpected2, 255);
-        RGBA8 expectedV3(v.mExpected3, v.mExpected3, v.mExpected3, 255);
-        EXPECT_PIXEL_RGBA8_EQ(RGBA8::kBlack, mRenderPass.color, 0, 0);
-        EXPECT_PIXEL_RGBA8_EQ(RGBA8::kWhite, mRenderPass.color, 0, 1);
-        EXPECT_PIXEL_RGBA8_EQ(RGBA8::kWhite, mRenderPass.color, 1, 0);
-        EXPECT_PIXEL_RGBA8_EQ(RGBA8::kBlack, mRenderPass.color, 1, 1);
+        utils::RGBA8 expectedU2(u.mExpected2, u.mExpected2, u.mExpected2, 255);
+        utils::RGBA8 expectedU3(u.mExpected3, u.mExpected3, u.mExpected3, 255);
+        utils::RGBA8 expectedV2(v.mExpected2, v.mExpected2, v.mExpected2, 255);
+        utils::RGBA8 expectedV3(v.mExpected3, v.mExpected3, v.mExpected3, 255);
+        EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kBlack, mRenderPass.color, 0, 0);
+        EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kWhite, mRenderPass.color, 0, 1);
+        EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kWhite, mRenderPass.color, 1, 0);
+        EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kBlack, mRenderPass.color, 1, 1);
         EXPECT_PIXEL_RGBA8_EQ(expectedU2, mRenderPass.color, 2, 0);
         EXPECT_PIXEL_RGBA8_EQ(expectedU3, mRenderPass.color, 3, 0);
         EXPECT_PIXEL_RGBA8_EQ(expectedV2, mRenderPass.color, 0, 2);

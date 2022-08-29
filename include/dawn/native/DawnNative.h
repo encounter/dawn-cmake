@@ -39,6 +39,9 @@ class AdapterBase;
 // An optional parameter of Adapter::CreateDevice() to send additional information when creating
 // a Device. For example, we can use it to enable a workaround, optimization or feature.
 struct DAWN_NATIVE_EXPORT DawnDeviceDescriptor {
+    DawnDeviceDescriptor();
+    ~DawnDeviceDescriptor();
+
     std::vector<const char*> requiredFeatures;
     std::vector<const char*> forceEnabledToggles;
     std::vector<const char*> forceDisabledToggles;
@@ -83,7 +86,6 @@ class DAWN_NATIVE_EXPORT Adapter {
 
     std::vector<const char*> GetSupportedExtensions() const;
     std::vector<const char*> GetSupportedFeatures() const;
-    WGPUDeviceProperties GetAdapterProperties() const;
     bool GetLimits(WGPUSupportedLimits* limits) const;
 
     void SetUseTieredLimits(bool useTieredLimits);
@@ -167,6 +169,8 @@ class DAWN_NATIVE_EXPORT Instance {
     // TODO(dawn:1374) Deprecate this once it is passed via the descriptor.
     void SetPlatform(dawn::platform::Platform* platform);
 
+    uint64_t GetDeviceCountForTesting() const;
+
     // Returns the underlying WGPUInstance object.
     WGPUInstance Get() const;
 
@@ -185,6 +189,9 @@ DAWN_NATIVE_EXPORT size_t GetLazyClearCountForTesting(WGPUDevice device);
 
 // Backdoor to get the number of deprecation warnings for testing
 DAWN_NATIVE_EXPORT size_t GetDeprecationWarningCountForTesting(WGPUDevice device);
+
+// Backdoor to get the number of adapters an instance knows about for testing
+DAWN_NATIVE_EXPORT size_t GetAdapterCountForTesting(WGPUInstance instance);
 
 //  Query if texture has been initialized
 DAWN_NATIVE_EXPORT bool IsTextureSubresourceInitialized(
@@ -232,13 +239,13 @@ struct DAWN_NATIVE_EXPORT ExternalImageDescriptor {
 
 struct DAWN_NATIVE_EXPORT ExternalImageAccessDescriptor {
   public:
-    bool isInitialized;  // Whether the texture is initialized on import
-    WGPUTextureUsageFlags usage;
+    bool isInitialized = false;  // Whether the texture is initialized on import
+    WGPUTextureUsageFlags usage = WGPUTextureUsage_None;
 };
 
 struct DAWN_NATIVE_EXPORT ExternalImageExportInfo {
   public:
-    bool isInitialized;  // Whether the texture is initialized after export
+    bool isInitialized = false;  // Whether the texture is initialized after export
     ExternalImageType GetType() const;
 
   protected:
@@ -247,6 +254,8 @@ struct DAWN_NATIVE_EXPORT ExternalImageExportInfo {
   private:
     ExternalImageType mType;
 };
+
+DAWN_NATIVE_EXPORT bool CheckIsErrorForTesting(void* objectHandle);
 
 DAWN_NATIVE_EXPORT const char* GetObjectLabelForTesting(void* objectHandle);
 

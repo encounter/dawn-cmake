@@ -68,7 +68,7 @@ TEST(AdapterDiscoveryTests, OnlySwiftShader) {
 
         EXPECT_EQ(properties.backendType, wgpu::BackendType::Vulkan);
         EXPECT_EQ(properties.adapterType, wgpu::AdapterType::CPU);
-        EXPECT_TRUE(gpu_info::IsSwiftshader(properties.vendorID, properties.deviceID));
+        EXPECT_TRUE(gpu_info::IsGoogleSwiftshader(properties.vendorID, properties.deviceID));
     }
 }
 
@@ -155,81 +155,6 @@ TEST(AdapterDiscoveryTests, OnlyMetal) {
 }
 #endif  // defined(DAWN_ENABLE_BACKEND_METAL)
 
-#if defined(DAWN_ENABLE_BACKEND_DESKTOP_GL)
-// Test discovering only desktop OpenGL adapters
-TEST(AdapterDiscoveryTests, OnlyDesktopGL) {
-    if (!glfwInit()) {
-        GTEST_SKIP() << "glfwInit() failed";
-    }
-    glfwDefaultWindowHints();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-
-    GLFWwindow* window = glfwCreateWindow(400, 400, "Dawn OpenGL test window", nullptr, nullptr);
-    glfwMakeContextCurrent(window);
-
-    dawn::native::Instance instance;
-
-    dawn::native::opengl::AdapterDiscoveryOptions options;
-    options.getProc = reinterpret_cast<void* (*)(const char*)>(glfwGetProcAddress);
-    instance.DiscoverAdapters(&options);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
-
-    const auto& adapters = instance.GetAdapters();
-    for (const auto& adapter : adapters) {
-        wgpu::AdapterProperties properties;
-        adapter.GetProperties(&properties);
-
-        EXPECT_EQ(properties.backendType, wgpu::BackendType::OpenGL);
-    }
-
-    glfwDestroyWindow(window);
-}
-#endif  // defined(DAWN_ENABLE_BACKEND_DESKTOP_GL)
-
-#if defined(DAWN_ENABLE_BACKEND_OPENGLES)
-// Test discovering only OpenGLES adapters
-TEST(AdapterDiscoveryTests, OnlyOpenGLES) {
-    ScopedEnvironmentVar angleDefaultPlatform;
-    if (GetEnvironmentVar("ANGLE_DEFAULT_PLATFORM").first.empty()) {
-        angleDefaultPlatform.Set("ANGLE_DEFAULT_PLATFORM", "swiftshader");
-    }
-
-    if (!glfwInit()) {
-        GTEST_SKIP() << "glfwInit() failed";
-    }
-    glfwDefaultWindowHints();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-    glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-
-    GLFWwindow* window = glfwCreateWindow(400, 400, "Dawn OpenGLES test window", nullptr, nullptr);
-    glfwMakeContextCurrent(window);
-
-    dawn::native::Instance instance;
-
-    dawn::native::opengl::AdapterDiscoveryOptionsES options;
-    options.getProc = reinterpret_cast<void* (*)(const char*)>(glfwGetProcAddress);
-    instance.DiscoverAdapters(&options);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
-
-    const auto& adapters = instance.GetAdapters();
-    for (const auto& adapter : adapters) {
-        wgpu::AdapterProperties properties;
-        adapter.GetProperties(&properties);
-
-        EXPECT_EQ(properties.backendType, wgpu::BackendType::OpenGLES);
-    }
-
-    glfwDestroyWindow(window);
-}
-#endif  // defined(DAWN_ENABLE_BACKEND_OPENGLES)
-
 #if defined(DAWN_ENABLE_BACKEND_METAL) && defined(DAWN_ENABLE_BACKEND_VULKAN)
 // Test discovering the Metal backend, then the Vulkan backend
 // does not duplicate adapters.
@@ -285,7 +210,7 @@ class AdapterCreationTest : public ::testing::Test {
                 nativeAdapter.GetProperties(&properties);
                 swiftShaderAvailable =
                     swiftShaderAvailable ||
-                    gpu_info::IsSwiftshader(properties.vendorID, properties.deviceID);
+                    gpu_info::IsGoogleSwiftshader(properties.vendorID, properties.deviceID);
                 discreteGPUAvailable = discreteGPUAvailable ||
                                        properties.adapterType == wgpu::AdapterType::DiscreteGPU;
                 integratedGPUAvailable = integratedGPUAvailable ||
@@ -364,7 +289,7 @@ TEST_F(AdapterCreationTest, FallbackAdapter) {
         adapter.GetProperties(&properties);
 
         EXPECT_EQ(properties.adapterType, wgpu::AdapterType::CPU);
-        EXPECT_TRUE(gpu_info::IsSwiftshader(properties.vendorID, properties.deviceID));
+        EXPECT_TRUE(gpu_info::IsGoogleSwiftshader(properties.vendorID, properties.deviceID));
     }
 }
 

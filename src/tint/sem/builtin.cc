@@ -17,13 +17,25 @@
 
 #include "src/tint/sem/builtin.h"
 
+#include <utility>
 #include <vector>
 
-#include "src/tint/utils/to_const_ptr_vec.h"
+#include "src/tint/utils/transform.h"
 
 TINT_INSTANTIATE_TYPEINFO(tint::sem::Builtin);
 
 namespace tint::sem {
+namespace {
+
+utils::VectorRef<const Parameter*> SetOwner(utils::VectorRef<Parameter*> parameters,
+                                            const tint::sem::CallTarget* owner) {
+    for (auto* parameter : parameters) {
+        parameter->SetOwner(owner);
+    }
+    return parameters;
+}
+
+}  // namespace
 
 const char* Builtin::str() const {
     return sem::str(type_);
@@ -83,19 +95,20 @@ bool IsAtomicBuiltin(BuiltinType i) {
            i == sem::BuiltinType::kAtomicCompareExchangeWeak;
 }
 
+bool IsDP4aBuiltin(BuiltinType i) {
+    return i == sem::BuiltinType::kDot4I8Packed || i == sem::BuiltinType::kDot4U8Packed;
+}
+
 Builtin::Builtin(BuiltinType type,
                  const sem::Type* return_type,
-                 std::vector<Parameter*> parameters,
+                 utils::VectorRef<Parameter*> parameters,
+                 EvaluationStage eval_stage,
                  PipelineStageSet supported_stages,
                  bool is_deprecated)
-    : Base(return_type, utils::ToConstPtrVec(parameters)),
+    : Base(return_type, SetOwner(std::move(parameters), this), eval_stage),
       type_(type),
       supported_stages_(supported_stages),
-      is_deprecated_(is_deprecated) {
-    for (auto* parameter : parameters) {
-        parameter->SetOwner(this);
-    }
-}
+      is_deprecated_(is_deprecated) {}
 
 Builtin::~Builtin() = default;
 
@@ -135,14 +148,35 @@ bool Builtin::IsAtomic() const {
     return IsAtomicBuiltin(type_);
 }
 
+bool Builtin::IsDP4a() const {
+    return IsDP4aBuiltin(type_);
+}
+
 bool Builtin::HasSideEffects() const {
-    if (IsAtomic() && type_ != sem::BuiltinType::kAtomicLoad) {
-        return true;
-    }
-    if (type_ == sem::BuiltinType::kTextureStore) {
-        return true;
+    switch (type_) {
+        case sem::BuiltinType::kAtomicAdd:
+        case sem::BuiltinType::kAtomicAnd:
+        case sem::BuiltinType::kAtomicCompareExchangeWeak:
+        case sem::BuiltinType::kAtomicExchange:
+        case sem::BuiltinType::kAtomicMax:
+        case sem::BuiltinType::kAtomicMin:
+        case sem::BuiltinType::kAtomicOr:
+        case sem::BuiltinType::kAtomicStore:
+        case sem::BuiltinType::kAtomicSub:
+        case sem::BuiltinType::kAtomicXor:
+        case sem::BuiltinType::kTextureStore:
+            return true;
+        default:
+            break;
     }
     return false;
+}
+
+ast::Extension Builtin::RequiredExtension() const {
+    if (IsDP4a()) {
+        return ast::Extension::kChromiumExperimentalDp4A;
+    }
+    return ast::Extension::kInvalid;
 }
 
 }  // namespace tint::sem

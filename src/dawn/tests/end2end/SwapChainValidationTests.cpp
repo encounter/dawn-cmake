@@ -17,8 +17,8 @@
 #include "dawn/common/Constants.h"
 #include "dawn/common/Log.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
-#include "dawn/utils/GLFWUtils.h"
 #include "dawn/utils/WGPUHelpers.h"
+#include "webgpu/webgpu_glfw.h"
 
 #include "GLFW/glfw3.h"
 
@@ -34,14 +34,11 @@ class SwapChainValidationTests : public DawnTest {
         });
         DAWN_TEST_UNSUPPORTED_IF(!glfwInit());
 
-        // The SwapChainValidationTests don't create devices so we don't need to call
-        // SetupGLFWWindowHintsForBackend. Set GLFW_NO_API anyway to avoid GLFW bringing up a GL
-        // context that we won't use.
-        ASSERT_TRUE(!IsOpenGL());
+        // Set GLFW_NO_API to avoid GLFW bringing up a GL context that we won't use.
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         window = glfwCreateWindow(400, 400, "SwapChainValidationTests window", nullptr, nullptr);
 
-        surface = utils::CreateSurfaceForWindow(GetInstance(), window);
+        surface = wgpu::glfw::CreateSurfaceForWindow(GetInstance(), window);
         ASSERT_NE(surface, nullptr);
 
         goodDescriptor.width = 1;
@@ -107,6 +104,15 @@ TEST_P(SwapChainValidationTests, CreationSuccess) {
     wgpu::SwapChain swapchain = device.CreateSwapChain(surface, &goodDescriptor);
     wgpu::TextureView view = swapchain.GetCurrentTextureView();
     swapchain.Present();
+}
+
+// Test that creating a swapchain with an invalid surface is an error.
+TEST_P(SwapChainValidationTests, InvalidSurface) {
+    wgpu::SurfaceDescriptor surface_desc = {};
+    wgpu::Surface surface = GetInstance().CreateSurface(&surface_desc);
+
+    ASSERT_DEVICE_ERROR_MSG(device.CreateSwapChain(surface, &goodDescriptor),
+                            testing::HasSubstr("[Surface] is invalid"));
 }
 
 // Checks that the creation size must be a valid 2D texture size.
@@ -219,7 +225,7 @@ TEST_P(SwapChainValidationTests, ViewDestroyedAfterPresent) {
 TEST_P(SwapChainValidationTests, ReturnedViewCharacteristics) {
     utils::ComboRenderPipelineDescriptor pipelineDesc;
     pipelineDesc.vertex.module = utils::CreateShaderModule(device, R"(
-        @stage(vertex) fn main() -> @builtin(position) vec4<f32> {
+        @vertex fn main() -> @builtin(position) vec4<f32> {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         })");
     pipelineDesc.cFragment.module = utils::CreateShaderModule(device, R"(
@@ -227,7 +233,7 @@ TEST_P(SwapChainValidationTests, ReturnedViewCharacteristics) {
             @location(0) target0 : vec4<f32>,
             @location(1) target1 : f32,
         }
-        @stage(fragment) fn main() -> FragmentOut {
+        @fragment fn main() -> FragmentOut {
             var out : FragmentOut;
             out.target0 = vec4<f32>(0.0, 1.0, 0.0, 1.0);
             out.target1 = 0.5;

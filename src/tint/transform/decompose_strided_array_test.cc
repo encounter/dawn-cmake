@@ -39,7 +39,7 @@ TEST_F(DecomposeStridedArrayTest, ShouldRunNonStridedArray) {
     // var<private> arr : array<f32, 4u>
 
     ProgramBuilder b;
-    b.Global("arr", b.ty.array<f32, 4u>(), ast::StorageClass::kPrivate);
+    b.GlobalVar("arr", b.ty.array<f32, 4u>(), ast::StorageClass::kPrivate);
     EXPECT_FALSE(ShouldRun<DecomposeStridedArray>(Program(std::move(b))));
 }
 
@@ -47,7 +47,7 @@ TEST_F(DecomposeStridedArrayTest, ShouldRunDefaultStridedArray) {
     // var<private> arr : @stride(4) array<f32, 4u>
 
     ProgramBuilder b;
-    b.Global("arr", b.ty.array<f32, 4u>(4), ast::StorageClass::kPrivate);
+    b.GlobalVar("arr", b.ty.array<f32, 4u>(4), ast::StorageClass::kPrivate);
     EXPECT_TRUE(ShouldRun<DecomposeStridedArray>(Program(std::move(b))));
 }
 
@@ -55,7 +55,7 @@ TEST_F(DecomposeStridedArrayTest, ShouldRunExplicitStridedArray) {
     // var<private> arr : @stride(16) array<f32, 4u>
 
     ProgramBuilder b;
-    b.Global("arr", b.ty.array<f32, 4u>(16), ast::StorageClass::kPrivate);
+    b.GlobalVar("arr", b.ty.array<f32, 4u>(16), ast::StorageClass::kPrivate);
     EXPECT_TRUE(ShouldRun<DecomposeStridedArray>(Program(std::move(b))));
 }
 
@@ -71,20 +71,20 @@ TEST_F(DecomposeStridedArrayTest, Empty) {
 TEST_F(DecomposeStridedArrayTest, PrivateDefaultStridedArray) {
     // var<private> arr : @stride(4) array<f32, 4u>
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let a : @stride(4) array<f32, 4u> = a;
     //   let b : f32 = arr[1];
     // }
 
     ProgramBuilder b;
-    b.Global("arr", b.ty.array<f32, 4u>(4), ast::StorageClass::kPrivate);
-    b.Func("f", {}, b.ty.void_(),
-           {
+    b.GlobalVar("arr", b.ty.array<f32, 4u>(4), ast::StorageClass::kPrivate);
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Decl(b.Let("a", b.ty.array<f32, 4u>(4), b.Expr("arr"))),
                b.Decl(b.Let("b", b.ty.f32(), b.IndexAccessor("arr", 1_i))),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -92,7 +92,7 @@ TEST_F(DecomposeStridedArrayTest, PrivateDefaultStridedArray) {
     auto* expect = R"(
 var<private> arr : array<f32, 4u>;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let a : array<f32, 4u> = arr;
   let b : f32 = arr[1i];
@@ -107,20 +107,20 @@ fn f() {
 TEST_F(DecomposeStridedArrayTest, PrivateStridedArray) {
     // var<private> arr : @stride(32) array<f32, 4u>
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let a : @stride(32) array<f32, 4u> = a;
     //   let b : f32 = arr[1];
     // }
 
     ProgramBuilder b;
-    b.Global("arr", b.ty.array<f32, 4u>(32), ast::StorageClass::kPrivate);
-    b.Func("f", {}, b.ty.void_(),
-           {
+    b.GlobalVar("arr", b.ty.array<f32, 4u>(32), ast::StorageClass::kPrivate);
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Decl(b.Let("a", b.ty.array<f32, 4u>(32), b.Expr("arr"))),
                b.Decl(b.Let("b", b.ty.f32(), b.IndexAccessor("arr", 1_i))),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -133,7 +133,7 @@ struct strided_arr {
 
 var<private> arr : array<strided_arr, 4u>;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let a : array<strided_arr, 4u> = arr;
   let b : f32 = arr[1i].el;
@@ -151,20 +151,20 @@ TEST_F(DecomposeStridedArrayTest, ReadUniformStridedArray) {
     // };
     // @group(0) @binding(0) var<uniform> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let a : @stride(32) array<f32, 4u> = s.a;
     //   let b : f32 = s.a[1];
     // }
     ProgramBuilder b;
-    auto* S = b.Structure("S", {b.Member("a", b.ty.array<f32, 4u>(32))});
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kUniform, b.GroupAndBinding(0, 0));
-    b.Func("f", {}, b.ty.void_(),
-           {
+    auto* S = b.Structure("S", utils::Vector{b.Member("a", b.ty.array<f32, 4u>(32))});
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kUniform, b.Group(0), b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Decl(b.Let("a", b.ty.array<f32, 4u>(32), b.MemberAccessor("s", "a"))),
                b.Decl(b.Let("b", b.ty.f32(), b.IndexAccessor(b.MemberAccessor("s", "a"), 1_i))),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -181,7 +181,7 @@ struct S {
 
 @group(0) @binding(0) var<uniform> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let a : array<strided_arr, 4u> = s.a;
   let b : f32 = s.a[1i].el;
@@ -199,22 +199,22 @@ TEST_F(DecomposeStridedArrayTest, ReadUniformDefaultStridedArray) {
     // };
     // @group(0) @binding(0) var<uniform> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let a : @stride(16) array<vec4<f32>, 4u> = s.a;
     //   let b : f32 = s.a[1][2];
     // }
     ProgramBuilder b;
-    auto* S = b.Structure("S", {b.Member("a", b.ty.array(b.ty.vec4<f32>(), 4_u, 16))});
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kUniform, b.GroupAndBinding(0, 0));
+    auto* S = b.Structure("S", utils::Vector{b.Member("a", b.ty.array(b.ty.vec4<f32>(), 4_u, 16))});
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kUniform, b.Group(0), b.Binding(0));
     b.Func(
-        "f", {}, b.ty.void_(),
-        {
+        "f", utils::Empty, b.ty.void_(),
+        utils::Vector{
             b.Decl(b.Let("a", b.ty.array(b.ty.vec4<f32>(), 4_u, 16), b.MemberAccessor("s", "a"))),
             b.Decl(b.Let("b", b.ty.f32(),
                          b.IndexAccessor(b.IndexAccessor(b.MemberAccessor("s", "a"), 1_i), 2_i))),
         },
-        {
+        utils::Vector{
             b.Stage(ast::PipelineStage::kCompute),
             b.WorkgroupSize(1_i),
         });
@@ -227,7 +227,7 @@ struct S {
 
 @group(0) @binding(0) var<uniform> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let a : array<vec4<f32>, 4u> = s.a;
   let b : f32 = s.a[1i][2i];
@@ -245,20 +245,20 @@ TEST_F(DecomposeStridedArrayTest, ReadStorageStridedArray) {
     // };
     // @group(0) @binding(0) var<storage> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let a : @stride(32) array<f32, 4u> = s.a;
     //   let b : f32 = s.a[1];
     // }
     ProgramBuilder b;
-    auto* S = b.Structure("S", {b.Member("a", b.ty.array<f32, 4u>(32))});
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kStorage, b.GroupAndBinding(0, 0));
-    b.Func("f", {}, b.ty.void_(),
-           {
+    auto* S = b.Structure("S", utils::Vector{b.Member("a", b.ty.array<f32, 4u>(32))});
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kStorage, b.Group(0), b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Decl(b.Let("a", b.ty.array<f32, 4u>(32), b.MemberAccessor("s", "a"))),
                b.Decl(b.Let("b", b.ty.f32(), b.IndexAccessor(b.MemberAccessor("s", "a"), 1_i))),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -275,7 +275,7 @@ struct S {
 
 @group(0) @binding(0) var<storage> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let a : array<strided_arr, 4u> = s.a;
   let b : f32 = s.a[1i].el;
@@ -293,20 +293,20 @@ TEST_F(DecomposeStridedArrayTest, ReadStorageDefaultStridedArray) {
     // };
     // @group(0) @binding(0) var<storage> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let a : @stride(4) array<f32, 4u> = s.a;
     //   let b : f32 = s.a[1];
     // }
     ProgramBuilder b;
-    auto* S = b.Structure("S", {b.Member("a", b.ty.array<f32, 4u>(4))});
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kStorage, b.GroupAndBinding(0, 0));
-    b.Func("f", {}, b.ty.void_(),
-           {
+    auto* S = b.Structure("S", utils::Vector{b.Member("a", b.ty.array<f32, 4u>(4))});
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kStorage, b.Group(0), b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Decl(b.Let("a", b.ty.array<f32, 4u>(4), b.MemberAccessor("s", "a"))),
                b.Decl(b.Let("b", b.ty.f32(), b.IndexAccessor(b.MemberAccessor("s", "a"), 1_i))),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -318,7 +318,7 @@ struct S {
 
 @group(0) @binding(0) var<storage> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let a : array<f32, 4u> = s.a;
   let b : f32 = s.a[1i];
@@ -336,24 +336,24 @@ TEST_F(DecomposeStridedArrayTest, WriteStorageStridedArray) {
     // };
     // @group(0) @binding(0) var<storage, read_write> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   s.a = @stride(32) array<f32, 4u>();
     //   s.a = @stride(32) array<f32, 4u>(1.0, 2.0, 3.0, 4.0);
     //   s.a[1i] = 5.0;
     // }
     ProgramBuilder b;
-    auto* S = b.Structure("S", {b.Member("a", b.ty.array<f32, 4u>(32))});
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-             b.GroupAndBinding(0, 0));
-    b.Func("f", {}, b.ty.void_(),
-           {
+    auto* S = b.Structure("S", utils::Vector{b.Member("a", b.ty.array<f32, 4u>(32))});
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite, b.Group(0),
+                b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Assign(b.MemberAccessor("s", "a"), b.Construct(b.ty.array<f32, 4u>(32))),
                b.Assign(b.MemberAccessor("s", "a"),
-                        b.Construct(b.ty.array<f32, 4u>(32), 1.0f, 2.0f, 3.0f, 4.0f)),
-               b.Assign(b.IndexAccessor(b.MemberAccessor("s", "a"), 1_i), 5.0f),
+                        b.Construct(b.ty.array<f32, 4u>(32), 1_f, 2_f, 3_f, 4_f)),
+               b.Assign(b.IndexAccessor(b.MemberAccessor("s", "a"), 1_i), 5_f),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -371,11 +371,11 @@ struct S {
 
 @group(0) @binding(0) var<storage, read_write> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   s.a = array<strided_arr, 4u>();
-  s.a = array<strided_arr, 4u>(strided_arr(1.0), strided_arr(2.0), strided_arr(3.0), strided_arr(4.0));
-  s.a[1i].el = 5.0;
+  s.a = array<strided_arr, 4u>(strided_arr(1.0f), strided_arr(2.0f), strided_arr(3.0f), strided_arr(4.0f));
+  s.a[1i].el = 5.0f;
 }
 )";
 
@@ -390,24 +390,24 @@ TEST_F(DecomposeStridedArrayTest, WriteStorageDefaultStridedArray) {
     // };
     // @group(0) @binding(0) var<storage, read_write> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   s.a = @stride(4) array<f32, 4u>();
     //   s.a = @stride(4) array<f32, 4u>(1.0, 2.0, 3.0, 4.0);
     //   s.a[1] = 5.0;
     // }
     ProgramBuilder b;
-    auto* S = b.Structure("S", {b.Member("a", b.ty.array<f32, 4u>(4))});
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-             b.GroupAndBinding(0, 0));
-    b.Func("f", {}, b.ty.void_(),
-           {
+    auto* S = b.Structure("S", utils::Vector{b.Member("a", b.ty.array<f32, 4u>(4))});
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite, b.Group(0),
+                b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Assign(b.MemberAccessor("s", "a"), b.Construct(b.ty.array<f32, 4u>(4))),
                b.Assign(b.MemberAccessor("s", "a"),
-                        b.Construct(b.ty.array<f32, 4u>(4), 1.0f, 2.0f, 3.0f, 4.0f)),
-               b.Assign(b.IndexAccessor(b.MemberAccessor("s", "a"), 1_i), 5.0f),
+                        b.Construct(b.ty.array<f32, 4u>(4), 1_f, 2_f, 3_f, 4_f)),
+               b.Assign(b.IndexAccessor(b.MemberAccessor("s", "a"), 1_i), 5_f),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -420,11 +420,11 @@ struct S {
 
 @group(0) @binding(0) var<storage, read_write> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   s.a = array<f32, 4u>();
-  s.a = array<f32, 4u>(1.0, 2.0, 3.0, 4.0);
-  s.a[1i] = 5.0;
+  s.a = array<f32, 4u>(1.0f, 2.0f, 3.0f, 4.0f);
+  s.a[1i] = 5.0f;
 }
 )";
 
@@ -439,7 +439,7 @@ TEST_F(DecomposeStridedArrayTest, ReadWriteViaPointerLets) {
     // };
     // @group(0) @binding(0) var<storage, read_write> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let a = &s.a;
     //   let b = &*&*(a);
@@ -449,19 +449,19 @@ TEST_F(DecomposeStridedArrayTest, ReadWriteViaPointerLets) {
     //   (*b)[1] = 5.0;
     // }
     ProgramBuilder b;
-    auto* S = b.Structure("S", {b.Member("a", b.ty.array<f32, 4u>(32))});
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-             b.GroupAndBinding(0, 0));
-    b.Func("f", {}, b.ty.void_(),
-           {
-               b.Decl(b.Let("a", nullptr, b.AddressOf(b.MemberAccessor("s", "a")))),
-               b.Decl(b.Let("b", nullptr, b.AddressOf(b.Deref(b.AddressOf(b.Deref("a")))))),
-               b.Decl(b.Let("c", nullptr, b.Deref("b"))),
-               b.Decl(b.Let("d", nullptr, b.IndexAccessor(b.Deref("b"), 1_i))),
-               b.Assign(b.Deref("b"), b.Construct(b.ty.array<f32, 4u>(32), 1.0f, 2.0f, 3.0f, 4.0f)),
-               b.Assign(b.IndexAccessor(b.Deref("b"), 1_i), 5.0f),
+    auto* S = b.Structure("S", utils::Vector{b.Member("a", b.ty.array<f32, 4u>(32))});
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite, b.Group(0),
+                b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
+               b.Decl(b.Let("a", b.AddressOf(b.MemberAccessor("s", "a")))),
+               b.Decl(b.Let("b", b.AddressOf(b.Deref(b.AddressOf(b.Deref("a")))))),
+               b.Decl(b.Let("c", b.Deref("b"))),
+               b.Decl(b.Let("d", b.IndexAccessor(b.Deref("b"), 1_i))),
+               b.Assign(b.Deref("b"), b.Construct(b.ty.array<f32, 4u>(32), 1_f, 2_f, 3_f, 4_f)),
+               b.Assign(b.IndexAccessor(b.Deref("b"), 1_i), 5_f),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -479,12 +479,12 @@ struct S {
 
 @group(0) @binding(0) var<storage, read_write> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let c = s.a;
   let d = s.a[1i].el;
-  s.a = array<strided_arr, 4u>(strided_arr(1.0), strided_arr(2.0), strided_arr(3.0), strided_arr(4.0));
-  s.a[1i].el = 5.0;
+  s.a = array<strided_arr, 4u>(strided_arr(1.0f), strided_arr(2.0f), strided_arr(3.0f), strided_arr(4.0f));
+  s.a[1i].el = 5.0f;
 }
 )";
 
@@ -500,7 +500,7 @@ TEST_F(DecomposeStridedArrayTest, PrivateAliasedStridedArray) {
     // };
     // @group(0) @binding(0) var<storage, read_write> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let a : ARR = s.a;
     //   let b : f32 = s.a[1];
@@ -510,19 +510,19 @@ TEST_F(DecomposeStridedArrayTest, PrivateAliasedStridedArray) {
     // }
     ProgramBuilder b;
     b.Alias("ARR", b.ty.array<f32, 4u>(32));
-    auto* S = b.Structure("S", {b.Member("a", b.ty.type_name("ARR"))});
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-             b.GroupAndBinding(0, 0));
-    b.Func("f", {}, b.ty.void_(),
-           {
+    auto* S = b.Structure("S", utils::Vector{b.Member("a", b.ty.type_name("ARR"))});
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite, b.Group(0),
+                b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Decl(b.Let("a", b.ty.type_name("ARR"), b.MemberAccessor("s", "a"))),
                b.Decl(b.Let("b", b.ty.f32(), b.IndexAccessor(b.MemberAccessor("s", "a"), 1_i))),
                b.Assign(b.MemberAccessor("s", "a"), b.Construct(b.ty.type_name("ARR"))),
                b.Assign(b.MemberAccessor("s", "a"),
-                        b.Construct(b.ty.type_name("ARR"), 1.0f, 2.0f, 3.0f, 4.0f)),
-               b.Assign(b.IndexAccessor(b.MemberAccessor("s", "a"), 1_i), 5.0f),
+                        b.Construct(b.ty.type_name("ARR"), 1_f, 2_f, 3_f, 4_f)),
+               b.Assign(b.IndexAccessor(b.MemberAccessor("s", "a"), 1_i), 5_f),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -541,13 +541,13 @@ struct S {
 
 @group(0) @binding(0) var<storage, read_write> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let a : ARR = s.a;
   let b : f32 = s.a[1i].el;
   s.a = ARR();
-  s.a = ARR(strided_arr(1.0), strided_arr(2.0), strided_arr(3.0), strided_arr(4.0));
-  s.a[1i].el = 5.0;
+  s.a = ARR(strided_arr(1.0f), strided_arr(2.0f), strided_arr(3.0f), strided_arr(4.0f));
+  s.a[1i].el = 5.0f;
 }
 )";
 
@@ -564,7 +564,7 @@ TEST_F(DecomposeStridedArrayTest, PrivateNestedStridedArray) {
     // };
     // @group(0) @binding(0) var<storage, read_write> s : S;
     //
-    // @stage(compute) @workgroup_size(1)
+    // @compute @workgroup_size(1)
     // fn f() {
     //   let a : ARR_B = s.a;
     //   let b : array<@stride(8) array<f32, 2u>, 3u> = s.a[3];
@@ -580,11 +580,11 @@ TEST_F(DecomposeStridedArrayTest, PrivateNestedStridedArray) {
             b.ty.array(                                        //
                 b.ty.array(b.ty.type_name("ARR_A"), 3_u, 16),  //
                 4_u, 128));
-    auto* S = b.Structure("S", {b.Member("a", b.ty.type_name("ARR_B"))});
-    b.Global("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-             b.GroupAndBinding(0, 0));
-    b.Func("f", {}, b.ty.void_(),
-           {
+    auto* S = b.Structure("S", utils::Vector{b.Member("a", b.ty.type_name("ARR_B"))});
+    b.GlobalVar("s", b.ty.Of(S), ast::StorageClass::kStorage, ast::Access::kReadWrite, b.Group(0),
+                b.Binding(0));
+    b.Func("f", utils::Empty, b.ty.void_(),
+           utils::Vector{
                b.Decl(b.Let("a", b.ty.type_name("ARR_B"), b.MemberAccessor("s", "a"))),
                b.Decl(b.Let("b", b.ty.array(b.ty.type_name("ARR_A"), 3_u, 16),
                             b.IndexAccessor(                 //
@@ -612,9 +612,9 @@ TEST_F(DecomposeStridedArrayTest, PrivateNestedStridedArray) {
                                     3_i),
                                 2_i),
                             1_i),
-                        5.0f),
+                        5_f),
            },
-           {
+           utils::Vector{
                b.Stage(ast::PipelineStage::kCompute),
                b.WorkgroupSize(1_i),
            });
@@ -641,14 +641,14 @@ struct S {
 
 @group(0) @binding(0) var<storage, read_write> s : S;
 
-@stage(compute) @workgroup_size(1i)
+@compute @workgroup_size(1i)
 fn f() {
   let a : ARR_B = s.a;
   let b : array<ARR_A, 3u> = s.a[3i].el;
   let c : ARR_A = s.a[3i].el[2i];
   let d : f32 = s.a[3i].el[2i][1i].el;
   s.a = ARR_B();
-  s.a[3i].el[2i][1i].el = 5.0;
+  s.a[3i].el[2i][1i].el = 5.0f;
 }
 )";
 

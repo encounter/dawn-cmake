@@ -16,6 +16,7 @@
 #define SRC_DAWN_TESTS_DAWNTEST_H_
 
 #include <memory>
+#include <queue>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -27,10 +28,12 @@
 #include "dawn/dawn_proc_table.h"
 #include "dawn/native/DawnNative.h"
 #include "dawn/platform/DawnPlatform.h"
+#include "dawn/tests/AdapterTestConfig.h"
 #include "dawn/tests/MockCallback.h"
 #include "dawn/tests/ParamGenerator.h"
 #include "dawn/tests/ToggleParser.h"
 #include "dawn/utils/ScopedAutoreleasePool.h"
+#include "dawn/utils/TestUtils.h"
 #include "dawn/utils/TextureUtils.h"
 #include "dawn/webgpu_cpp.h"
 #include "dawn/webgpu_cpp_print.h"
@@ -119,76 +122,6 @@
 
 #define ASSERT_DEVICE_ERROR(statement) ASSERT_DEVICE_ERROR_MSG(statement, testing::_)
 
-struct RGBA8 {
-    constexpr RGBA8() : RGBA8(0, 0, 0, 0) {}
-    constexpr RGBA8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) : r(r), g(g), b(b), a(a) {}
-    bool operator==(const RGBA8& other) const;
-    bool operator!=(const RGBA8& other) const;
-    bool operator<=(const RGBA8& other) const;
-    bool operator>=(const RGBA8& other) const;
-
-    uint8_t r, g, b, a;
-
-    static const RGBA8 kZero;
-    static const RGBA8 kBlack;
-    static const RGBA8 kRed;
-    static const RGBA8 kGreen;
-    static const RGBA8 kBlue;
-    static const RGBA8 kYellow;
-    static const RGBA8 kWhite;
-};
-std::ostream& operator<<(std::ostream& stream, const RGBA8& color);
-
-struct BackendTestConfig {
-    BackendTestConfig(wgpu::BackendType backendType,
-                      std::initializer_list<const char*> forceEnabledWorkarounds = {},
-                      std::initializer_list<const char*> forceDisabledWorkarounds = {});
-
-    wgpu::BackendType backendType;
-
-    std::vector<const char*> forceEnabledWorkarounds;
-    std::vector<const char*> forceDisabledWorkarounds;
-};
-
-struct TestAdapterProperties : wgpu::AdapterProperties {
-    TestAdapterProperties(const wgpu::AdapterProperties& properties, bool selected);
-    std::string adapterName;
-    bool selected;
-
-  private:
-    // This may be temporary, so it is copied into |adapterName| and made private.
-    using wgpu::AdapterProperties::name;
-};
-
-struct AdapterTestParam {
-    AdapterTestParam(const BackendTestConfig& config,
-                     const TestAdapterProperties& adapterProperties);
-
-    TestAdapterProperties adapterProperties;
-    std::vector<const char*> forceEnabledWorkarounds;
-    std::vector<const char*> forceDisabledWorkarounds;
-};
-
-std::ostream& operator<<(std::ostream& os, const AdapterTestParam& param);
-
-BackendTestConfig D3D12Backend(std::initializer_list<const char*> forceEnabledWorkarounds = {},
-                               std::initializer_list<const char*> forceDisabledWorkarounds = {});
-
-BackendTestConfig MetalBackend(std::initializer_list<const char*> forceEnabledWorkarounds = {},
-                               std::initializer_list<const char*> forceDisabledWorkarounds = {});
-
-BackendTestConfig NullBackend(std::initializer_list<const char*> forceEnabledWorkarounds = {},
-                              std::initializer_list<const char*> forceDisabledWorkarounds = {});
-
-BackendTestConfig OpenGLBackend(std::initializer_list<const char*> forceEnabledWorkarounds = {},
-                                std::initializer_list<const char*> forceDisabledWorkarounds = {});
-
-BackendTestConfig OpenGLESBackend(std::initializer_list<const char*> forceEnabledWorkarounds = {},
-                                  std::initializer_list<const char*> forceDisabledWorkarounds = {});
-
-BackendTestConfig VulkanBackend(std::initializer_list<const char*> forceEnabledWorkarounds = {},
-                                std::initializer_list<const char*> forceDisabledWorkarounds = {});
-
 struct GLFWwindow;
 
 namespace utils {
@@ -257,6 +190,7 @@ class DawnTestEnvironment : public testing::Environment {
     bool mUseWire = false;
     dawn::native::BackendValidationLevel mBackendValidationLevel =
         dawn::native::BackendValidationLevel::Disabled;
+    std::string mANGLEBackend;
     bool mBeginCaptureOnStartup = false;
     bool mHasVendorIdFilter = false;
     uint32_t mVendorIdFilter = 0;
@@ -271,8 +205,6 @@ class DawnTestEnvironment : public testing::Environment {
     std::vector<TestAdapterProperties> mAdapterProperties;
 
     std::unique_ptr<utils::PlatformDebugLogger> mPlatformDebugLogger;
-    GLFWwindow* mOpenGLWindow;
-    GLFWwindow* mOpenGLESWindow;
 };
 
 class DawnTestBase {
@@ -308,6 +240,7 @@ class DawnTestBase {
 
     bool UsesWire() const;
     bool IsBackendValidationEnabled() const;
+    bool IsFullBackendValidationEnabled() const;
     bool RunSuppressedTests() const;
 
     bool IsDXC() const;
@@ -342,6 +275,10 @@ class DawnTestBase {
         std::string mTest;
     };
 
+    // Resolve all the deferred expectations in mDeferredExpectations now to avoid letting
+    // mDeferredExpectations get too big.
+    void ResolveDeferredExpectationsNow();
+
   protected:
     wgpu::Device device;
     wgpu::Queue queue;
@@ -351,10 +288,11 @@ class DawnTestBase {
 
     size_t mLastWarningCount = 0;
 
-    // Mock callbacks tracking errors and destruction. Device lost is a nice mock since tests that
-    // do not care about device destruction can ignore the callback entirely.
-    testing::MockCallback<WGPUErrorCallback> mDeviceErrorCallback;
-    testing::NiceMock<testing::MockCallback<WGPUDeviceLostCallback>> mDeviceLostCallback;
+    // Mock callbacks tracking errors and destruction. These are strict mocks because any errors or
+    // device loss that aren't expected should result in test failures and not just some warnings
+    // printed to stdout.
+    testing::StrictMock<testing::MockCallback<WGPUErrorCallback>> mDeviceErrorCallback;
+    testing::StrictMock<testing::MockCallback<WGPUDeviceLostCallback>> mDeviceLostCallback;
 
     // Helper methods to implement the EXPECT_ macros
     std::ostringstream& AddBufferExpectation(const char* file,
@@ -533,18 +471,21 @@ class DawnTestBase {
 
     const wgpu::AdapterProperties& GetAdapterProperties() const;
 
-    // TODO(crbug.com/dawn/689): Use limits returned from the wire
-    // This is implemented here because tests need to always query
-    // the |backendDevice| since limits are not implemented in the wire.
     wgpu::SupportedLimits GetSupportedLimits();
 
   private:
     utils::ScopedAutoreleasePool mObjCAutoreleasePool;
     AdapterTestParam mParam;
     std::unique_ptr<utils::WireHelper> mWireHelper;
+    wgpu::Instance mInstance;
+    wgpu::Adapter mAdapter;
+
+    // Isolation keys are not exposed to the wire client. Device creation in the tests from
+    // the client first push the key into this queue, which is then consumed by the server.
+    std::queue<std::string> mNextIsolationKeyQueue;
 
     // Internal device creation function for default device creation with some optional overrides.
-    std::pair<wgpu::Device, WGPUDevice> CreateDeviceImpl(std::string isolationKey = "");
+    WGPUDevice CreateDeviceImpl(std::string isolationKey);
 
     std::ostringstream& AddTextureExpectationImpl(const char* file,
                                                   int line,
@@ -605,6 +546,7 @@ class DawnTestBase {
     void ResolveExpectations();
 
     dawn::native::Adapter mBackendAdapter;
+    WGPUDevice mLastCreatedBackendDevice;
 
     std::unique_ptr<dawn::platform::Platform> mTestPlatform;
 };
@@ -764,7 +706,7 @@ extern template class ExpectEq<uint8_t>;
 extern template class ExpectEq<int16_t>;
 extern template class ExpectEq<uint32_t>;
 extern template class ExpectEq<uint64_t>;
-extern template class ExpectEq<RGBA8>;
+extern template class ExpectEq<utils::RGBA8>;
 extern template class ExpectEq<float>;
 extern template class ExpectEq<float, uint16_t>;
 
@@ -786,11 +728,11 @@ class ExpectBetweenColors : public Expectation {
 // A color is considered between color0 and color1 when all channel values are within range of
 // each counterparts. It doesn't matter which value is higher or lower. Essentially color =
 // lerp(color0, color1, t) where t is [0,1]. But I don't want to be too strict here.
-extern template class ExpectBetweenColors<RGBA8>;
+extern template class ExpectBetweenColors<utils::RGBA8>;
 
 class CustomTextureExpectation : public Expectation {
   public:
-    virtual ~CustomTextureExpectation() = default;
+    ~CustomTextureExpectation() override = default;
     virtual uint32_t DataSize() = 0;
 };
 

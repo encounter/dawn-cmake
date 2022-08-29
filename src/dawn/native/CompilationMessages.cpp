@@ -42,6 +42,8 @@ OwnedCompilationMessages::OwnedCompilationMessages() {
     mCompilationInfo.messages = nullptr;
 }
 
+OwnedCompilationMessages::~OwnedCompilationMessages() = default;
+
 void OwnedCompilationMessages::AddMessageForTesting(std::string message,
                                                     wgpu::CompilationMessageType type,
                                                     uint64_t lineNum,
@@ -171,6 +173,10 @@ void OwnedCompilationMessages::AddFormattedTintMessages(const tint::diag::List& 
             }
             case (tint::diag::Severity::Warning): {
                 warningCount++;
+                messageList.add(tint::diag::Diagnostic(diag));
+                break;
+            }
+            case (tint::diag::Severity::Note): {
                 messageList.add(tint::diag::Diagnostic(diag));
                 break;
             }

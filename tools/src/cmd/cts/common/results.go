@@ -218,13 +218,20 @@ func GetResults(
 		status := toStatus(rpb.Status)
 		tags := result.NewTags()
 
+		duration := rpb.GetDuration().AsDuration()
+
 		for _, sp := range rpb.Tags {
 			if sp.Key == "typ_tag" {
 				tags.Add(sp.Value)
 			}
+			if sp.Key == "javascript_duration" {
+				var err error
+				if duration, err = time.ParseDuration(sp.Value); err != nil {
+					return err
+				}
+			}
 		}
 
-		duration := rpb.GetDuration().AsDuration()
 		if status == result.Pass && duration > cfg.Test.SlowThreshold {
 			status = result.Slow
 		}
@@ -324,26 +331,16 @@ func MostRecentResultsForChange(
 	return nil, gerrit.Patchset{}, fmt.Errorf("no builds found for change %v", change)
 }
 
-// CleanTags modifies each result so that tags which are found in
-// cfg.TagAliases are expanded to include all the tag aliases.
-// Tags in cfg.Tag.Remove are also removed.
-// Finally, duplicate results are removed by erring towards Failure.
+// CleanTags modifies each result so that tags in cfg.Tag.Remove are removed and
+// duplicate results are removed by erring towards Failure.
 // See: crbug.com/dawn/1387, crbug.com/dawn/1401
 func CleanTags(cfg Config, results *result.List) {
+	// Remove any tags found in cfg.Tag.Remove
 	remove := result.NewTags(cfg.Tag.Remove...)
-	aliases := make([]result.Tags, len(cfg.Tag.Aliases))
-	for i, l := range cfg.Tag.Aliases {
-		aliases[i] = result.NewTags(l...)
-	}
-	// Expand the result tags for the aliased tag sets
 	for _, r := range *results {
-		for _, set := range aliases {
-			if r.Tags.ContainsAny(set) {
-				r.Tags.AddAll(set)
-			}
-		}
 		r.Tags.RemoveAll(remove)
 	}
+	// Clean up duplicate results
 	*results = results.ReplaceDuplicates(func(s result.Statuses) result.Status {
 		// If all results have the same status, then use that.
 		if len(s) == 1 {
@@ -355,6 +352,10 @@ func CleanTags(cfg Config, results *result.List) {
 			return result.Crash
 		case s.Contains(result.Abort):
 			return result.Abort
+		case s.Contains(result.Failure):
+			return result.Failure
+		case s.Contains(result.Slow):
+			return result.Slow
 		}
 		return result.Failure
 	})

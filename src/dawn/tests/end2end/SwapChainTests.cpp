@@ -16,8 +16,8 @@
 
 #include "dawn/common/Constants.h"
 #include "dawn/common/Log.h"
-#include "dawn/utils/GLFWUtils.h"
 #include "dawn/utils/WGPUHelpers.h"
+#include "webgpu/webgpu_glfw.h"
 
 #include "GLFW/glfw3.h"
 
@@ -37,10 +37,7 @@ class SwapChainTests : public DawnTest {
             GTEST_SKIP();
         }
 
-        // The SwapChainTests don't create OpenGL contexts so we don't need to call
-        // SetupGLFWWindowHintsForBackend. Set GLFW_NO_API anyway to avoid GLFW bringing up a GL
-        // context that we won't use.
-        ASSERT_TRUE(!IsOpenGL());
+        // Set GLFW_NO_API to avoid GLFW bringing up a GL context that we won't use.
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         window = glfwCreateWindow(400, 400, "SwapChainValidationTests window", nullptr, nullptr);
 
@@ -48,7 +45,7 @@ class SwapChainTests : public DawnTest {
         int height;
         glfwGetFramebufferSize(window, &width, &height);
 
-        surface = utils::CreateSurfaceForWindow(GetInstance(), window);
+        surface = wgpu::glfw::CreateSurfaceForWindow(GetInstance(), window);
         ASSERT_NE(surface, nullptr);
 
         baseDescriptor.width = width;

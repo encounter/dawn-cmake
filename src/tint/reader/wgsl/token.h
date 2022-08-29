@@ -17,8 +17,7 @@
 
 #include <string>
 #include <string_view>
-// TODO(https://crbug.com/dawn/1379) Update cpplint and remove NOLINT
-#include <variant>  // NOLINT(build/include_order))
+#include <variant>
 
 #include "src/tint/source.h"
 
@@ -33,19 +32,25 @@ class Token {
         kError = -2,
         /// Uninitialized token
         kUninitialized = 0,
+        /// Placeholder token which maybe fillled in later
+        kPlaceholder = 1,
         /// End of input string reached
         kEOF,
 
         /// An identifier
         kIdentifier,
-        /// A float value
+        /// A float literal with no suffix
         kFloatLiteral,
+        /// A float literal with an 'f' suffix
+        kFloatLiteral_F,
+        /// A float literal with an 'h' suffix
+        kFloatLiteral_H,
         /// An integer literal with no suffix
         kIntLiteral,
         /// An integer literal with an 'i' suffix
-        kIntILiteral,
+        kIntLiteral_I,
         /// An integer literal with a 'u' suffix
-        kIntULiteral,
+        kIntLiteral_U,
 
         /// A '&'
         kAnd,
@@ -135,6 +140,10 @@ class Token {
         kOrEqual,
         /// A '^='
         kXorEqual,
+        /// A '>>='
+        kShiftRightEqual,
+        /// A '<<='
+        kShiftLeftEqual,
 
         /// A 'array'
         kArray,
@@ -148,6 +157,8 @@ class Token {
         kBreak,
         /// A 'case'
         kCase,
+        /// A 'const'
+        kConst,
         /// A 'continue'
         kContinue,
         /// A 'continuing'
@@ -160,6 +171,8 @@ class Token {
         kElse,
         /// A 'enable'
         kEnable,
+        /// A 'f16'
+        kF16,
         /// A 'f32'
         kF32,
         /// A 'fallthrough'
@@ -170,14 +183,10 @@ class Token {
         kFn,
         // A 'for'
         kFor,
-        /// A 'function'
-        kFunction,
         /// A 'i32'
         kI32,
         /// A 'if'
         kIf,
-        /// A 'import'
-        kImport,
         /// A 'let'
         kLet,
         /// A 'loop'
@@ -202,8 +211,6 @@ class Token {
         kMat4x4,
         /// A 'override'
         kOverride,
-        /// A 'private'
-        kPrivate,
         /// A 'ptr'
         kPtr,
         /// A 'return'
@@ -212,8 +219,8 @@ class Token {
         kSampler,
         /// A 'sampler_comparison'
         kComparisonSampler,
-        /// A 'storage'
-        kStorage,
+        /// A 'static_assert'
+        kStaticAssert,
         /// A 'struct'
         kStruct,
         /// A 'switch'
@@ -258,8 +265,6 @@ class Token {
         kType,
         /// A 'u32'
         kU32,
-        /// A 'uniform'
-        kUniform,
         /// A 'var'
         kVar,
         /// A 'vec2'
@@ -268,8 +273,8 @@ class Token {
         kVec3,
         /// A 'vec4'
         kVec4,
-        /// A 'workgroup'
-        kWorkgroup,
+        /// A 'while'
+        kWhile,
     };
 
     /// Converts a token type to a name
@@ -304,25 +309,23 @@ class Token {
     /// @param source the source of the token
     /// @param val the source unsigned for the token
     Token(Type type, const Source& source, int64_t val);
-    /// Create a float Token
+    /// Create a double Token
+    /// @param type the Token::Type of the token
     /// @param source the source of the token
-    /// @param val the source float for the token
-    Token(const Source& source, float val);
+    /// @param val the source double for the token
+    Token(Type type, const Source& source, double val);
     /// Move constructor
     Token(Token&&);
-    /// Copy constructor
-    Token(const Token&);
     ~Token();
-
-    /// Assignment operator
-    /// @param b the token to copy
-    /// @return Token
-    Token& operator=(const Token& b);
 
     /// Equality operator with an identifier
     /// @param ident the identifier string
     /// @return true if this token is an identifier and is equal to ident.
-    bool operator==(std::string_view ident);
+    bool operator==(std::string_view ident) const;
+
+    /// Sets the token to the given type
+    /// @param type the type to set
+    void SetType(Token::Type type) { type_ = type; }
 
     /// Returns true if the token is of the given type
     /// @param t the type to check against.
@@ -331,6 +334,8 @@ class Token {
 
     /// @returns true if the token is uninitialized
     bool IsUninitialized() const { return type_ == Type::kUninitialized; }
+    /// @returns true if the token is a placeholder
+    bool IsPlaceholder() const { return type_ == Type::kPlaceholder; }
     /// @returns true if the token is EOF
     bool IsEof() const { return type_ == Type::kEOF; }
     /// @returns true if the token is Error
@@ -339,9 +344,10 @@ class Token {
     bool IsIdentifier() const { return type_ == Type::kIdentifier; }
     /// @returns true if the token is a literal
     bool IsLiteral() const {
-        return type_ == Type::kIntLiteral || type_ == Type::kIntILiteral ||
-               type_ == Type::kIntULiteral || type_ == Type::kFalse || type_ == Type::kTrue ||
-               type_ == Type::kFloatLiteral;
+        return type_ == Type::kIntLiteral || type_ == Type::kIntLiteral_I ||
+               type_ == Type::kIntLiteral_U || type_ == Type::kFalse || type_ == Type::kTrue ||
+               type_ == Type::kFloatLiteral || type_ == Type::kFloatLiteral_F ||
+               type_ == Type::kFloatLiteral_H;
     }
     /// @returns true if token is a 'matNxM'
     bool IsMatrix() const {
@@ -371,16 +377,25 @@ class Token {
         return type_ == Type::kVec2 || type_ == Type::kVec3 || type_ == Type::kVec4;
     }
 
+    /// @returns true if the token can be split during parse into component tokens
+    bool IsSplittable() const {
+        return Is(Token::Type::kShiftRight) || Is(Token::Type::kGreaterThanEqual) ||
+               Is(Token::Type::kAndAnd) || Is(Token::Type::kMinusMinus);
+    }
+
     /// @returns the source information for this token
     Source source() const { return source_; }
+
+    /// @returns the type of the token
+    Type type() const { return type_; }
 
     /// Returns the string value of the token
     /// @return std::string
     std::string to_str() const;
     /// Returns the float value of the token. 0 is returned if the token does not
     /// contain a float value.
-    /// @return float
-    float to_f32() const;
+    /// @return double
+    double to_f64() const;
     /// Returns the int64_t value of the token. 0 is returned if the token does
     /// not contain an integer value.
     /// @return int64_t
@@ -395,7 +410,7 @@ class Token {
     /// The source where the token appeared
     Source source_;
     /// The value represented by the token
-    std::variant<int64_t, float, std::string, std::string_view> value_;
+    std::variant<int64_t, double, std::string, std::string_view> value_;
 };
 
 #ifndef NDEBUG

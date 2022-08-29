@@ -18,6 +18,8 @@
 #include "src/tint/resolver/resolver_test_helper.h"
 #include "src/tint/sem/storage_texture.h"
 
+using ::testing::HasSubstr;
+
 using namespace tint::number_suffixes;  // NOLINT
 
 namespace tint::resolver {
@@ -28,7 +30,7 @@ using ResolverCompoundAssignmentValidationTest = ResolverTest;
 TEST_F(ResolverCompoundAssignmentValidationTest, CompatibleTypes) {
     // var a : i32 = 2;
     // a += 2
-    auto* var = Var("a", ty.i32(), ast::StorageClass::kNone, Expr(2_i));
+    auto* var = Var("a", ty.i32(), Expr(2_i));
     WrapInFunction(var, CompoundAssign(Source{{12, 34}}, "a", 2_i, ast::BinaryOp::kAdd));
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
@@ -39,7 +41,7 @@ TEST_F(ResolverCompoundAssignmentValidationTest, CompatibleTypesThroughAlias) {
     // var a : myint = 2;
     // a += 2
     auto* myint = Alias("myint", ty.i32());
-    auto* var = Var("a", ty.Of(myint), ast::StorageClass::kNone, Expr(2_i));
+    auto* var = Var("a", ty.Of(myint), Expr(2_i));
     WrapInFunction(var, CompoundAssign(Source{{12, 34}}, "a", 2_i, ast::BinaryOp::kAdd));
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
@@ -64,16 +66,15 @@ TEST_F(ResolverCompoundAssignmentValidationTest, IncompatibleTypes) {
     //   a += 2.3;
     // }
 
-    auto* var = Var("a", ty.i32(), ast::StorageClass::kNone, Expr(2_i));
+    auto* var = Var("a", ty.i32(), Expr(2_i));
 
-    auto* assign = CompoundAssign(Source{{12, 34}}, "a", 2.3f, ast::BinaryOp::kAdd);
+    auto* assign = CompoundAssign(Source{{12, 34}}, "a", 2.3_f, ast::BinaryOp::kAdd);
     WrapInFunction(var, assign);
 
     ASSERT_FALSE(r()->Resolve());
 
-    EXPECT_EQ(r()->error(),
-              "12:34 error: compound assignment operand types are invalid: i32 "
-              "add f32");
+    EXPECT_THAT(r()->error(),
+                HasSubstr("12:34 error: no matching overload for operator += (i32, f32)"));
 }
 
 TEST_F(ResolverCompoundAssignmentValidationTest, IncompatibleOp) {
@@ -82,15 +83,15 @@ TEST_F(ResolverCompoundAssignmentValidationTest, IncompatibleOp) {
     //   a |= 2.0;
     // }
 
-    auto* var = Var("a", ty.f32(), ast::StorageClass::kNone, Expr(1.f));
+    auto* var = Var("a", ty.f32(), Expr(1_f));
 
-    auto* assign = CompoundAssign(Source{{12, 34}}, "a", 2.0f, ast::BinaryOp::kOr);
+    auto* assign = CompoundAssign(Source{{12, 34}}, "a", 2_f, ast::BinaryOp::kOr);
     WrapInFunction(var, assign);
 
     ASSERT_FALSE(r()->Resolve());
 
-    EXPECT_EQ(r()->error(),
-              "12:34 error: compound assignment operand types are invalid: f32 or f32");
+    EXPECT_THAT(r()->error(),
+                HasSubstr("12:34 error: no matching overload for operator |= (f32, f32)"));
 }
 
 TEST_F(ResolverCompoundAssignmentValidationTest, VectorScalar_Pass) {
@@ -99,9 +100,9 @@ TEST_F(ResolverCompoundAssignmentValidationTest, VectorScalar_Pass) {
     //   a += 1.0;
     // }
 
-    auto* var = Var("a", ty.vec4<f32>(), ast::StorageClass::kNone);
+    auto* var = Var("a", ty.vec4<f32>());
 
-    auto* assign = CompoundAssign(Source{{12, 34}}, "a", 1.f, ast::BinaryOp::kAdd);
+    auto* assign = CompoundAssign(Source{{12, 34}}, "a", 1_f, ast::BinaryOp::kAdd);
     WrapInFunction(var, assign);
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
@@ -113,7 +114,7 @@ TEST_F(ResolverCompoundAssignmentValidationTest, ScalarVector_Fail) {
     //   a += vec4<f32>();
     // }
 
-    auto* var = Var("a", ty.f32(), ast::StorageClass::kNone);
+    auto* var = Var("a", ty.f32());
 
     auto* assign = CompoundAssign(Source{{12, 34}}, "a", vec4<f32>(), ast::BinaryOp::kAdd);
     WrapInFunction(var, assign);
@@ -129,9 +130,9 @@ TEST_F(ResolverCompoundAssignmentValidationTest, MatrixScalar_Pass) {
     //   a *= 2.0;
     // }
 
-    auto* var = Var("a", ty.mat4x4<f32>(), ast::StorageClass::kNone);
+    auto* var = Var("a", ty.mat4x4<f32>());
 
-    auto* assign = CompoundAssign(Source{{12, 34}}, "a", 2.f, ast::BinaryOp::kMultiply);
+    auto* assign = CompoundAssign(Source{{12, 34}}, "a", 2_f, ast::BinaryOp::kMultiply);
     WrapInFunction(var, assign);
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
@@ -143,7 +144,7 @@ TEST_F(ResolverCompoundAssignmentValidationTest, ScalarMatrix_Fail) {
     //   a *= mat4x4();
     // }
 
-    auto* var = Var("a", ty.f32(), ast::StorageClass::kNone);
+    auto* var = Var("a", ty.f32());
 
     auto* assign = CompoundAssign(Source{{12, 34}}, "a", mat4x4<f32>(), ast::BinaryOp::kMultiply);
     WrapInFunction(var, assign);
@@ -159,7 +160,7 @@ TEST_F(ResolverCompoundAssignmentValidationTest, VectorMatrix_Pass) {
     //   a *= mat4x4();
     // }
 
-    auto* var = Var("a", ty.vec4<f32>(), ast::StorageClass::kNone);
+    auto* var = Var("a", ty.vec4<f32>());
 
     auto* assign = CompoundAssign(Source{{12, 34}}, "a", mat4x4<f32>(), ast::BinaryOp::kMultiply);
     WrapInFunction(var, assign);
@@ -173,16 +174,16 @@ TEST_F(ResolverCompoundAssignmentValidationTest, VectorMatrix_ColumnMismatch) {
     //   a *= mat4x2();
     // }
 
-    auto* var = Var("a", ty.vec4<f32>(), ast::StorageClass::kNone);
+    auto* var = Var("a", ty.vec4<f32>());
 
     auto* assign = CompoundAssign(Source{{12, 34}}, "a", mat4x2<f32>(), ast::BinaryOp::kMultiply);
     WrapInFunction(var, assign);
 
     ASSERT_FALSE(r()->Resolve());
 
-    EXPECT_EQ(r()->error(),
-              "12:34 error: compound assignment operand types are invalid: "
-              "vec4<f32> multiply mat4x2<f32>");
+    EXPECT_THAT(
+        r()->error(),
+        HasSubstr("12:34 error: no matching overload for operator *= (vec4<f32>, mat4x2<f32>)"));
 }
 
 TEST_F(ResolverCompoundAssignmentValidationTest, VectorMatrix_ResultMismatch) {
@@ -191,7 +192,7 @@ TEST_F(ResolverCompoundAssignmentValidationTest, VectorMatrix_ResultMismatch) {
     //   a *= mat2x4();
     // }
 
-    auto* var = Var("a", ty.vec4<f32>(), ast::StorageClass::kNone);
+    auto* var = Var("a", ty.vec4<f32>());
 
     auto* assign = CompoundAssign(Source{{12, 34}}, "a", mat2x4<f32>(), ast::BinaryOp::kMultiply);
     WrapInFunction(var, assign);
@@ -207,7 +208,7 @@ TEST_F(ResolverCompoundAssignmentValidationTest, MatrixVector_Fail) {
     //   a *= vec4();
     // }
 
-    auto* var = Var("a", ty.mat4x4<f32>(), ast::StorageClass::kNone);
+    auto* var = Var("a", ty.mat4x4<f32>());
 
     auto* assign = CompoundAssign(Source{{12, 34}}, "a", vec4<f32>(), ast::BinaryOp::kMultiply);
     WrapInFunction(var, assign);
@@ -223,9 +224,8 @@ TEST_F(ResolverCompoundAssignmentValidationTest, Phony) {
     // }
     WrapInFunction(CompoundAssign(Source{{56, 78}}, Phony(), 1_i, ast::BinaryOp::kAdd));
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(),
-              "56:78 error: compound assignment operand types are invalid: void "
-              "add i32");
+    EXPECT_THAT(r()->error(),
+                HasSubstr("56:78 error: no matching overload for operator += (void, i32)"));
 }
 
 TEST_F(ResolverCompoundAssignmentValidationTest, ReadOnlyBuffer) {
@@ -233,24 +233,23 @@ TEST_F(ResolverCompoundAssignmentValidationTest, ReadOnlyBuffer) {
     // {
     //   a += 1i;
     // }
-    Global(Source{{12, 34}}, "a", ty.i32(), ast::StorageClass::kStorage, ast::Access::kRead,
-           GroupAndBinding(0, 0));
+    GlobalVar(Source{{12, 34}}, "a", ty.i32(), ast::StorageClass::kStorage, ast::Access::kRead,
+              Group(0), Binding(0));
     WrapInFunction(CompoundAssign(Source{{56, 78}}, "a", 1_i, ast::BinaryOp::kAdd));
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
-              "56:78 error: cannot store into a read-only type 'ref<storage, "
-              "i32, read>'");
+              "56:78 error: cannot store into a read-only type 'ref<storage, i32, read>'");
 }
 
 TEST_F(ResolverCompoundAssignmentValidationTest, LhsConstant) {
     // let a = 1i;
     // a += 1i;
-    auto* a = Let(Source{{12, 34}}, "a", nullptr, Expr(1_i));
+    auto* a = Let(Source{{12, 34}}, "a", Expr(1_i));
     WrapInFunction(a, CompoundAssign(Expr(Source{{56, 78}}, "a"), 1_i, ast::BinaryOp::kAdd));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(56:78 error: cannot assign to const
+    EXPECT_EQ(r()->error(), R"(56:78 error: cannot assign to 'let'
 12:34 note: 'a' is declared here:)");
 }
 
@@ -265,13 +264,13 @@ TEST_F(ResolverCompoundAssignmentValidationTest, LhsLiteral) {
 TEST_F(ResolverCompoundAssignmentValidationTest, LhsAtomic) {
     // var<workgroup> a : atomic<i32>;
     // a += a;
-    Global(Source{{12, 34}}, "a", ty.atomic(ty.i32()), ast::StorageClass::kWorkgroup);
+    GlobalVar(Source{{12, 34}}, "a", ty.atomic(ty.i32()), ast::StorageClass::kWorkgroup);
     WrapInFunction(CompoundAssign(Source{{56, 78}}, "a", "a", ast::BinaryOp::kAdd));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(),
-              "56:78 error: compound assignment operand types are invalid: "
-              "atomic<i32> add atomic<i32>");
+    EXPECT_THAT(
+        r()->error(),
+        HasSubstr("error: no matching overload for operator += (atomic<i32>, atomic<i32>)"));
 }
 
 }  // namespace
