@@ -458,7 +458,7 @@ ResultOrError<SwapChain::Config> SwapChain::ChooseConfig(
     config.transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 
     config.alphaMode = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-#if !DAWN_PLATFORM_IS(ANDROID)
+#if 0
     DAWN_INVALID_IF(
         (surfaceInfo.capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) == 0,
         "Vulkan SwapChain must support opaque alpha.");
