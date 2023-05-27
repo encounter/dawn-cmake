@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "gmock/gmock.h"
 #include "src/tint/ast/stage_attribute.h"
 #include "src/tint/writer/glsl/test_helper.h"
+
+#include "gmock/gmock.h"
 
 using namespace tint::number_suffixes;  // NOLINT
 
@@ -23,63 +24,63 @@ namespace {
 
 using ::testing::HasSubstr;
 
-using create_type_func_ptr = const ast::Type* (*)(const ProgramBuilder::TypesBuilder& ty);
+using create_type_func_ptr = ast::Type (*)(const ProgramBuilder::TypesBuilder& ty);
 
-inline const ast::Type* ty_i32(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_i32(const ProgramBuilder::TypesBuilder& ty) {
     return ty.i32();
 }
-inline const ast::Type* ty_u32(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_u32(const ProgramBuilder::TypesBuilder& ty) {
     return ty.u32();
 }
-inline const ast::Type* ty_f32(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_f32(const ProgramBuilder::TypesBuilder& ty) {
     return ty.f32();
 }
 template <typename T>
-inline const ast::Type* ty_vec2(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_vec2(const ProgramBuilder::TypesBuilder& ty) {
     return ty.vec2<T>();
 }
 template <typename T>
-inline const ast::Type* ty_vec3(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_vec3(const ProgramBuilder::TypesBuilder& ty) {
     return ty.vec3<T>();
 }
 template <typename T>
-inline const ast::Type* ty_vec4(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_vec4(const ProgramBuilder::TypesBuilder& ty) {
     return ty.vec4<T>();
 }
 template <typename T>
-inline const ast::Type* ty_mat2x2(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_mat2x2(const ProgramBuilder::TypesBuilder& ty) {
     return ty.mat2x2<T>();
 }
 template <typename T>
-inline const ast::Type* ty_mat2x3(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_mat2x3(const ProgramBuilder::TypesBuilder& ty) {
     return ty.mat2x3<T>();
 }
 template <typename T>
-inline const ast::Type* ty_mat2x4(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_mat2x4(const ProgramBuilder::TypesBuilder& ty) {
     return ty.mat2x4<T>();
 }
 template <typename T>
-inline const ast::Type* ty_mat3x2(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_mat3x2(const ProgramBuilder::TypesBuilder& ty) {
     return ty.mat3x2<T>();
 }
 template <typename T>
-inline const ast::Type* ty_mat3x3(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_mat3x3(const ProgramBuilder::TypesBuilder& ty) {
     return ty.mat3x3<T>();
 }
 template <typename T>
-inline const ast::Type* ty_mat3x4(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_mat3x4(const ProgramBuilder::TypesBuilder& ty) {
     return ty.mat3x4<T>();
 }
 template <typename T>
-inline const ast::Type* ty_mat4x2(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_mat4x2(const ProgramBuilder::TypesBuilder& ty) {
     return ty.mat4x2<T>();
 }
 template <typename T>
-inline const ast::Type* ty_mat4x3(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_mat4x3(const ProgramBuilder::TypesBuilder& ty) {
     return ty.mat4x3<T>();
 }
 template <typename T>
-inline const ast::Type* ty_mat4x4(const ProgramBuilder::TypesBuilder& ty) {
+inline ast::Type ty_mat4x4(const ProgramBuilder::TypesBuilder& ty) {
     return ty.mat4x4<T>();
 }
 
@@ -91,8 +92,8 @@ class GlslGeneratorImplTest_MemberAccessorBase : public BASE {
 
         auto* s = b.Structure("Data", members);
 
-        b.GlobalVar("data", b.ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-                    b.Group(1), b.Binding(0));
+        b.GlobalVar("data", b.ty.Of(s), builtin::AddressSpace::kStorage,
+                    builtin::Access::kReadWrite, b.Group(1_a), b.Binding(0_a));
     }
 
     void SetupFunction(utils::VectorRef<const ast::Statement*> statements) {
@@ -112,14 +113,14 @@ using GlslGeneratorImplTest_MemberAccessorWithParam =
 
 TEST_F(GlslGeneratorImplTest_MemberAccessor, EmitExpression_MemberAccessor) {
     auto* s = Structure("Data", utils::Vector{Member("mem", ty.f32())});
-    GlobalVar("str", ty.Of(s), ast::StorageClass::kPrivate);
+    GlobalVar("str", ty.Of(s), builtin::AddressSpace::kPrivate);
 
     auto* expr = MemberAccessor("str", "mem");
     WrapInFunction(Var("expr", ty.f32(), expr));
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
 
 struct Data {
@@ -144,10 +145,7 @@ struct TypeCase {
     std::string expected;
 };
 inline std::ostream& operator<<(std::ostream& out, TypeCase c) {
-    ProgramBuilder b;
-    auto* ty = c.member_type(b.ty);
-    out << ty->FriendlyName(b.Symbols());
-    return out;
+    return out << c.expected;
 }
 
 using GlslGeneratorImplTest_MemberAccessor_StorageBufferLoad =
@@ -172,34 +170,34 @@ TEST_P(GlslGeneratorImplTest_MemberAccessor_StorageBufferLoad, Test) {
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_THAT(gen.result(), HasSubstr(p.expected));
 }
 
 INSTANTIATE_TEST_SUITE_P(GlslGeneratorImplTest_MemberAccessor,
                          GlslGeneratorImplTest_MemberAccessor_StorageBufferLoad,
-                         testing::Values(TypeCase{ty_u32, "data.b"},
-                                         TypeCase{ty_f32, "data.b"},
-                                         TypeCase{ty_i32, "data.b"},
-                                         TypeCase{ty_vec2<u32>, "data.b"},
-                                         TypeCase{ty_vec2<f32>, "data.b"},
-                                         TypeCase{ty_vec2<i32>, "data.b"},
-                                         TypeCase{ty_vec3<u32>, "data.b"},
-                                         TypeCase{ty_vec3<f32>, "data.b"},
-                                         TypeCase{ty_vec3<i32>, "data.b"},
-                                         TypeCase{ty_vec4<u32>, "data.b"},
-                                         TypeCase{ty_vec4<f32>, "data.b"},
-                                         TypeCase{ty_vec4<i32>, "data.b"},
-                                         TypeCase{ty_mat2x2<f32>, "data.b"},
-                                         TypeCase{ty_mat2x3<f32>, "data.b"},
-                                         TypeCase{ty_mat2x4<f32>, "data.b"},
-                                         TypeCase{ty_mat3x2<f32>, "data.b"},
-                                         TypeCase{ty_mat3x3<f32>, "data.b"},
-                                         TypeCase{ty_mat3x4<f32>, "data.b"},
-                                         TypeCase{ty_mat4x2<f32>, "data.b"},
-                                         TypeCase{ty_mat4x3<f32>, "data.b"},
-                                         TypeCase{ty_mat4x4<f32>, "data.b"}));
+                         testing::Values(TypeCase{ty_u32, "data.inner.b"},
+                                         TypeCase{ty_f32, "data.inner.b"},
+                                         TypeCase{ty_i32, "data.inner.b"},
+                                         TypeCase{ty_vec2<u32>, "data.inner.b"},
+                                         TypeCase{ty_vec2<f32>, "data.inner.b"},
+                                         TypeCase{ty_vec2<i32>, "data.inner.b"},
+                                         TypeCase{ty_vec3<u32>, "data.inner.b"},
+                                         TypeCase{ty_vec3<f32>, "data.inner.b"},
+                                         TypeCase{ty_vec3<i32>, "data.inner.b"},
+                                         TypeCase{ty_vec4<u32>, "data.inner.b"},
+                                         TypeCase{ty_vec4<f32>, "data.inner.b"},
+                                         TypeCase{ty_vec4<i32>, "data.inner.b"},
+                                         TypeCase{ty_mat2x2<f32>, "data.inner.b"},
+                                         TypeCase{ty_mat2x3<f32>, "data.inner.b"},
+                                         TypeCase{ty_mat2x4<f32>, "data.inner.b"},
+                                         TypeCase{ty_mat3x2<f32>, "data.inner.b"},
+                                         TypeCase{ty_mat3x3<f32>, "data.inner.b"},
+                                         TypeCase{ty_mat3x4<f32>, "data.inner.b"},
+                                         TypeCase{ty_mat4x2<f32>, "data.inner.b"},
+                                         TypeCase{ty_mat4x3<f32>, "data.inner.b"},
+                                         TypeCase{ty_mat4x4<f32>, "data.inner.b"}));
 
 using GlslGeneratorImplTest_MemberAccessor_StorageBufferStore =
     GlslGeneratorImplTest_MemberAccessorWithParam<TypeCase>;
@@ -219,39 +217,49 @@ TEST_P(GlslGeneratorImplTest_MemberAccessor_StorageBufferStore, Test) {
     });
 
     SetupFunction(utils::Vector{
-        Decl(Var("value", p.member_type(ty), Construct(p.member_type(ty)))),
+        Decl(Var("value", p.member_type(ty), Call(p.member_type(ty)))),
         Assign(MemberAccessor("data", "b"), Expr("value")),
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_THAT(gen.result(), HasSubstr(p.expected));
 }
 
 INSTANTIATE_TEST_SUITE_P(GlslGeneratorImplTest_MemberAccessor,
                          GlslGeneratorImplTest_MemberAccessor_StorageBufferStore,
-                         testing::Values(TypeCase{ty_u32, "data.b = value"},
-                                         TypeCase{ty_f32, "data.b = value"},
-                                         TypeCase{ty_i32, "data.b = value"},
-                                         TypeCase{ty_vec2<u32>, "data.b = value"},
-                                         TypeCase{ty_vec2<f32>, "data.b = value"},
-                                         TypeCase{ty_vec2<i32>, "data.b = value"},
-                                         TypeCase{ty_vec3<u32>, "data.b = value"},
-                                         TypeCase{ty_vec3<f32>, "data.b = value"},
-                                         TypeCase{ty_vec3<i32>, "data.b = value"},
-                                         TypeCase{ty_vec4<u32>, "data.b = value"},
-                                         TypeCase{ty_vec4<f32>, "data.b = value"},
-                                         TypeCase{ty_vec4<i32>, "data.b = value"},
-                                         TypeCase{ty_mat2x2<f32>, "data.b = value"},
-                                         TypeCase{ty_mat2x3<f32>, "data.b = value"},
-                                         TypeCase{ty_mat2x4<f32>, "data.b = value"},
-                                         TypeCase{ty_mat3x2<f32>, "data.b = value"},
-                                         TypeCase{ty_mat3x3<f32>, "data.b = value"},
-                                         TypeCase{ty_mat3x4<f32>, "data.b = value"},
-                                         TypeCase{ty_mat4x2<f32>, "data.b = value"},
-                                         TypeCase{ty_mat4x3<f32>, "data.b = value"},
-                                         TypeCase{ty_mat4x4<f32>, "data.b = value"}));
+                         testing::Values(TypeCase{ty_u32, "data.inner.b = value"},
+                                         TypeCase{ty_f32, "data.inner.b = value"},
+                                         TypeCase{ty_i32, "data.inner.b = value"},
+                                         TypeCase{ty_vec2<u32>, "data.inner.b = value"},
+                                         TypeCase{ty_vec2<f32>, "data.inner.b = value"},
+                                         TypeCase{ty_vec2<i32>, "data.inner.b = value"},
+                                         TypeCase{ty_vec3<u32>, "data.inner.b = value"},
+                                         TypeCase{ty_vec3<f32>, "data.inner.b = value"},
+                                         TypeCase{ty_vec3<i32>, "data.inner.b = value"},
+                                         TypeCase{ty_vec4<u32>, "data.inner.b = value"},
+                                         TypeCase{ty_vec4<f32>, "data.inner.b = value"},
+                                         TypeCase{ty_vec4<i32>, "data.inner.b = value"},
+                                         TypeCase{ty_mat2x2<f32>, "data.inner.b = value"},
+                                         TypeCase{ty_mat2x3<f32>, R"(
+  data.inner.b[0] = value[0u];
+  data.inner.b[1] = value[1u];)"},
+                                         TypeCase{ty_mat2x4<f32>, "data.inner.b = value"},
+                                         TypeCase{ty_mat3x2<f32>, "data.inner.b = value"},
+                                         TypeCase{ty_mat3x3<f32>, R"(
+  data.inner.b[0] = value[0u];
+  data.inner.b[1] = value[1u];
+  data.inner.b[2] = value[2u];)"},
+                                         TypeCase{ty_mat3x4<f32>, "data.inner.b = value"},
+                                         TypeCase{ty_mat4x2<f32>, "data.inner.b = value"},
+                                         TypeCase{ty_mat4x3<f32>, R"(
+  data.inner.b[0] = value[0u];
+  data.inner.b[1] = value[1u];
+  data.inner.b[2] = value[2u];
+  data.inner.b[3] = value[3u];)"},
+                                         TypeCase{ty_mat4x4<f32>, "data.inner.b = value"}));
 
 TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Store_Matrix_Empty) {
     // struct Data {
@@ -267,27 +275,36 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Store_Matrix_Empty) {
     });
 
     SetupFunction(utils::Vector{
-        Assign(MemberAccessor("data", "b"), Construct(ty.mat2x3<f32>())),
+        Assign(MemberAccessor("data", "b"), Call(ty.mat2x3<f32>())),
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
     auto* expected =
         R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Data {
   int a;
+  uint pad;
+  uint pad_1;
+  uint pad_2;
   mat2x3 b;
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  int a;
-  mat2x3 b;
+layout(binding = 0, std430) buffer data_block_ssbo {
+  Data inner;
 } data;
+
+void assign_and_preserve_padding_data_b(mat2x3 value) {
+  data.inner.b[0] = value[0u];
+  data.inner.b[1] = value[1u];
+}
+
 void tint_symbol() {
-  data.b = mat2x3(vec3(0.0f), vec3(0.0f));
+  assign_and_preserve_padding_data_b(mat2x3(vec3(0.0f), vec3(0.0f)));
 }
 
 void main() {
@@ -316,23 +333,26 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Load_Matrix_Single_El
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     auto* expected =
         R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Data {
   float z;
+  uint pad;
+  uint pad_1;
+  uint pad_2;
   mat4x3 a;
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  float z;
-  mat4x3 a;
+layout(binding = 0, std430) buffer data_block_ssbo {
+  Data inner;
 } data;
+
 void tint_symbol() {
-  float x = data.a[2][1];
+  float x = data.inner.a[2][1];
 }
 
 void main() {
@@ -353,7 +373,7 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor,
 
     SetupStorageBuffer(utils::Vector{
         Member("z", ty.f32()),
-        Member("a", ty.array<i32, 5>(4)),
+        Member("a", ty.array<i32, 5>()),
     });
 
     SetupFunction(utils::Vector{
@@ -361,23 +381,23 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor,
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     auto* expected =
         R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Data {
   float z;
   int a[5];
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  float z;
-  int a[5];
+layout(binding = 0, std430) buffer data_block_ssbo {
+  Data inner;
 } data;
+
 void tint_symbol() {
-  int x = data.a[2];
+  int x = data.inner.a[2];
 }
 
 void main() {
@@ -398,7 +418,7 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor,
 
     SetupStorageBuffer(utils::Vector{
         Member("z", ty.f32()),
-        Member("a", ty.array<i32, 5>(4)),
+        Member("a", ty.array<i32, 5>()),
     });
 
     SetupFunction(utils::Vector{
@@ -409,26 +429,26 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor,
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     auto* expected =
         R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Data {
   float z;
   int a[5];
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  float z;
-  int a[5];
+layout(binding = 0, std430) buffer data_block_ssbo {
+  Data inner;
 } data;
+
 void tint_symbol() {
   int a = 2;
   int b = 4;
   int c = 3;
-  int x = data.a[((a + b) - c)];
+  int x = data.inner.a[((a + b) - c)];
 }
 
 void main() {
@@ -448,7 +468,7 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Store_ToArray) {
 
     SetupStorageBuffer(utils::Vector{
         Member("z", ty.f32()),
-        Member("a", ty.array<i32, 5>(4)),
+        Member("a", ty.array<i32, 5>()),
     });
 
     SetupFunction(utils::Vector{
@@ -456,23 +476,23 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Store_ToArray) {
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     auto* expected =
         R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Data {
   float z;
   int a[5];
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  float z;
-  int a[5];
+layout(binding = 0, std430) buffer data_block_ssbo {
+  Data inner;
 } data;
+
 void tint_symbol() {
-  data.a[2] = 2;
+  data.inner.a[2] = 2;
 }
 
 void main() {
@@ -501,7 +521,7 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Load_MultiLevel) {
                                      });
 
     SetupStorageBuffer(utils::Vector{
-        Member("c", ty.array(ty.Of(inner), 4_u, 32)),
+        Member("c", ty.array(ty.Of(inner), 4_u)),
     });
 
     SetupFunction(utils::Vector{
@@ -509,26 +529,29 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Load_MultiLevel) {
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     auto* expected =
         R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Inner {
   vec3 a;
+  uint pad;
   vec3 b;
+  uint pad_1;
 };
 
 struct Data {
   Inner c[4];
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  Inner c[4];
+layout(binding = 0, std430) buffer data_block_ssbo {
+  Data inner;
 } data;
+
 void tint_symbol() {
-  vec3 x = data.c[2].b;
+  vec3 x = data.inner.c[2].b;
 }
 
 void main() {
@@ -557,7 +580,7 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Load_MultiLevel_Swizz
                                      });
 
     SetupStorageBuffer(utils::Vector{
-        Member("c", ty.array(ty.Of(inner), 4_u, 32)),
+        Member("c", ty.array(ty.Of(inner), 4_u)),
     });
 
     SetupFunction(utils::Vector{
@@ -567,26 +590,29 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Load_MultiLevel_Swizz
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     auto* expected =
         R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Inner {
   vec3 a;
+  uint pad;
   vec3 b;
+  uint pad_1;
 };
 
 struct Data {
   Inner c[4];
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  Inner c[4];
+layout(binding = 0, std430) buffer data_block_ssbo {
+  Data inner;
 } data;
+
 void tint_symbol() {
-  vec2 x = data.c[2].b.xy;
+  vec2 x = data.inner.c[2].b.xy;
 }
 
 void main() {
@@ -616,7 +642,7 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor,
                                      });
 
     SetupStorageBuffer(utils::Vector{
-        Member("c", ty.array(ty.Of(inner), 4_u, 32)),
+        Member("c", ty.array(ty.Of(inner), 4_u)),
     });
 
     SetupFunction(utils::Vector{
@@ -626,26 +652,29 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor,
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     auto* expected =
         R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Inner {
   vec3 a;
+  uint pad;
   vec3 b;
+  uint pad_1;
 };
 
 struct Data {
   Inner c[4];
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  Inner c[4];
+layout(binding = 0, std430) buffer data_block_ssbo {
+  Data inner;
 } data;
+
 void tint_symbol() {
-  float x = data.c[2].b.g;
+  float x = data.inner.c[2].b.g;
 }
 
 void main() {
@@ -674,7 +703,7 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Load_MultiLevel_Index
                                      });
 
     SetupStorageBuffer(utils::Vector{
-        Member("c", ty.array(ty.Of(inner), 4_u, 32)),
+        Member("c", ty.array(ty.Of(inner), 4_u)),
     });
 
     SetupFunction(utils::Vector{
@@ -684,26 +713,29 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Load_MultiLevel_Index
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     auto* expected =
         R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Inner {
   vec3 a;
+  uint pad;
   vec3 b;
+  uint pad_1;
 };
 
 struct Data {
   Inner c[4];
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  Inner c[4];
+layout(binding = 0, std430) buffer data_block_ssbo {
+  Data inner;
 } data;
+
 void tint_symbol() {
-  float x = data.c[2].b[1];
+  float x = data.inner.c[2].b[1];
 }
 
 void main() {
@@ -732,7 +764,7 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Store_MultiLevel) {
                                      });
 
     SetupStorageBuffer(utils::Vector{
-        Member("c", ty.array(ty.Of(inner), 4_u, 32)),
+        Member("c", ty.array(ty.Of(inner), 4_u)),
     });
 
     SetupFunction(utils::Vector{
@@ -741,26 +773,29 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Store_MultiLevel) {
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     auto* expected =
         R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Inner {
   vec3 a;
+  uint pad;
   vec3 b;
+  uint pad_1;
 };
 
 struct Data {
   Inner c[4];
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  Inner c[4];
+layout(binding = 0, std430) buffer data_block_ssbo {
+  Data inner;
 } data;
+
 void tint_symbol() {
-  data.c[2].b = vec3(1.0f, 2.0f, 3.0f);
+  data.inner.c[2].b = vec3(1.0f, 2.0f, 3.0f);
 }
 
 void main() {
@@ -789,7 +824,7 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Store_Swizzle_SingleL
                                      });
 
     SetupStorageBuffer(utils::Vector{
-        Member("c", ty.array(ty.Of(inner), 4_u, 32)),
+        Member("c", ty.array(ty.Of(inner), 4_u)),
     });
 
     SetupFunction(utils::Vector{
@@ -799,26 +834,29 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, StorageBuffer_Store_Swizzle_SingleL
     });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     auto* expected =
         R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Inner {
   ivec3 a;
+  uint pad;
   vec3 b;
+  uint pad_1;
 };
 
 struct Data {
   Inner c[4];
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  Inner c[4];
+layout(binding = 0, std430) buffer data_block_ssbo {
+  Data inner;
 } data;
+
 void tint_symbol() {
-  data.c[2].b.y = 1.0f;
+  data.inner.c[2].b.y = 1.0f;
 }
 
 void main() {
@@ -835,7 +873,8 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, Swizzle_xyz) {
     WrapInFunction(var, expr);
 
     GeneratorImpl& gen = SanitizeAndBuild();
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_THAT(gen.result(), HasSubstr("my_vec.xyz"));
 }
 
@@ -845,7 +884,8 @@ TEST_F(GlslGeneratorImplTest_MemberAccessor, Swizzle_gbr) {
     WrapInFunction(var, expr);
 
     GeneratorImpl& gen = SanitizeAndBuild();
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_THAT(gen.result(), HasSubstr("my_vec.gbr"));
 }
 

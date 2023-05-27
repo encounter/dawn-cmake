@@ -1,5 +1,5 @@
-Texture2D<uint4> Src : register(t0, space0);
-RWTexture2D<uint4> Dst : register(u1, space0);
+Texture2D<uint4> Src : register(t0);
+RWTexture2D<uint4> Dst : register(u1);
 
 [numthreads(1, 1, 1)]
 void main() {
@@ -8,6 +8,7 @@ void main() {
   srcValue = x_22;
   const uint x_24 = srcValue.x;
   const uint x_25 = (x_24 + 1u);
-  Dst[(0).xx] = srcValue.xxxx;
+  const uint4 x_27 = srcValue;
+  Dst[(0).xx] = x_27.xxxx;
   return;
 }

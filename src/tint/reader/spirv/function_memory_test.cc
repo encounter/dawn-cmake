@@ -159,7 +159,7 @@ TEST_F(SpvParserMemoryTest, EmitStatement_LoadBool) {
     auto fe = p->function_emitter(100);
     EXPECT_TRUE(fe.EmitBody()) << p->error();
     auto ast_body = fe.ast_body();
-    EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr("let x_2 : bool = x_1;"));
+    EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr("let x_2 = x_1;"));
 }
 
 TEST_F(SpvParserMemoryTest, EmitStatement_LoadScalar) {
@@ -181,8 +181,9 @@ TEST_F(SpvParserMemoryTest, EmitStatement_LoadScalar) {
     auto fe = p->function_emitter(100);
     EXPECT_TRUE(fe.EmitBody()) << p->error();
     auto ast_body = fe.ast_body();
-    EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr(R"(let x_2 : u32 = x_1;
-let x_3 : u32 = x_1;
+    EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr(R"( x_1 = 42u;
+let x_2 = x_1;
+let x_3 = x_1;
 )"));
 }
 
@@ -206,7 +207,8 @@ TEST_F(SpvParserMemoryTest, EmitStatement_UseLoadedScalarTwice) {
     auto fe = p->function_emitter(100);
     EXPECT_TRUE(fe.EmitBody()) << p->error();
     auto ast_body = fe.ast_body();
-    EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr(R"(let x_2 : u32 = x_1;
+    EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr(R"( x_1 = 42u;
+let x_2 = x_1;
 x_1 = x_2;
 x_1 = x_2;
 )"));
@@ -498,7 +500,7 @@ TEST_F(SpvParserMemoryTest, EmitStatement_AccessChain_Matrix) {
     EXPECT_TRUE(fe.EmitBody());
     auto ast_body = fe.ast_body();
     EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr("myvar[2u] = vec4<f32>(42.0f, 42.0f, 42.0f, 42.0f);"));
+                HasSubstr("myvar[2u] = vec4f(42.0f, 42.0f, 42.0f, 42.0f);"));
 }
 
 TEST_F(SpvParserMemoryTest, EmitStatement_AccessChain_Array) {
@@ -530,7 +532,7 @@ TEST_F(SpvParserMemoryTest, EmitStatement_AccessChain_Array) {
     EXPECT_TRUE(fe.EmitBody());
     auto ast_body = fe.ast_body();
     EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr("myvar[2u] = vec4<f32>(42.0f, 42.0f, 42.0f, 42.0f);"));
+                HasSubstr("myvar[2u] = vec4f(42.0f, 42.0f, 42.0f, 42.0f);"));
 }
 
 TEST_F(SpvParserMemoryTest, EmitStatement_AccessChain_Struct) {
@@ -801,8 +803,8 @@ TEST_F(SpvParserMemoryTest, EmitStatement_AccessChain_DereferenceBase) {
     auto p = parser(test::Assemble(assembly));
     ASSERT_TRUE(p->BuildAndParseInternalModule());
     const auto got = test::ToString(p->program());
-    const std::string expected = R"(fn x_200(x_1 : ptr<private, vec2<u32>>) {
-  let x_3 : u32 = (*(x_1)).x;
+    const std::string expected = R"(fn x_200(x_1 : ptr<private, vec2u>) {
+  let x_3 = (*(x_1)).x;
   return;
 }
 
@@ -818,11 +820,11 @@ fn main() {
     EXPECT_EQ(got, expected) << got;
 }
 
-TEST_F(SpvParserMemoryTest, EmitStatement_AccessChain_InferFunctionStorageClass) {
+TEST_F(SpvParserMemoryTest, EmitStatement_AccessChain_InferFunctionAddressSpace) {
     // An access chain can have no indices. When the base is a Function variable,
-    // the reference type has no explicit storage class in the AST representation.
+    // the reference type has no explicit address space in the AST representation.
     // But the pointer type for the let declaration must have an explicit
-    // 'function' storage class. From crbug.com/tint/807
+    // 'function' address space. From crbug.com/tint/807
     const std::string assembly = R"(
 OpCapability Shader
 OpMemoryModel Logical Simple
@@ -846,7 +848,7 @@ OpExecutionMode %main OriginUpperLeft
     const auto got = test::ToString(p->program());
     const std::string expected = R"(fn main_1() {
   var x_1 : u32;
-  let x_2 : ptr<function, u32> = &(x_1);
+  let x_2 = &(x_1);
   return;
 }
 
@@ -858,7 +860,52 @@ fn main() {
     EXPECT_EQ(got, expected) << got;
 }
 
-std::string OldStorageBufferPreamble() {
+std::string NewStorageBufferPreamble(bool nonwritable = false) {
+    // Declare a buffer with
+    //  StorageBuffer storage class
+    //  Block struct decoration
+    return std::string(R"(
+     OpCapability Shader
+     OpExtension "SPV_KHR_storage_buffer_storage_class"
+     OpMemoryModel Logical Simple
+     OpEntryPoint Fragment %100 "main"
+     OpExecutionMode %100 OriginUpperLeft
+     OpName %myvar "myvar"
+
+     OpDecorate %myvar DescriptorSet 0
+     OpDecorate %myvar Binding 0
+
+     OpDecorate %struct Block
+     OpMemberDecorate %struct 0 Offset 0
+     OpMemberDecorate %struct 1 Offset 4
+     OpDecorate %arr ArrayStride 4
+     )") +
+           (nonwritable ? R"(
+     OpMemberDecorate %struct 0 NonWritable
+     OpMemberDecorate %struct 1 NonWritable)"
+                        : "") +
+           R"(
+     %void = OpTypeVoid
+     %voidfn = OpTypeFunction %void
+     %uint = OpTypeInt 32 0
+
+     %uint_0 = OpConstant %uint 0
+     %uint_1 = OpConstant %uint 1
+
+     %arr = OpTypeRuntimeArray %uint
+     %struct = OpTypeStruct %uint %arr
+     %ptr_struct = OpTypePointer StorageBuffer %struct
+     %ptr_uint = OpTypePointer StorageBuffer %uint
+
+     %myvar = OpVariable %ptr_struct StorageBuffer
+  )";
+}
+
+std::string OldStorageBufferPreamble(bool nonwritable = false) {
+    // Declare a buffer with
+    //  Unifrom storage class
+    //  BufferBlock struct decoration
+    // This is the deprecated way to declare a storage buffer.
     return Preamble() + R"(
      OpName %myvar "myvar"
 
@@ -869,7 +916,12 @@ std::string OldStorageBufferPreamble() {
      OpMemberDecorate %struct 0 Offset 0
      OpMemberDecorate %struct 1 Offset 4
      OpDecorate %arr ArrayStride 4
-
+     )" +
+           (nonwritable ? R"(
+     OpMemberDecorate %struct 0 NonWritable
+     OpMemberDecorate %struct 1 NonWritable)"
+                        : "") +
+           R"(
      %void = OpTypeVoid
      %voidfn = OpTypeFunction %void
      %uint = OpTypeInt 32 0
@@ -900,10 +952,12 @@ TEST_F(SpvParserMemoryTest, RemapStorageBuffer_TypesAndVarDeclarations) {
     auto p = parser(test::Assemble(assembly));
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << assembly << p->error();
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr(R"(type RTArr = @stride(4) array<u32>;
+    EXPECT_THAT(module_str, HasSubstr(R"(alias RTArr = @stride(4) array<u32>;
 
 struct S {
+  /* @offset(0) */
   field0 : u32,
+  /* @offset(4) */
   field1 : RTArr,
 }
 
@@ -936,6 +990,158 @@ TEST_F(SpvParserMemoryTest, RemapStorageBuffer_ThroughAccessChain_NonCascaded) {
     EXPECT_THAT(got, HasSubstr(R"(myvar.field0 = 0u;
 myvar.field1[1u] = 0u;
 )"));
+}
+
+TEST_F(SpvParserMemoryTest, RemapStorageBuffer_ThroughAccessChain_NonCascaded_UsedTwice_ReadWrite) {
+    // Use the pointer value twice, which provokes the spirv-reader
+    // to make a let declaration for the pointer.  The storage class
+    // must be 'storage', not 'uniform'.
+    const auto assembly = OldStorageBufferPreamble() + R"(
+  %100 = OpFunction %void None %voidfn
+  %entry = OpLabel
+
+  ; the scalar element
+  %1 = OpAccessChain %ptr_uint %myvar %uint_0
+  OpStore %1 %uint_0
+  OpStore %1 %uint_0
+
+  ; element in the runtime array
+  %2 = OpAccessChain %ptr_uint %myvar %uint_1 %uint_1
+  ; Use the pointer twice
+  %3 = OpLoad %uint %2
+  OpStore %2 %uint_0
+
+  OpReturn
+  OpFunctionEnd
+)";
+    auto p = parser(test::Assemble(assembly));
+    ASSERT_TRUE(p->BuildAndParseInternalModule()) << assembly << p->error();
+    auto fe = p->function_emitter(100);
+    EXPECT_TRUE(fe.EmitBody()) << p->error();
+    auto ast_body = fe.ast_body();
+    const auto got = test::ToString(p->program(), ast_body);
+    EXPECT_THAT(got, HasSubstr(R"(let x_1 = &(myvar.field0);
+*(x_1) = 0u;
+*(x_1) = 0u;
+let x_2 = &(myvar.field1[1u]);
+let x_3 = *(x_2);
+*(x_2) = 0u;
+)"));
+}
+
+TEST_F(SpvParserMemoryTest, RemapStorageBuffer_ThroughAccessChain_NonCascaded_UsedTwice_ReadOnly) {
+    // Like the previous test, but make the storage buffer read_only.
+    // The pointer type must also be read-only.
+    const auto assembly = OldStorageBufferPreamble(true) + R"(
+  %100 = OpFunction %void None %voidfn
+  %entry = OpLabel
+
+  ; the scalar element
+  %1 = OpAccessChain %ptr_uint %myvar %uint_0
+  OpStore %1 %uint_0
+  OpStore %1 %uint_0
+
+  ; element in the runtime array
+  %2 = OpAccessChain %ptr_uint %myvar %uint_1 %uint_1
+  ; Use the pointer twice
+  %3 = OpLoad %uint %2
+  OpStore %2 %uint_0
+
+  OpReturn
+  OpFunctionEnd
+)";
+    auto p = parser(test::Assemble(assembly));
+    ASSERT_TRUE(p->BuildAndParseInternalModule()) << assembly << p->error();
+    auto fe = p->function_emitter(100);
+    EXPECT_TRUE(fe.EmitBody()) << p->error();
+    auto ast_body = fe.ast_body();
+    const auto got = test::ToString(p->program(), ast_body);
+    EXPECT_THAT(got, HasSubstr(R"(let x_1 = &(myvar.field0);
+*(x_1) = 0u;
+*(x_1) = 0u;
+let x_2 = &(myvar.field1[1u]);
+let x_3 = *(x_2);
+*(x_2) = 0u;
+)")) << got
+     << assembly;
+}
+
+TEST_F(SpvParserMemoryTest, StorageBuffer_ThroughAccessChain_NonCascaded_UsedTwice_ReadWrite) {
+    // Use new style storage buffer declaration:
+    //   StorageBuffer storage class,
+    //   Block decoration
+    // The pointer type must use 'storage' address space, and should use defaulted access
+    const auto assembly = NewStorageBufferPreamble() + R"(
+  %100 = OpFunction %void None %voidfn
+  %entry = OpLabel
+
+  ; the scalar element
+  %1 = OpAccessChain %ptr_uint %myvar %uint_0
+  OpStore %1 %uint_0
+  OpStore %1 %uint_0
+
+  ; element in the runtime array
+  %2 = OpAccessChain %ptr_uint %myvar %uint_1 %uint_1
+  ; Use the pointer twice
+  %3 = OpLoad %uint %2
+  OpStore %2 %uint_0
+
+  OpReturn
+  OpFunctionEnd
+)";
+    auto p = parser(test::Assemble(assembly));
+    ASSERT_TRUE(p->BuildAndParseInternalModule()) << assembly << p->error();
+    auto fe = p->function_emitter(100);
+    EXPECT_TRUE(fe.EmitBody()) << p->error();
+    auto ast_body = fe.ast_body();
+    const auto got = test::ToString(p->program(), ast_body);
+    EXPECT_THAT(got, HasSubstr(R"(let x_1 = &(myvar.field0);
+*(x_1) = 0u;
+*(x_1) = 0u;
+let x_2 = &(myvar.field1[1u]);
+let x_3 = *(x_2);
+*(x_2) = 0u;
+)")) << got;
+}
+
+TEST_F(SpvParserMemoryTest, StorageBuffer_ThroughAccessChain_NonCascaded_UsedTwice_ReadOnly) {
+    // Like the previous test, but make the storage buffer read_only.
+    // Use new style storage buffer declaration:
+    //   StorageBuffer storage class,
+    //   Block decoration
+    // The pointer type must use 'storage' address space, and must use read_only
+    // access
+    const auto assembly = NewStorageBufferPreamble(true) + R"(
+  %100 = OpFunction %void None %voidfn
+  %entry = OpLabel
+
+  ; the scalar element
+  %1 = OpAccessChain %ptr_uint %myvar %uint_0
+  OpStore %1 %uint_0
+  OpStore %1 %uint_0
+
+  ; element in the runtime array
+  %2 = OpAccessChain %ptr_uint %myvar %uint_1 %uint_1
+  ; Use the pointer twice
+  %3 = OpLoad %uint %2
+  OpStore %2 %uint_0
+
+  OpReturn
+  OpFunctionEnd
+)";
+    auto p = parser(test::Assemble(assembly));
+    ASSERT_TRUE(p->BuildAndParseInternalModule()) << assembly << p->error();
+    auto fe = p->function_emitter(100);
+    EXPECT_TRUE(fe.EmitBody()) << p->error();
+    auto ast_body = fe.ast_body();
+    const auto got = test::ToString(p->program(), ast_body);
+    EXPECT_THAT(got, HasSubstr(R"(let x_1 = &(myvar.field0);
+*(x_1) = 0u;
+*(x_1) = 0u;
+let x_2 = &(myvar.field1[1u]);
+let x_3 = *(x_2);
+*(x_2) = 0u;
+)")) << got;
 }
 
 TEST_F(SpvParserMemoryTest, RemapStorageBuffer_ThroughAccessChain_NonCascaded_InBoundsAccessChain) {
@@ -993,7 +1199,7 @@ TEST_F(SpvParserMemoryTest, RemapStorageBuffer_ThroughAccessChain_Cascaded) {
 
 TEST_F(SpvParserMemoryTest, RemapStorageBuffer_ThroughCopyObject_WithoutHoisting) {
     // Generates a const declaration directly.
-    // We have to do a bunch of storage class tracking for locally
+    // We have to do a bunch of address space tracking for locally
     // defined values in order to get the right pointer-to-storage-buffer
     // value type for the const declration.
     const auto assembly = OldStorageBufferPreamble() + R"(
@@ -1012,69 +1218,11 @@ TEST_F(SpvParserMemoryTest, RemapStorageBuffer_ThroughCopyObject_WithoutHoisting
     auto fe = p->function_emitter(100);
     EXPECT_TRUE(fe.EmitBody()) << p->error();
     auto ast_body = fe.ast_body();
-    EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr(R"(let x_2 : ptr<storage, u32> = &(myvar.field1[1u]);
+    EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr(R"(let x_2 = &(myvar.field1[1u]);
 *(x_2) = 0u;
 )")) << p->error();
 
     p->SkipDumpingPending("crbug.com/tint/1041 track access mode in spirv-reader parser type");
-}
-
-TEST_F(SpvParserMemoryTest, RemapStorageBuffer_ThroughCopyObject_WithHoisting) {
-    // TODO(dneto): Hoisting non-storable values (pointers) is not yet supported.
-    // It's debatable whether this test should run at all.
-    // crbug.com/tint/98
-
-    // Like the previous test, but the declaration for the copy-object
-    // has its declaration hoisted.
-    const auto assembly = OldStorageBufferPreamble() + R"(
-  %bool = OpTypeBool
-  %cond = OpConstantTrue %bool
-
-  %100 = OpFunction %void None %voidfn
-
-  %entry = OpLabel
-  OpSelectionMerge %99 None
-  OpBranchConditional %cond %20 %30
-
-  %20 = OpLabel
-  %1 = OpAccessChain %ptr_uint %myvar %uint_1 %uint_1
-  ; this definintion dominates the use in %99
-  %2 = OpCopyObject %ptr_uint %1
-  OpBranch %99
-
-  %30 = OpLabel
-  OpReturn
-
-  %99 = OpLabel
-  OpStore %2 %uint_0
-  OpReturn
-
-  OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModule()) << assembly << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_TRUE(fe.EmitBody()) << p->error();
-    auto ast_body = fe.ast_body();
-    EXPECT_EQ(test::ToString(p->program(), ast_body),
-              R"(var x_2 : ptr<storage, u32>;
-if (true) {
-  x_2 = &(myvar.field1[1u]);
-} else {
-  return;
-}
-x_2 = 0u;
-return;
-)") << p->error();
-    p->SkipDumpingPending("crbug.com/tint/98");
-}
-
-TEST_F(SpvParserMemoryTest, DISABLED_RemapStorageBuffer_ThroughFunctionCall) {
-    // WGSL does not support pointer-to-storage-buffer as function parameter
-}
-TEST_F(SpvParserMemoryTest, DISABLED_RemapStorageBuffer_ThroughFunctionParameter) {
-    // WGSL does not support pointer-to-storage-buffer as function parameter
 }
 
 std::string RuntimeArrayPreamble() {
@@ -1128,7 +1276,7 @@ TEST_F(SpvParserMemoryTest, ArrayLength_FromVar) {
     EXPECT_TRUE(fe.EmitBody()) << p->error();
     auto ast_body = fe.ast_body();
     const auto body_str = test::ToString(p->program(), ast_body);
-    EXPECT_THAT(body_str, HasSubstr("let x_1 : u32 = arrayLength(&(myvar.rtarr));")) << body_str;
+    EXPECT_THAT(body_str, HasSubstr("let x_1 = arrayLength(&(myvar.rtarr));")) << body_str;
 }
 
 TEST_F(SpvParserMemoryTest, ArrayLength_FromCopyObject) {
@@ -1148,8 +1296,8 @@ TEST_F(SpvParserMemoryTest, ArrayLength_FromCopyObject) {
     EXPECT_TRUE(fe.EmitBody()) << p->error();
     auto ast_body = fe.ast_body();
     const auto body_str = test::ToString(p->program(), ast_body);
-    EXPECT_THAT(body_str, HasSubstr(R"(let x_2 : ptr<storage, S> = &(myvar);
-let x_1 : u32 = arrayLength(&((*(x_2)).rtarr));
+    EXPECT_THAT(body_str, HasSubstr(R"(let x_2 = &(myvar);
+let x_1 = arrayLength(&((*(x_2)).rtarr));
 )")) << body_str;
 
     p->SkipDumpingPending("crbug.com/tint/1041 track access mode in spirv-reader parser type");
@@ -1172,7 +1320,7 @@ TEST_F(SpvParserMemoryTest, ArrayLength_FromAccessChain) {
     EXPECT_TRUE(fe.EmitBody()) << p->error();
     auto ast_body = fe.ast_body();
     const auto body_str = test::ToString(p->program(), ast_body);
-    EXPECT_THAT(body_str, HasSubstr("let x_1 : u32 = arrayLength(&(myvar.rtarr));")) << body_str;
+    EXPECT_THAT(body_str, HasSubstr("let x_1 = arrayLength(&(myvar.rtarr));")) << body_str;
 }
 
 std::string InvalidPointerPreamble() {

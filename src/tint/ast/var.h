@@ -28,41 +28,38 @@ namespace tint::ast {
 ///
 /// ```
 ///  // Declared outside a function, i.e. at module scope, requires
-///  // a storage class.
+///  // a address space.
 ///  var<workgroup> width : i32;     // no initializer
 ///  var<private> height : i32 = 3;  // with initializer
 ///
-///  // A variable declared inside a function doesn't take a storage class,
+///  // A variable declared inside a function doesn't take a address space,
 ///  // and maps to SPIR-V Function storage.
 ///  var computed_depth : i32;
 ///  var area : i32 = compute_area(width, height);
 /// ```
 ///
 /// @see https://www.w3.org/TR/WGSL/#var-decls
-class Var final : public Castable<Var, Variable> {
+class Var final : public utils::Castable<Var, Variable> {
   public:
     /// Create a 'var' variable
     /// @param pid the identifier of the program that owns this node
     /// @param nid the unique node identifier
     /// @param source the variable source
-    /// @param sym the variable symbol
+    /// @param name the variable name
     /// @param type the declared variable type
-    /// @param declared_storage_class the declared storage class
+    /// @param declared_address_space the declared address space
     /// @param declared_access the declared access control
-    /// @param constructor the constructor expression
+    /// @param initializer the initializer expression
     /// @param attributes the variable attributes
     Var(ProgramID pid,
         NodeID nid,
         const Source& source,
-        const Symbol& sym,
-        const ast::Type* type,
-        StorageClass declared_storage_class,
-        Access declared_access,
-        const Expression* constructor,
+        const Identifier* name,
+        Type type,
+        const Expression* declared_address_space,
+        const Expression* declared_access,
+        const Expression* initializer,
         utils::VectorRef<const Attribute*> attributes);
-
-    /// Move constructor
-    Var(Var&&);
 
     /// Destructor
     ~Var() override;
@@ -76,11 +73,11 @@ class Var final : public Castable<Var, Variable> {
     /// @return the newly cloned node
     const Var* Clone(CloneContext* ctx) const override;
 
-    /// The declared storage class
-    const StorageClass declared_storage_class;
+    /// The declared address space
+    const Expression* const declared_address_space = nullptr;
 
     /// The declared access control
-    const Access declared_access;
+    const Expression* const declared_access = nullptr;
 };
 
 /// A list of `var` declarations

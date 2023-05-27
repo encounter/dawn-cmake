@@ -19,6 +19,9 @@
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
+namespace dawn {
+namespace {
+
 constexpr uint32_t kRTSize = 4;
 
 class DrawIndexedIndirectTest : public DawnTest {
@@ -38,13 +41,13 @@ class DrawIndexedIndirectTest : public DawnTest {
 
         wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
             @vertex
-            fn main(@location(0) pos : vec4<f32>) -> @builtin(position) vec4<f32> {
+            fn main(@location(0) pos : vec4f) -> @builtin(position) vec4f {
                 return pos;
             })");
 
         wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
-            @fragment fn main() -> @location(0) vec4<f32> {
-                return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+            @fragment fn main() -> @location(0) vec4f {
+                return vec4f(0.0, 1.0, 0.0, 1.0);
             })");
 
         utils::ComboRenderPipelineDescriptor descriptor;
@@ -158,10 +161,6 @@ TEST_P(DrawIndexedIndirectTest, BaseVertex) {
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGL());
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
 
-    // TODO(crbug.com/dawn/966): Fails on Metal Intel, likely because @builtin(vertex_index)
-    // doesn't take into account BaseVertex, which breaks programmable vertex pulling.
-    DAWN_SUPPRESS_TEST_IF(IsMetal() && IsIntel());
-
     // TODO(crbug.com/dawn/1292): Some Intel OpenGL drivers don't seem to like
     // the offsets that Tint/GLSL produces.
     DAWN_SUPPRESS_TEST_IF(IsIntel() && IsOpenGL() && IsLinux());
@@ -190,10 +189,6 @@ TEST_P(DrawIndexedIndirectTest, BaseVertex) {
 TEST_P(DrawIndexedIndirectTest, IndirectOffset) {
     // TODO(crbug.com/dawn/789): Test is failing after a roll on SwANGLE on Windows only.
     DAWN_SUPPRESS_TEST_IF(IsANGLE() && IsWindows());
-
-    // TODO(crbug.com/dawn/966): Fails on Metal Intel, likely because @builtin(vertex_index)
-    // doesn't take into account BaseVertex, which breaks programmable vertex pulling.
-    DAWN_SUPPRESS_TEST_IF(IsMetal() && IsIntel());
 
     // TODO(crbug.com/dawn/1292): Some Intel OpenGL drivers don't seem to like
     // the offsets that Tint/GLSL produces.
@@ -307,6 +302,9 @@ TEST_P(DrawIndexedIndirectTest, ValidateMultipleDraws) {
     // TODO(crbug.com/dawn/1292): Some Intel OpenGL drivers don't seem to like
     // the offsets that Tint/GLSL produces.
     DAWN_SUPPRESS_TEST_IF(IsIntel() && IsOpenGL() && IsLinux());
+
+    // TODO(dawn:1549) Fails on Qualcomm-based Android devices.
+    DAWN_SUPPRESS_TEST_IF(IsAndroid() && IsQualcomm());
 
     // It doesn't make sense to test invalid inputs when validation is disabled.
     DAWN_SUPPRESS_TEST_IF(HasToggleEnabled("skip_validation"));
@@ -715,8 +713,12 @@ TEST_P(DrawIndexedIndirectTest, ValidateReusedBundleWithChangingParams) {
 }
 
 DAWN_INSTANTIATE_TEST(DrawIndexedIndirectTest,
+                      D3D11Backend(),
                       D3D12Backend(),
                       MetalBackend(),
                       OpenGLBackend(),
                       OpenGLESBackend(),
                       VulkanBackend());
+
+}  // anonymous namespace
+}  // namespace dawn

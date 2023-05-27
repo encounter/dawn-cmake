@@ -3,7 +3,7 @@ struct strided_arr {
   el : i32,
 }
 
-type Arr = array<strided_arr, 5u>;
+alias Arr = array<strided_arr, 5u>;
 
 struct buf0 {
   x_GLF_uniform_int_values : Arr,
@@ -14,7 +14,7 @@ struct strided_arr_1 {
   el : f32,
 }
 
-type Arr_1 = array<strided_arr_1, 3u>;
+alias Arr_1 = array<strided_arr_1, 3u>;
 
 struct buf1 {
   x_GLF_uniform_float_values : Arr_1,
@@ -30,7 +30,7 @@ fn main_1() {
   var I : vec4<f32>;
   var N : vec4<f32>;
   var R : vec4<f32>;
-  var ref : vec4<f32>;
+  var r : vec4<f32>;
   let x_40 : i32 = x_6.x_GLF_uniform_int_values[2].el;
   let x_43 : i32 = x_6.x_GLF_uniform_int_values[3].el;
   let x_46 : i32 = x_6.x_GLF_uniform_int_values[4].el;
@@ -44,9 +44,9 @@ fn main_1() {
   let x_58 : vec4<f32> = N;
   let x_59 : vec4<f32> = I;
   let x_62 : vec4<f32> = N;
-  ref = (x_55 - (x_62 * (x_57 * dot(x_58, x_59))));
+  r = (x_55 - (x_62 * (x_57 * dot(x_58, x_59))));
   let x_65 : vec4<f32> = R;
-  let x_66 : vec4<f32> = ref;
+  let x_66 : vec4<f32> = r;
   let x_69 : f32 = x_9.x_GLF_uniform_float_values[0].el;
   if ((distance(x_65, x_66) < x_69)) {
     let x_75 : i32 = x_6.x_GLF_uniform_int_values[0].el;

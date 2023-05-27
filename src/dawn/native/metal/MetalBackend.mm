@@ -17,26 +17,45 @@
 
 #include "dawn/native/MetalBackend.h"
 
+#include "dawn/native/metal/CommandRecordingContext.h"
 #include "dawn/native/metal/DeviceMTL.h"
 #include "dawn/native/metal/TextureMTL.h"
 
 namespace dawn::native::metal {
 
-AdapterDiscoveryOptions::AdapterDiscoveryOptions()
-    : AdapterDiscoveryOptionsBase(WGPUBackendType_Metal) {}
+PhysicalDeviceDiscoveryOptions::PhysicalDeviceDiscoveryOptions()
+    : PhysicalDeviceDiscoveryOptionsBase(WGPUBackendType_Metal) {}
 
 ExternalImageDescriptorIOSurface::ExternalImageDescriptorIOSurface()
     : ExternalImageDescriptor(ExternalImageType::IOSurface) {}
 
+ExternalImageDescriptorIOSurface::~ExternalImageDescriptorIOSurface() = default;
+
 WGPUTexture WrapIOSurface(WGPUDevice device, const ExternalImageDescriptorIOSurface* cDescriptor) {
     Device* backendDevice = ToBackend(FromAPI(device));
-    Ref<TextureBase> texture =
-        backendDevice->CreateTextureWrappingIOSurface(cDescriptor, cDescriptor->ioSurface);
+    std::vector<MTLSharedEventAndSignalValue> waitEvents;
+    for (const auto& waitEvent : cDescriptor->waitEvents) {
+        waitEvents.push_back(
+            {static_cast<id<MTLSharedEvent>>(waitEvent.sharedEvent), waitEvent.signaledValue});
+    }
+    auto deviceLock(backendDevice->GetScopedLock());
+    Ref<TextureBase> texture = backendDevice->CreateTextureWrappingIOSurface(
+        cDescriptor, cDescriptor->ioSurface, std::move(waitEvents));
     return ToAPI(texture.Detach());
 }
 
+void IOSurfaceEndAccess(WGPUTexture cTexture,
+                        ExternalImageIOSurfaceEndAccessDescriptor* descriptor) {
+    Texture* texture = ToBackend(FromAPI(cTexture));
+    auto device = texture->GetDevice();
+    auto deviceLock(device->GetScopedLock());
+    texture->IOSurfaceEndAccess(descriptor);
+}
+
 void WaitForCommandsToBeScheduled(WGPUDevice device) {
-    ToBackend(FromAPI(device))->WaitForCommandsToBeScheduled();
+    Device* backendDevice = ToBackend(FromAPI(device));
+    auto deviceLock(backendDevice->GetScopedLock());
+    backendDevice->WaitForCommandsToBeScheduled();
 }
 
 }  // namespace dawn::native::metal

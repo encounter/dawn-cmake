@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Package gen holds types and helpers for generating templated code from the
-/// intrinsic.def file.
-///
-/// Used by tools/src/cmd/gen/main.go
+// Package gen holds types and helpers for generating templated code from the
+// intrinsic.def file.
+//
+// Used by tools/src/cmd/gen/main.go
 package gen
 
 import (
@@ -50,7 +50,7 @@ type IntrinsicTable struct {
 	Builtins                  []Intrinsic      // kBuiltins table content
 	UnaryOperators            []Intrinsic      // kUnaryOperators table content
 	BinaryOperators           []Intrinsic      // kBinaryOperators table content
-	ConstructorsAndConverters []Intrinsic      // kConstructorsAndConverters table content
+	ConstructorsAndConverters []Intrinsic      // kInitializersAndConverters table content
 }
 
 // TemplateType is used to create the C++ TemplateTypeInfo structure
@@ -106,6 +106,8 @@ type Overload struct {
 	ReturnMatcherIndicesOffset *int
 	// StageUses describes the stages an overload can be used in
 	CanBeUsedInStage sem.StageUses
+	// True if the overload is marked as @must_use
+	MustUse bool
 	// True if the overload is marked as deprecated
 	IsDeprecated bool
 	// The kind of overload
@@ -211,6 +213,7 @@ func (b *IntrinsicTableBuilder) buildOverload(o *sem.Overload) (Overload, error)
 		ParametersOffset:           b.lut.parameters.Add(ob.parameters),
 		ReturnMatcherIndicesOffset: ob.returnTypeMatcherIndicesOffset,
 		CanBeUsedInStage:           o.CanBeUsedInStage,
+		MustUse:                    o.MustUse,
 		IsDeprecated:               o.IsDeprecated,
 		Kind:                       string(o.Decl.Kind),
 		ConstEvalFunction:          o.ConstEvalFunction,
@@ -338,9 +341,12 @@ func (b *overloadBuilder) matcherIndex(n sem.Named) (int, error) {
 // The order of returned matcher indices is always the order of the fully
 // qualified name as read from left to right.
 // For example, calling collectMatcherIndices() for the fully qualified name:
-//    A<B<C, D>, E<F, G<H>, I>
+//
+//	A<B<C, D>, E<F, G<H>, I>
+//
 // Would return the matcher indices:
-//    A, B, C, D, E, F, G, H, I
+//
+//	A, B, C, D, E, F, G, H, I
 func (b *overloadBuilder) collectMatcherIndices(fqn sem.FullyQualifiedName) ([]int, error) {
 	idx, err := b.matcherIndex(fqn.Target)
 	if err != nil {
@@ -416,9 +422,12 @@ func BuildIntrinsicTable(s *sem.Sem) (*IntrinsicTable, error) {
 // SplitDisplayName splits displayName into parts, where text wrapped in {}
 // braces are not quoted and the rest is quoted. This is used to help process
 // the string value of the [[display()]] decoration. For example:
-//   SplitDisplayName("vec{N}<{T}>")
+//
+//	SplitDisplayName("vec{N}<{T}>")
+//
 // would return the strings:
-//   [`"vec"`, `N`, `"<"`, `T`, `">"`]
+//
+//	[`"vec"`, `N`, `"<"`, `T`, `">"`]
 func SplitDisplayName(displayName string) []string {
 	parts := []string{}
 	pending := strings.Builder{}
@@ -468,6 +477,10 @@ func DeepestElementType(fqn sem.FullyQualifiedName) sem.FullyQualifiedName {
 		return fqn.TemplateArguments[0].(sem.FullyQualifiedName)
 	case "vec":
 		return fqn.TemplateArguments[1].(sem.FullyQualifiedName)
+	case "mat2x2", "mat2x3", "mat2x4",
+		"mat3x2", "mat3x3", "mat3x4",
+		"mat4x2", "mat4x3", "mat4x4":
+		return DeepestElementType(fqn.TemplateArguments[0].(sem.FullyQualifiedName))
 	case "mat":
 		return DeepestElementType(fqn.TemplateArguments[2].(sem.FullyQualifiedName))
 	case "array":
@@ -492,6 +505,12 @@ func IsAbstract(fqn sem.FullyQualifiedName) bool {
 // numeric type, or if it starts with a leading underscore.
 func IsDeclarable(fqn sem.FullyQualifiedName) bool {
 	return !IsAbstract(DeepestElementType(fqn)) && !strings.HasPrefix(fqn.Target.GetName(), "_")
+}
+
+// IsHostShareable returns true if the FullyQualifiedName refers to a type that is host-sharable.
+// See https://www.w3.org/TR/WGSL/#host-shareable-types
+func IsHostShareable(fqn sem.FullyQualifiedName) bool {
+	return IsDeclarable(fqn) && DeepestElementType(fqn).Target.GetName() != "bool"
 }
 
 // OverloadUsesF16 returns true if the overload uses the f16 type anywhere in the signature.

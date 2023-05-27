@@ -22,6 +22,7 @@
 #include "dawn/utils/TestUtils.h"
 #include "dawn/utils/WGPUHelpers.h"
 
+namespace dawn {
 namespace {
 
 using Format = wgpu::TextureFormat;
@@ -89,19 +90,6 @@ class NonzeroTextureCreationTests : public DawnTestWithParams<Params> {
         DAWN_TEST_UNSUPPORTED_IF(GetParam().mFormat == wgpu::TextureFormat::RGBA8Snorm &&
                                  HasToggleEnabled("disable_snorm_read"));
 
-        // TODO(crbug.com/dawn/791): Determine Intel specific platforms this occurs on, and
-        // implement a workaround on all backends (happens on Windows too, but not on our test
-        // machines).
-        DAWN_SUPPRESS_TEST_IF((GetParam().mFormat == wgpu::TextureFormat::Depth32Float ||
-                               GetParam().mFormat == wgpu::TextureFormat::Depth24PlusStencil8) &&
-                              IsMetal() && IsIntel() && GetParam().mMip != 0);
-
-        // TODO(crbug.com/dawn/1071): Implement a workaround on Intel/Metal backends.
-        DAWN_SUPPRESS_TEST_IF((GetParam().mFormat == wgpu::TextureFormat::R8Unorm ||
-                               GetParam().mFormat == wgpu::TextureFormat::RG8Unorm) &&
-                              GetParam().mMipCount > 1 &&
-                              HasToggleEnabled("disable_r8_rg8_mipmaps"));
-
         // TODO(crbug.com/dawn/667): ANGLE claims to support NV_read_stencil, but won't read
         // correctly from a DEPTH32F_STENCIL8 texture.
         DAWN_SUPPRESS_TEST_IF(GetParam().mFormat == wgpu::TextureFormat::Depth24PlusStencil8 &&
@@ -120,6 +108,12 @@ class NonzeroTextureCreationTests : public DawnTestWithParams<Params> {
         // GL may support the feature, but reading data back is not implemented.
         DAWN_TEST_UNSUPPORTED_IF(GetParam().mFormat == wgpu::TextureFormat::BC1RGBAUnorm &&
                                  (IsOpenGL() || IsOpenGLES()));
+
+        // TODO(crbug.com/dawn/1637): Failures with ANGLE only with some format/aspect
+        DAWN_SUPPRESS_TEST_IF(IsWindows() && IsANGLE() &&
+                              GetParam().mAspect == wgpu::TextureAspect::All &&
+                              (GetParam().mFormat == wgpu::TextureFormat::Stencil8 ||
+                               GetParam().mFormat == wgpu::TextureFormat::Depth32Float));
 
         wgpu::TextureDescriptor descriptor;
         descriptor.dimension = GetParam().mDimension;
@@ -203,6 +197,14 @@ class NonzeroTextureCreationTests : public DawnTestWithParams<Params> {
                 }
                 break;
             }
+            case wgpu::TextureFormat::Stencil8: {
+                uint32_t texelCount = mipSize * mipSize * depthOrArrayLayers;
+                std::vector<uint8_t> expectedStencil(texelCount, 1);
+                EXPECT_TEXTURE_EQ(expectedStencil.data(), texture, {0, 0, 0},
+                                  {mipSize, mipSize, depthOrArrayLayers}, mip,
+                                  wgpu::TextureAspect::StencilOnly);
+                break;
+            }
             case wgpu::TextureFormat::BC1RGBAUnorm: {
                 // Set buffer with dirty data so we know it is cleared by the lazy cleared
                 // texture copy
@@ -254,9 +256,8 @@ class NonzeroNonrenderableTextureCreationTests : public NonzeroTextureCreationTe
 class NonzeroCompressedTextureCreationTests : public NonzeroTextureCreationTests {};
 class NonzeroDepthTextureCreationTests : public NonzeroTextureCreationTests {};
 class NonzeroDepthStencilTextureCreationTests : public NonzeroTextureCreationTests {};
+class NonzeroStencilTextureCreationTests : public NonzeroTextureCreationTests {};
 class NonzeroMultisampledTextureCreationTests : public NonzeroTextureCreationTests {};
-
-}  // anonymous namespace
 
 // Test that texture clears to a non-zero value because toggle is enabled.
 TEST_P(NonzeroTextureCreationTests, TextureCreationClears) {
@@ -280,6 +281,11 @@ TEST_P(NonzeroDepthTextureCreationTests, TextureCreationClears) {
 
 // Test that texture clears to a non-zero value because toggle is enabled.
 TEST_P(NonzeroDepthStencilTextureCreationTests, TextureCreationClears) {
+    Run();
+}
+
+// Test that texture clears to a non-zero value because toggle is enabled.
+TEST_P(NonzeroStencilTextureCreationTests, TextureCreationClears) {
     Run();
 }
 
@@ -365,7 +371,7 @@ DAWN_INSTANTIATE_TEST_P(NonzeroDepthTextureCreationTests,
                          VulkanBackend({"nonzero_clear_resources_on_creation_for_testing"},
                                        {"lazy_clear_resource_on_first_use"})},
                         {wgpu::TextureFormat::Depth32Float},
-                        {wgpu::TextureAspect::DepthOnly},
+                        {wgpu::TextureAspect::All, wgpu::TextureAspect::DepthOnly},
                         {wgpu::TextureUsage(wgpu::TextureUsage::RenderAttachment |
                                             wgpu::TextureUsage::CopySrc),
                          wgpu::TextureUsage::CopySrc},
@@ -401,10 +407,37 @@ DAWN_INSTANTIATE_TEST_P(
 );
 
 DAWN_INSTANTIATE_TEST_P(
+    NonzeroStencilTextureCreationTests,
+    {D3D12Backend({"nonzero_clear_resources_on_creation_for_testing"},
+                  {"lazy_clear_resource_on_first_use"}),
+     MetalBackend({"nonzero_clear_resources_on_creation_for_testing"},
+                  {"lazy_clear_resource_on_first_use"}),
+     OpenGLBackend({"nonzero_clear_resources_on_creation_for_testing"},
+                   {"lazy_clear_resource_on_first_use"}),
+     OpenGLESBackend({"nonzero_clear_resources_on_creation_for_testing"},
+                     {"lazy_clear_resource_on_first_use"}),
+     VulkanBackend({"nonzero_clear_resources_on_creation_for_testing"},
+                   {"lazy_clear_resource_on_first_use"})},
+    {wgpu::TextureFormat::Stencil8},
+    {wgpu::TextureAspect::All, wgpu::TextureAspect::StencilOnly},
+    {wgpu::TextureUsage(wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc |
+                        wgpu::TextureUsage::TextureBinding),
+     wgpu::TextureUsage(wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::CopySrc)},
+    {wgpu::TextureDimension::e2D},
+    {1u, 7u},          // depth or array layers
+    {4u},              // mip count
+    {0u, 1u, 2u, 3u},  // mip
+    {1u}               // sample count
+);
+
+DAWN_INSTANTIATE_TEST_P(
     NonzeroMultisampledTextureCreationTests,
     {D3D12Backend({"nonzero_clear_resources_on_creation_for_testing"},
                   {"lazy_clear_resource_on_first_use"}),
      MetalBackend({"nonzero_clear_resources_on_creation_for_testing"},
+                  {"lazy_clear_resource_on_first_use"}),
+     MetalBackend({"nonzero_clear_resources_on_creation_for_testing",
+                   "metal_use_combined_depth_stencil_format_for_stencil8"},
                   {"lazy_clear_resource_on_first_use"}),
      OpenGLBackend({"nonzero_clear_resources_on_creation_for_testing"},
                    {"lazy_clear_resource_on_first_use"}),
@@ -421,3 +454,6 @@ DAWN_INSTANTIATE_TEST_P(
     {0u},  // mip
     {4u}   // sample count
 );
+
+}  // anonymous namespace
+}  // namespace dawn

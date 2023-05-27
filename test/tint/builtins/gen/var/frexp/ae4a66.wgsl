@@ -25,10 +25,9 @@ enable f16;
 
 // fn frexp(vec<3, f16>) -> __frexp_result_vec<3, f16>
 fn frexp_ae4a66() {
-  var arg_0 = vec3<f16>(f16());
+  var arg_0 = vec3<f16>(1.h);
   var res = frexp(arg_0);
 }
-
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {
   frexp_ae4a66();

@@ -1,6 +1,9 @@
-SKIP: FAILED
-
 #version 310 es
+
+vec3 tint_select(vec3 param_0, vec3 param_1, bvec3 param_2) {
+    return vec3(param_2[0] ? param_1[0] : param_0[0], param_2[1] ? param_1[1] : param_0[1], param_2[2] ? param_1[2] : param_0[2]);
+}
+
 
 struct GammaTransferParams {
   float G;
@@ -16,34 +19,51 @@ struct GammaTransferParams {
 struct ExternalTextureParams {
   uint numPlanes;
   uint doYuvToRgbConversionOnly;
+  uint pad;
+  uint pad_1;
   mat3x4 yuvToRgbConversionMatrix;
   GammaTransferParams gammaDecodeParams;
   GammaTransferParams gammaEncodeParams;
   mat3 gamutConversionMatrix;
+  mat3x2 coordTransformationMatrix;
+  uint pad_2;
+  uint pad_3;
 };
 
-layout(binding = 2) uniform ExternalTextureParams_1 {
+struct ExternalTextureParams_std140 {
   uint numPlanes;
   uint doYuvToRgbConversionOnly;
+  uint pad;
+  uint pad_1;
   mat3x4 yuvToRgbConversionMatrix;
   GammaTransferParams gammaDecodeParams;
   GammaTransferParams gammaEncodeParams;
   mat3 gamutConversionMatrix;
+  vec2 coordTransformationMatrix_0;
+  vec2 coordTransformationMatrix_1;
+  vec2 coordTransformationMatrix_2;
+  uint pad_2;
+  uint pad_3;
+};
+
+layout(binding = 2, std140) uniform ext_tex_params_block_std140_ubo {
+  ExternalTextureParams_std140 inner;
 } ext_tex_params;
 
 vec3 gammaCorrection(vec3 v, GammaTransferParams params) {
   bvec3 cond = lessThan(abs(v), vec3(params.D));
   vec3 t = (sign(v) * ((params.C * abs(v)) + params.F));
   vec3 f = (sign(v) * (pow(((params.A * abs(v)) + params.B), vec3(params.G)) + params.E));
-  return mix(f, t, cond);
+  return tint_select(f, t, cond);
 }
 
 vec4 textureLoadExternal(highp sampler2D plane0_1, highp sampler2D plane1_1, ivec2 coord, ExternalTextureParams params) {
+  ivec2 coord1 = (coord >> uvec2(1u));
   vec3 color = vec3(0.0f, 0.0f, 0.0f);
   if ((params.numPlanes == 1u)) {
     color = texelFetch(plane0_1, coord, 0).rgb;
   } else {
-    color = (vec4(texelFetch(plane0_1, coord, 0).r, texelFetch(plane1_1, coord, 0).rg, 1.0f) * params.yuvToRgbConversionMatrix);
+    color = (vec4(texelFetch(plane0_1, coord, 0).r, texelFetch(plane1_1, coord1, 0).rg, 1.0f) * params.yuvToRgbConversionMatrix);
   }
   if ((params.doYuvToRgbConversionOnly == 0u)) {
     color = gammaCorrection(color, params.gammaDecodeParams);
@@ -59,8 +79,12 @@ vec4 textureLoad2d(highp sampler2D tint_symbol_1, highp sampler2D ext_tex_plane_
 
 uniform highp sampler2D arg_0_1;
 uniform highp sampler2D ext_tex_plane_1_2;
+ExternalTextureParams conv_ExternalTextureParams(ExternalTextureParams_std140 val) {
+  return ExternalTextureParams(val.numPlanes, val.doYuvToRgbConversionOnly, val.pad, val.pad_1, val.yuvToRgbConversionMatrix, val.gammaDecodeParams, val.gammaEncodeParams, val.gamutConversionMatrix, mat3x2(val.coordTransformationMatrix_0, val.coordTransformationMatrix_1, val.coordTransformationMatrix_2), val.pad_2, val.pad_3);
+}
+
 void doTextureLoad() {
-  vec4 res = textureLoad2d(arg_0_1, ext_tex_plane_1_2, ext_tex_params, ivec2(0));
+  vec4 res = textureLoad2d(arg_0_1, ext_tex_plane_1_2, conv_ExternalTextureParams(ext_tex_params.inner), ivec2(0));
 }
 
 vec4 vertex_main() {
@@ -76,16 +100,13 @@ void main() {
   gl_Position.z = ((2.0f * gl_Position.z) - gl_Position.w);
   return;
 }
-Error parsing GLSL shader:
-ERROR: 0:61: 'textureLoad2d' : no matching overloaded function found 
-ERROR: 0:61: '=' :  cannot convert from ' const float' to ' temp highp 4-component vector of float'
-ERROR: 0:61: '' : compilation terminated 
-ERROR: 3 compilation errors.  No code generated.
-
-
-
 #version 310 es
-precision mediump float;
+precision highp float;
+
+vec3 tint_select(vec3 param_0, vec3 param_1, bvec3 param_2) {
+    return vec3(param_2[0] ? param_1[0] : param_0[0], param_2[1] ? param_1[1] : param_0[1], param_2[2] ? param_1[2] : param_0[2]);
+}
+
 
 struct GammaTransferParams {
   float G;
@@ -101,34 +122,51 @@ struct GammaTransferParams {
 struct ExternalTextureParams {
   uint numPlanes;
   uint doYuvToRgbConversionOnly;
+  uint pad;
+  uint pad_1;
   mat3x4 yuvToRgbConversionMatrix;
   GammaTransferParams gammaDecodeParams;
   GammaTransferParams gammaEncodeParams;
   mat3 gamutConversionMatrix;
+  mat3x2 coordTransformationMatrix;
+  uint pad_2;
+  uint pad_3;
 };
 
-layout(binding = 2) uniform ExternalTextureParams_1 {
+struct ExternalTextureParams_std140 {
   uint numPlanes;
   uint doYuvToRgbConversionOnly;
+  uint pad;
+  uint pad_1;
   mat3x4 yuvToRgbConversionMatrix;
   GammaTransferParams gammaDecodeParams;
   GammaTransferParams gammaEncodeParams;
   mat3 gamutConversionMatrix;
+  vec2 coordTransformationMatrix_0;
+  vec2 coordTransformationMatrix_1;
+  vec2 coordTransformationMatrix_2;
+  uint pad_2;
+  uint pad_3;
+};
+
+layout(binding = 2, std140) uniform ext_tex_params_block_std140_ubo {
+  ExternalTextureParams_std140 inner;
 } ext_tex_params;
 
 vec3 gammaCorrection(vec3 v, GammaTransferParams params) {
   bvec3 cond = lessThan(abs(v), vec3(params.D));
   vec3 t = (sign(v) * ((params.C * abs(v)) + params.F));
   vec3 f = (sign(v) * (pow(((params.A * abs(v)) + params.B), vec3(params.G)) + params.E));
-  return mix(f, t, cond);
+  return tint_select(f, t, cond);
 }
 
 vec4 textureLoadExternal(highp sampler2D plane0_1, highp sampler2D plane1_1, ivec2 coord, ExternalTextureParams params) {
+  ivec2 coord1 = (coord >> uvec2(1u));
   vec3 color = vec3(0.0f, 0.0f, 0.0f);
   if ((params.numPlanes == 1u)) {
     color = texelFetch(plane0_1, coord, 0).rgb;
   } else {
-    color = (vec4(texelFetch(plane0_1, coord, 0).r, texelFetch(plane1_1, coord, 0).rg, 1.0f) * params.yuvToRgbConversionMatrix);
+    color = (vec4(texelFetch(plane0_1, coord, 0).r, texelFetch(plane1_1, coord1, 0).rg, 1.0f) * params.yuvToRgbConversionMatrix);
   }
   if ((params.doYuvToRgbConversionOnly == 0u)) {
     color = gammaCorrection(color, params.gammaDecodeParams);
@@ -144,8 +182,12 @@ vec4 textureLoad2d(highp sampler2D tint_symbol_1, highp sampler2D ext_tex_plane_
 
 uniform highp sampler2D arg_0_1;
 uniform highp sampler2D ext_tex_plane_1_2;
+ExternalTextureParams conv_ExternalTextureParams(ExternalTextureParams_std140 val) {
+  return ExternalTextureParams(val.numPlanes, val.doYuvToRgbConversionOnly, val.pad, val.pad_1, val.yuvToRgbConversionMatrix, val.gammaDecodeParams, val.gammaEncodeParams, val.gamutConversionMatrix, mat3x2(val.coordTransformationMatrix_0, val.coordTransformationMatrix_1, val.coordTransformationMatrix_2), val.pad_2, val.pad_3);
+}
+
 void doTextureLoad() {
-  vec4 res = textureLoad2d(arg_0_1, ext_tex_plane_1_2, ext_tex_params, ivec2(0));
+  vec4 res = textureLoad2d(arg_0_1, ext_tex_plane_1_2, conv_ExternalTextureParams(ext_tex_params.inner), ivec2(0));
 }
 
 void fragment_main() {
@@ -156,15 +198,12 @@ void main() {
   fragment_main();
   return;
 }
-Error parsing GLSL shader:
-ERROR: 0:62: 'textureLoad2d' : no matching overloaded function found 
-ERROR: 0:62: '=' :  cannot convert from ' const float' to ' temp mediump 4-component vector of float'
-ERROR: 0:62: '' : compilation terminated 
-ERROR: 3 compilation errors.  No code generated.
-
-
-
 #version 310 es
+
+vec3 tint_select(vec3 param_0, vec3 param_1, bvec3 param_2) {
+    return vec3(param_2[0] ? param_1[0] : param_0[0], param_2[1] ? param_1[1] : param_0[1], param_2[2] ? param_1[2] : param_0[2]);
+}
+
 
 struct GammaTransferParams {
   float G;
@@ -180,34 +219,51 @@ struct GammaTransferParams {
 struct ExternalTextureParams {
   uint numPlanes;
   uint doYuvToRgbConversionOnly;
+  uint pad;
+  uint pad_1;
   mat3x4 yuvToRgbConversionMatrix;
   GammaTransferParams gammaDecodeParams;
   GammaTransferParams gammaEncodeParams;
   mat3 gamutConversionMatrix;
+  mat3x2 coordTransformationMatrix;
+  uint pad_2;
+  uint pad_3;
 };
 
-layout(binding = 2) uniform ExternalTextureParams_1 {
+struct ExternalTextureParams_std140 {
   uint numPlanes;
   uint doYuvToRgbConversionOnly;
+  uint pad;
+  uint pad_1;
   mat3x4 yuvToRgbConversionMatrix;
   GammaTransferParams gammaDecodeParams;
   GammaTransferParams gammaEncodeParams;
   mat3 gamutConversionMatrix;
+  vec2 coordTransformationMatrix_0;
+  vec2 coordTransformationMatrix_1;
+  vec2 coordTransformationMatrix_2;
+  uint pad_2;
+  uint pad_3;
+};
+
+layout(binding = 2, std140) uniform ext_tex_params_block_std140_ubo {
+  ExternalTextureParams_std140 inner;
 } ext_tex_params;
 
 vec3 gammaCorrection(vec3 v, GammaTransferParams params) {
   bvec3 cond = lessThan(abs(v), vec3(params.D));
   vec3 t = (sign(v) * ((params.C * abs(v)) + params.F));
   vec3 f = (sign(v) * (pow(((params.A * abs(v)) + params.B), vec3(params.G)) + params.E));
-  return mix(f, t, cond);
+  return tint_select(f, t, cond);
 }
 
 vec4 textureLoadExternal(highp sampler2D plane0_1, highp sampler2D plane1_1, ivec2 coord, ExternalTextureParams params) {
+  ivec2 coord1 = (coord >> uvec2(1u));
   vec3 color = vec3(0.0f, 0.0f, 0.0f);
   if ((params.numPlanes == 1u)) {
     color = texelFetch(plane0_1, coord, 0).rgb;
   } else {
-    color = (vec4(texelFetch(plane0_1, coord, 0).r, texelFetch(plane1_1, coord, 0).rg, 1.0f) * params.yuvToRgbConversionMatrix);
+    color = (vec4(texelFetch(plane0_1, coord, 0).r, texelFetch(plane1_1, coord1, 0).rg, 1.0f) * params.yuvToRgbConversionMatrix);
   }
   if ((params.doYuvToRgbConversionOnly == 0u)) {
     color = gammaCorrection(color, params.gammaDecodeParams);
@@ -223,8 +279,12 @@ vec4 textureLoad2d(highp sampler2D tint_symbol_1, highp sampler2D ext_tex_plane_
 
 uniform highp sampler2D arg_0_1;
 uniform highp sampler2D ext_tex_plane_1_2;
+ExternalTextureParams conv_ExternalTextureParams(ExternalTextureParams_std140 val) {
+  return ExternalTextureParams(val.numPlanes, val.doYuvToRgbConversionOnly, val.pad, val.pad_1, val.yuvToRgbConversionMatrix, val.gammaDecodeParams, val.gammaEncodeParams, val.gamutConversionMatrix, mat3x2(val.coordTransformationMatrix_0, val.coordTransformationMatrix_1, val.coordTransformationMatrix_2), val.pad_2, val.pad_3);
+}
+
 void doTextureLoad() {
-  vec4 res = textureLoad2d(arg_0_1, ext_tex_plane_1_2, ext_tex_params, ivec2(0));
+  vec4 res = textureLoad2d(arg_0_1, ext_tex_plane_1_2, conv_ExternalTextureParams(ext_tex_params.inner), ivec2(0));
 }
 
 void compute_main() {
@@ -236,11 +296,3 @@ void main() {
   compute_main();
   return;
 }
-Error parsing GLSL shader:
-ERROR: 0:61: 'textureLoad2d' : no matching overloaded function found 
-ERROR: 0:61: '=' :  cannot convert from ' const float' to ' temp highp 4-component vector of float'
-ERROR: 0:61: '' : compilation terminated 
-ERROR: 3 compilation errors.  No code generated.
-
-
-

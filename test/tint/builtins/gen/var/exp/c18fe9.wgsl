@@ -25,9 +25,11 @@ enable f16;
 
 // fn exp(f16) -> f16
 fn exp_c18fe9() {
-  var arg_0 = f16();
+  var arg_0 = 1.h;
   var res: f16 = exp(arg_0);
+  prevent_dce = res;
 }
+@group(2) @binding(0) var<storage, read_write> prevent_dce : f16;
 
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {

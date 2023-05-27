@@ -1,12 +1,15 @@
 SKIP: FAILED
 
 vector<float16_t, 4> tint_degrees(vector<float16_t, 4> param_0) {
-  return param_0 * 57.295779513082322865;
+  return param_0 * 57.29577951308232286465;
 }
 
+RWByteAddressBuffer prevent_dce : register(u0, space2);
+
 void degrees_3055d3() {
-  vector<float16_t, 4> arg_0 = (float16_t(0.0h)).xxxx;
+  vector<float16_t, 4> arg_0 = (float16_t(1.0h)).xxxx;
   vector<float16_t, 4> res = tint_degrees(arg_0);
+  prevent_dce.Store<vector<float16_t, 4> >(0u, res);
 }
 
 struct tint_symbol {
@@ -35,6 +38,3 @@ void compute_main() {
   degrees_3055d3();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x00000151C0FBF8C0(1,8-16): error X3000: syntax error: unexpected token 'float16_t'
-

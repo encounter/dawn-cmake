@@ -1,8 +1,16 @@
 SKIP: FAILED
 
+RWByteAddressBuffer prevent_dce : register(u0, space2);
+
+void prevent_dce_store(uint offset, matrix<float16_t, 2, 3> value) {
+  prevent_dce.Store<vector<float16_t, 3> >((offset + 0u), value[0u]);
+  prevent_dce.Store<vector<float16_t, 3> >((offset + 8u), value[1u]);
+}
+
 void transpose_b9ad1f() {
-  matrix<float16_t, 3, 2> arg_0 = matrix<float16_t, 3, 2>((float16_t(0.0h)).xx, (float16_t(0.0h)).xx, (float16_t(0.0h)).xx);
+  matrix<float16_t, 3, 2> arg_0 = matrix<float16_t, 3, 2>((float16_t(1.0h)).xx, (float16_t(1.0h)).xx, (float16_t(1.0h)).xx);
   matrix<float16_t, 2, 3> res = transpose(arg_0);
+  prevent_dce_store(0u, res);
 }
 
 struct tint_symbol {
@@ -31,7 +39,3 @@ void compute_main() {
   transpose_b9ad1f();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001BE022AEC60(2,10-18): error X3000: syntax error: unexpected token 'float16_t'
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001BE022AEC60(3,10-18): error X3000: syntax error: unexpected token 'float16_t'
-

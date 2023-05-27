@@ -18,39 +18,53 @@
 #include <memory>
 
 #include "dawn/native/Device.h"
+#include "dawn/native/Instance.h"
 #include "dawn/native/RenderPipeline.h"
+#include "dawn/platform/DawnPlatform.h"
+#include "dawn/tests/unittests/native/mocks/QueueMock.h"
 #include "gmock/gmock.h"
 
 namespace dawn::native {
+
+class BindGroupLayoutMock;
 
 class DeviceMock : public DeviceBase {
   public:
     // Exposes some protected functions for testing purposes.
     using DeviceBase::DestroyObjects;
-    using DeviceBase::SetToggle;
+    using DeviceBase::ForceSetToggleForTesting;
+
+    // TODO(lokokung): Use real DeviceBase constructor instead of mock specific one.
+    //       - Requires AdapterMock.
+    //       - Can probably remove GetPlatform overload.
+    //       - Allows removing ForceSetToggleForTesting calls.
+    DeviceMock();
+    ~DeviceMock() override;
+    dawn::platform::Platform* GetPlatform() const override;
+
+    // Mock specific functionality.
+    QueueMock* GetQueueMock();
+    BindGroupLayoutMock* GetEmptyBindGroupLayoutMock();
 
     MOCK_METHOD(ResultOrError<Ref<CommandBufferBase>>,
                 CreateCommandBuffer,
                 (CommandEncoder*, const CommandBufferDescriptor*),
                 (override));
 
-    MOCK_METHOD(ResultOrError<std::unique_ptr<StagingBufferBase>>,
-                CreateStagingBuffer,
-                (size_t),
+    MOCK_METHOD(MaybeError,
+                CopyFromStagingToBufferImpl,
+                (BufferBase*, uint64_t, BufferBase*, uint64_t, uint64_t),
                 (override));
     MOCK_METHOD(MaybeError,
-                CopyFromStagingToBuffer,
-                (StagingBufferBase*, uint64_t, BufferBase*, uint64_t, uint64_t),
-                (override));
-    MOCK_METHOD(MaybeError,
-                CopyFromStagingToTexture,
-                (const StagingBufferBase*, const TextureDataLayout&, TextureCopy*, const Extent3D&),
+                CopyFromStagingToTextureImpl,
+                (const BufferBase*, const TextureDataLayout&, const TextureCopy&, const Extent3D&),
                 (override));
 
     MOCK_METHOD(uint32_t, GetOptimalBytesPerRowAlignment, (), (const, override));
     MOCK_METHOD(uint64_t, GetOptimalBufferToTextureCopyOffsetAlignment, (), (const, override));
 
     MOCK_METHOD(float, GetTimestampPeriodInNS, (), (const, override));
+    MOCK_METHOD(void, ForceEventualFlushOfCommands, (), (override));
 
     MOCK_METHOD(ResultOrError<Ref<BindGroupBase>>,
                 CreateBindGroupImpl,
@@ -96,11 +110,7 @@ class DeviceMock : public DeviceBase {
                 (override));
     MOCK_METHOD(ResultOrError<Ref<SwapChainBase>>,
                 CreateSwapChainImpl,
-                (const SwapChainDescriptor*),
-                (override));
-    MOCK_METHOD(ResultOrError<Ref<NewSwapChainBase>>,
-                CreateSwapChainImpl,
-                (Surface*, NewSwapChainBase*, const SwapChainDescriptor*),
+                (Surface*, SwapChainBase*, const SwapChainDescriptor*),
                 (override));
     MOCK_METHOD(ResultOrError<Ref<TextureBase>>,
                 CreateTextureImpl,
@@ -111,11 +121,20 @@ class DeviceMock : public DeviceBase {
                 (TextureBase*, const TextureViewDescriptor*),
                 (override));
 
+    MOCK_METHOD(ResultOrError<wgpu::TextureUsage>,
+                GetSupportedSurfaceUsageImpl,
+                (const Surface*),
+                (const, override));
+
     MOCK_METHOD(MaybeError, TickImpl, (), (override));
 
     MOCK_METHOD(ResultOrError<ExecutionSerial>, CheckAndUpdateCompletedSerials, (), (override));
     MOCK_METHOD(void, DestroyImpl, (), (override));
     MOCK_METHOD(MaybeError, WaitForIdleForDestruction, (), (override));
+    MOCK_METHOD(bool, HasPendingCommands, (), (const, override));
+
+  private:
+    Ref<InstanceBase> mInstance;
 };
 
 }  // namespace dawn::native

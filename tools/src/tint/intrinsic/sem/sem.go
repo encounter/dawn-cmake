@@ -182,6 +182,7 @@ type Overload struct {
 	ReturnType        *FullyQualifiedName
 	Parameters        []Parameter
 	CanBeUsedInStage  StageUses
+	MustUse           bool   // True if function cannot be used as a statement
 	IsDeprecated      bool   // True if this overload is deprecated
 	ConstEvalFunction string // Name of the function used to evaluate the intrinsic at shader creation time
 }
@@ -242,9 +243,10 @@ func (o Overload) Format(w fmt.State, verb rune) {
 
 // Parameter describes a single parameter of a function overload
 type Parameter struct {
-	Name    string
-	Type    FullyQualifiedName
-	IsConst bool // Did this parameter have a @const attribute?
+	Name      string
+	Type      FullyQualifiedName
+	IsConst   bool    // Did this parameter have a @const attribute?
+	TestValue float64 // Value to use for end-to-end tests
 }
 
 // Format implements the fmt.Formatter interface

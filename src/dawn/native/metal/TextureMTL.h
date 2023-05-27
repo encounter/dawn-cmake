@@ -17,19 +17,22 @@
 
 #include <IOSurface/IOSurfaceRef.h>
 #import <Metal/Metal.h>
+#include <vector>
 
 #include "dawn/native/Texture.h"
 
 #include "dawn/common/CoreFoundationRef.h"
 #include "dawn/common/NSRef.h"
 #include "dawn/native/DawnNative.h"
+#include "dawn/native/MetalBackend.h"
 
 namespace dawn::native::metal {
 
 class CommandRecordingContext;
 class Device;
+struct MTLSharedEventAndSignalValue;
 
-MTLPixelFormat MetalPixelFormat(wgpu::TextureFormat format);
+MTLPixelFormat MetalPixelFormat(const DeviceBase* device, wgpu::TextureFormat format);
 MaybeError ValidateIOSurfaceCanBeWrapped(const DeviceBase* device,
                                          const TextureDescriptor* descriptor,
                                          IOSurfaceRef ioSurface);
@@ -40,7 +43,8 @@ class Texture final : public TextureBase {
     static ResultOrError<Ref<Texture>> CreateFromIOSurface(
         Device* device,
         const ExternalImageDescriptor* descriptor,
-        IOSurfaceRef ioSurface);
+        IOSurfaceRef ioSurface,
+        std::vector<MTLSharedEventAndSignalValue> waitEvents);
     static Ref<Texture> CreateWrapping(Device* device,
                                        const TextureDescriptor* descriptor,
                                        NSPRef<id<MTLTexture>> wrapped);
@@ -51,8 +55,14 @@ class Texture final : public TextureBase {
     IOSurfaceRef GetIOSurface();
     NSPRef<id<MTLTexture>> CreateFormatView(wgpu::TextureFormat format);
 
-    void EnsureSubresourceContentInitialized(CommandRecordingContext* commandContext,
-                                             const SubresourceRange& range);
+    bool ShouldKeepInitialized() const;
+
+    MTLBlitOption ComputeMTLBlitOption(Aspect aspect) const;
+    MaybeError EnsureSubresourceContentInitialized(CommandRecordingContext* commandContext,
+                                                   const SubresourceRange& range);
+
+    void SynchronizeTextureBeforeUse(CommandRecordingContext* commandContext);
+    void IOSurfaceEndAccess(ExternalImageIOSurfaceEndAccessDescriptor* descriptor);
 
   private:
     using TextureBase::TextureBase;
@@ -63,10 +73,12 @@ class Texture final : public TextureBase {
     MaybeError InitializeAsInternalTexture(const TextureDescriptor* descriptor);
     MaybeError InitializeFromIOSurface(const ExternalImageDescriptor* descriptor,
                                        const TextureDescriptor* textureDescriptor,
-                                       IOSurfaceRef ioSurface);
+                                       IOSurfaceRef ioSurface,
+                                       std::vector<MTLSharedEventAndSignalValue> waitEvents);
     void InitializeAsWrapping(const TextureDescriptor* descriptor, NSPRef<id<MTLTexture>> wrapped);
 
     void DestroyImpl() override;
+    void SetLabelImpl() override;
 
     MaybeError ClearTexture(CommandRecordingContext* commandContext,
                             const SubresourceRange& range,
@@ -76,6 +88,7 @@ class Texture final : public TextureBase {
 
     MTLTextureUsage mMtlUsage;
     CFRef<IOSurfaceRef> mIOSurface = nullptr;
+    std::vector<MTLSharedEventAndSignalValue> mWaitEvents;
 };
 
 class TextureView final : public TextureViewBase {
@@ -95,8 +108,9 @@ class TextureView final : public TextureViewBase {
   private:
     using TextureViewBase::TextureViewBase;
     MaybeError Initialize(const TextureViewDescriptor* descriptor);
+    void DestroyImpl() override;
+    void SetLabelImpl() override;
 
-    // TODO(crbug.com/dawn/1355): Clear this reference on texture destroy.
     NSPRef<id<MTLTexture>> mMtlTextureView;
 };
 

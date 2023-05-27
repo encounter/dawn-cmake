@@ -1,7 +1,10 @@
 SKIP: FAILED
 
+RWByteAddressBuffer prevent_dce : register(u0, space2);
+
 void cos_0a89f7() {
-  vector<float16_t, 4> res = cos((float16_t(0.0h)).xxxx);
+  vector<float16_t, 4> res = (float16_t(1.0h)).xxxx;
+  prevent_dce.Store<vector<float16_t, 4> >(0u, res);
 }
 
 struct tint_symbol {
@@ -30,6 +33,3 @@ void compute_main() {
   cos_0a89f7();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x0000016E7F3887E0(2,10-18): error X3000: syntax error: unexpected token 'float16_t'
-

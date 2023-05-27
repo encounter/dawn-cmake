@@ -1,5 +1,5 @@
 #version 310 es
-precision mediump float;
+precision highp float;
 
 struct SB_RW_atomic {
   int arg_0;
@@ -9,14 +9,16 @@ struct SB_RW {
   int arg_0;
 };
 
-layout(binding = 0, std430) buffer SB_RW_atomic_1 {
-  int arg_0;
+layout(binding = 0, std430) buffer sb_rw_block_ssbo {
+  SB_RW_atomic inner;
 } sb_rw;
+
 void atomicAdd_d32fe4() {
   int arg_1 = 0;
   int res = 0;
   arg_1 = 1;
-  int x_13 = atomicAdd(sb_rw.arg_0, arg_1);
+  int x_20 = arg_1;
+  int x_13 = atomicAdd(sb_rw.inner.arg_0, x_20);
   res = x_13;
   return;
 }
@@ -44,14 +46,16 @@ struct SB_RW {
   int arg_0;
 };
 
-layout(binding = 0, std430) buffer SB_RW_atomic_1 {
-  int arg_0;
+layout(binding = 0, std430) buffer sb_rw_block_ssbo {
+  SB_RW_atomic inner;
 } sb_rw;
+
 void atomicAdd_d32fe4() {
   int arg_1 = 0;
   int res = 0;
   arg_1 = 1;
-  int x_13 = atomicAdd(sb_rw.arg_0, arg_1);
+  int x_20 = arg_1;
+  int x_13 = atomicAdd(sb_rw.inner.arg_0, x_20);
   res = x_13;
   return;
 }

@@ -1,10 +1,8 @@
-uint tint_pack2x16unorm(float2 param_0) {
-  uint2 i = uint2(round(clamp(param_0, 0.0, 1.0) * 65535.0));
-  return (i.x | i.y << 16);
-}
+RWByteAddressBuffer prevent_dce : register(u0, space2);
 
 void pack2x16unorm_0f08e4() {
-  uint res = tint_pack2x16unorm((0.0f).xx);
+  uint res = 4294967295u;
+  prevent_dce.Store(0u, asuint(res));
 }
 
 struct tint_symbol {

@@ -1,5 +1,87 @@
 # Tint changes during Origin Trial
 
+## Changes for M112
+
+### Breaking changes
+
+* Most builtin functions that return a value can no longer be used as a call statement. [tint:1844](crbug.com/tint/1844)
+* The `sig` member of the return type of `frexp()` has been renamed to `fract`. [tint:1766](crbug.com/tint/1766)
+* Calling a function with multiple pointer arguments that alias each other is now a error. [tint:1675](crbug.com/tint/1675)
+* `type` deprecation has been removed. `alias` must be used now. [tint:1812](crbug.com/tint/1812)
+* `static_assert` deprecation has been removed. `const_assert` must now be used. [tint:1807](crbug.com/tint/1807)
+
+## Changes for M111
+
+### New features
+
+* The `workgroupUniformLoad` builtin function is now supported. [tint:1780](crbug.com/tint/1780)
+* The `diagnostic` directive and `@diagnostic` attribute are now supported. [tint:1809](crbug.com/tint/1809)
+  * The attribute is currently only supported on function declarations.
+
+### Breaking changes
+
+* You may need to add parentheses to less-than or greater-than binary expressions that now parse as template lists. For example `a(b<c, d>e)` will need parentheses around `b<c` or `d>e`. [tint:1810](crbug.com/tint/1810).
+* Uniformity analysis failures are now an error [tint:880](crbug.com/tint/880)
+  * The `derivative_uniformity` diagnostic filter can be used to modify the severity if needed.
+
+## Deprecated Features
+
+* The keyword to alias a type has been renamed from `type` to `alias`. [tint:1812](crbug.com/tint/1812)
+* `static_assert` has been renamed to `const_assert`. [tint:1807](crbug.com/tint/1807)
+
+## Changes for M110
+
+### Breaking changes
+
+* The `textureSampleLevel()` overload for `texture_external` has been removed. Use `textureSampleBaseClampToEdge()`. [tint:1671](crbug.com/tint/1671)
+
+### Deprecated Features
+
+* The `sig` member of the return type of `frexp()` has been renamed to `fract`. [tint:1757](crbug.com/tint/1757)
+* Calling a function with multiple pointer arguments that alias each other is now a warning, and
+  will become an error in a future release. [tint:1675](crbug.com/tint/1675)
+
+## Changes for M109
+
+### Breaking changes
+
+* `textureDimensions()`, `textureNumLayers()` and `textureNumLevels()` now return unsigned integers / vectors. [tint:1526](crbug.com/tint/1526)
+* The `@stage` attribute has been removed. The short forms should be used
+  instead (`@vertex`, `@fragment`, or `@compute`). [tint:1503](crbug.com/tint/1503)
+* Module-scope `let` is now an error. Use module-scope `const` instead. [tint:1580](crbug.com/tint/1584)
+* Reserved words are now an error instead of a deprecation. [tint:1463](crbug.com/tint/1463)
+* You may no longer use pointer parameters in `workgroup` address space. [tint:1721](crbug.com/tint/1721)
+
+### New features
+
+* Uniformity analysis failures are warnings again [tint:1728](crbug.com/tint/1728)
+* You can now call texture builtins with a mix of signed and unsigned integer arguments. [tint:1733](crbug.com/tint/1733)
+
+## Changes for M108
+
+### New features
+
+* `textureSampleBaseClampToEdge()` has been implemented. [tint:1671](crbug.com/tint/1671)
+
+### Deprecated Features
+
+* The `external_texture` overload of `textureSampleLevel()` has been deprecated. Use `textureSampleBaseClampToEdge()` instead. [tint:1671](crbug.com/tint/1671)
+
+### Fixes
+
+* Constant evaluation of type conversions where the value exceeds the limits of the target type have been fixed. [tint:1707](crbug.com/tint/1707)
+
+## Changes for M107
+
+### New features
+
+* `saturate()` has been implemented. [tint:1591](crbug.com/tint/1591)
+
+### Breaking changes
+
+* Uniformity analysis failures are now an error [tint:880](crbug.com/tint/880)
+* Indexing an array, vector or matrix with a compile-time expression that's out-of-bounds is now an error [tint:1665](crbug.com/tint/1665)
+
 ## Changes for M106
 
 ### New features

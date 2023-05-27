@@ -3,8 +3,11 @@
 @group(1) @binding(1) var arg_1 : sampler_comparison;
 
 fn textureGatherCompare_6d9352() {
-  var res : vec4<f32> = textureGatherCompare(arg_0, arg_1, vec2<f32>(), 1.0f);
+  var res : vec4<f32> = textureGatherCompare(arg_0, arg_1, vec2<f32>(1.0f), 1.0f);
+  prevent_dce = res;
 }
+
+@group(2) @binding(0) var<storage, read_write> prevent_dce : vec4<f32>;
 
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {

@@ -17,40 +17,57 @@
 
 #include <type_traits>
 
+#include "src/tint/sem/builtin_enum_expression.h"
+
 // Forward declarations
+namespace tint::utils {
+class CastableBase;
+}  // namespace tint::utils
 namespace tint::ast {
-class Array;
+class AccessorExpression;
+class BinaryExpression;
+class BitcastExpression;
+class BuiltinAttribute;
+class CallExpression;
 class Expression;
 class ForLoopStatement;
 class Function;
 class IfStatement;
+class LiteralExpression;
 class Node;
 class Override;
+class PhonyExpression;
 class Statement;
 class Struct;
 class StructMember;
 class SwitchStatement;
-class Type;
 class TypeDecl;
 class Variable;
 class WhileStatement;
+class UnaryOpExpression;
 }  // namespace tint::ast
+namespace tint::builtin {
+enum class BuiltinValue;
+}
 namespace tint::sem {
-class Array;
 class Expression;
 class ForLoopStatement;
 class Function;
+class GlobalVariable;
 class IfStatement;
 class Node;
-class GlobalVariable;
 class Statement;
 class Struct;
 class StructMember;
 class SwitchStatement;
-class Type;
+class ValueExpression;
 class Variable;
 class WhileStatement;
 }  // namespace tint::sem
+namespace tint::type {
+class Array;
+class Type;
+}  // namespace tint::type
 
 namespace tint::sem {
 
@@ -60,29 +77,35 @@ namespace tint::sem {
 /// rules will be used to infer the return type based on the argument type.
 struct TypeMappings {
     //! @cond Doxygen_Suppress
-    Array* operator()(ast::Array*);
+    BuiltinEnumExpression<builtin::BuiltinValue>* operator()(ast::BuiltinAttribute*);
+    utils::CastableBase* operator()(ast::Node*);
     Expression* operator()(ast::Expression*);
     ForLoopStatement* operator()(ast::ForLoopStatement*);
     Function* operator()(ast::Function*);
-    IfStatement* operator()(ast::IfStatement*);
-    Node* operator()(ast::Node*);
     GlobalVariable* operator()(ast::Override*);
+    IfStatement* operator()(ast::IfStatement*);
     Statement* operator()(ast::Statement*);
     Struct* operator()(ast::Struct*);
     StructMember* operator()(ast::StructMember*);
     SwitchStatement* operator()(ast::SwitchStatement*);
-    Type* operator()(ast::Type*);
-    Type* operator()(ast::TypeDecl*);
+    type::Type* operator()(ast::TypeDecl*);
+    ValueExpression* operator()(ast::AccessorExpression*);
+    ValueExpression* operator()(ast::BinaryExpression*);
+    ValueExpression* operator()(ast::BitcastExpression*);
+    ValueExpression* operator()(ast::CallExpression*);
+    ValueExpression* operator()(ast::LiteralExpression*);
+    ValueExpression* operator()(ast::PhonyExpression*);
+    ValueExpression* operator()(ast::UnaryOpExpression*);
     Variable* operator()(ast::Variable*);
     WhileStatement* operator()(ast::WhileStatement*);
     //! @endcond
 };
 
 /// SemanticNodeTypeFor resolves to the appropriate sem::Node type for the
-/// AST or type node `AST_OR_TYPE`.
-template <typename AST_OR_TYPE>
+/// AST node `AST`.
+template <typename AST>
 using SemanticNodeTypeFor =
-    typename std::remove_pointer<decltype(TypeMappings()(std::declval<AST_OR_TYPE*>()))>::type;
+    typename std::remove_pointer<decltype(TypeMappings()(std::declval<AST*>()))>::type;
 
 }  // namespace tint::sem
 

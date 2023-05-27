@@ -16,6 +16,7 @@
 #include "src/tint/reader/spirv/function.h"
 #include "src/tint/reader/spirv/parser_impl_test_helper.h"
 #include "src/tint/reader/spirv/spirv_tools_helpers_test.h"
+#include "src/tint/utils/string_stream.h"
 
 namespace tint::reader::spirv {
 namespace {
@@ -27,7 +28,7 @@ using ::testing::HasSubstr;
 using SpvParserCFGTest = SpvParserTest;
 
 std::string Dump(const std::vector<uint32_t>& v) {
-    std::ostringstream o;
+    utils::StringStream o;
     o << "{";
     for (auto a : v) {
         o << a << " ";
@@ -638,9 +639,8 @@ TEST_F(SpvParserCFGTest, RegisterMerges_GoodLoopMerge_MultiBlockLoop_ContinueIsN
     EXPECT_FALSE(bi99->is_continue_entire_loop);
 }
 
-TEST_F(
-    SpvParserCFGTest,
-    RegisterMerges_GoodLoopMerge_MultiBlockLoop_ContinueIsNotHeader_BranchConditional) {  // NOLINT
+TEST_F(SpvParserCFGTest,
+       RegisterMerges_GoodLoopMerge_MultiBlockLoop_ContinueIsNotHeader_BranchConditional) {
     auto p = parser(test::Assemble(CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -1288,43 +1288,7 @@ TEST_F(SpvParserCFGTest, ComputeBlockOrder_Switch_DefaultSameAsACase) {
     EXPECT_THAT(fe.block_order(), ElementsAre(10, 40, 20, 30, 99));
 }
 
-TEST_F(SpvParserCFGTest, ComputeBlockOrder_RespectSwitchCaseFallthrough) {
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None
-     ; SPIR-V validation requires a fallthrough destination to immediately
-     ; follow the source. So %20 -> %40, %30 -> %50
-     OpSwitch %selector %99 20 %20 40 %40 30 %30 50 %50
-
-     %50 = OpLabel
-     OpBranch %99
-
-     %99 = OpLabel
-     OpReturn
-
-     %40 = OpLabel
-     OpBranch %99
-
-     %30 = OpLabel
-     OpBranch %50 ; fallthrough
-
-     %20 = OpLabel
-     OpBranch %40 ; fallthrough
-
-     OpFunctionEnd
-  )";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    fe.RegisterBasicBlocks();
-    fe.ComputeBlockOrderAndPositions();
-
-    EXPECT_THAT(fe.block_order(), ElementsAre(10, 30, 50, 20, 40, 99)) << assembly;
-}
-
-TEST_F(SpvParserCFGTest, ComputeBlockOrder_RespectSwitchCaseFallthrough_FromDefault) {
+TEST_F(SpvParserCFGTest, ClassifyCFGEdges_Fallthrough_IsError) {
     auto assembly = CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -1352,122 +1316,9 @@ TEST_F(SpvParserCFGTest, ComputeBlockOrder_RespectSwitchCaseFallthrough_FromDefa
     auto p = parser(test::Assemble(assembly));
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
     auto fe = p->function_emitter(100);
-    fe.RegisterBasicBlocks();
-    fe.ComputeBlockOrderAndPositions();
-
-    EXPECT_THAT(fe.block_order(), ElementsAre(10, 20, 80, 30, 40, 99)) << assembly;
-}
-
-TEST_F(SpvParserCFGTest, ComputeBlockOrder_RespectSwitchCaseFallthrough_FromCaseToDefaultToCase) {
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None
-     OpSwitch %selector %80 20 %20 30 %30
-
-     %20 = OpLabel
-     OpBranch %80 ; fallthrough to default
-
-     %80 = OpLabel ; the default case
-     OpBranch %30 ; fallthrough to 30
-
-     %30 = OpLabel
-     OpBranch %99
-
-     %99 = OpLabel ; dominated by %30, so follow %30
-     OpReturn
-
-     OpFunctionEnd
-  )";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    fe.RegisterBasicBlocks();
-    fe.ComputeBlockOrderAndPositions();
-
-    EXPECT_THAT(fe.block_order(), ElementsAre(10, 20, 80, 30, 99)) << assembly;
-}
-
-TEST_F(SpvParserCFGTest, ComputeBlockOrder_SwitchCasesFallthrough_OppositeDirections) {
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None
-     OpSwitch %selector %99 20 %20 30 %30 40 %40 50 %50
-
-     %99 = OpLabel
-     OpReturn
-
-     %20 = OpLabel
-     OpBranch %30 ; forward
-
-     %40 = OpLabel
-     OpBranch %99
-
-     %30 = OpLabel
-     OpBranch %99
-
-     ; SPIR-V doesn't actually allow a fall-through that goes backward in the
-     ; module. But the block ordering algorithm tolerates it.
-     %50 = OpLabel
-     OpBranch %40 ; backward
-
-     OpFunctionEnd
-  )";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    fe.RegisterBasicBlocks();
-    fe.ComputeBlockOrderAndPositions();
-
-    EXPECT_THAT(fe.block_order(), ElementsAre(10, 50, 40, 20, 30, 99)) << assembly;
-
-    // We're deliberately testing a case that SPIR-V doesn't allow.
-    p->DeliberatelyInvalidSpirv();
-}
-
-TEST_F(SpvParserCFGTest, ComputeBlockOrder_RespectSwitchCaseFallthrough_Interleaved) {
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None
-     ; SPIR-V validation requires a fallthrough destination to immediately
-     ; follow the source. So %20 -> %40
-     OpSwitch %selector %99 20 %20 40 %40 30 %30 50 %50
-
-     %99 = OpLabel
-     OpReturn
-
-     %20 = OpLabel
-     OpBranch %40
-
-     %30 = OpLabel
-     OpBranch %50
-
-     %40 = OpLabel
-     OpBranch %60
-
-     %50 = OpLabel
-     OpBranch %70
-
-     %60 = OpLabel
-     OpBranch %99
-
-     %70 = OpLabel
-     OpBranch %99
-
-     OpFunctionEnd
-  )";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    fe.RegisterBasicBlocks();
-    fe.ComputeBlockOrderAndPositions();
-
-    EXPECT_THAT(fe.block_order(), ElementsAre(10, 30, 50, 70, 20, 40, 60, 99)) << assembly;
+    EXPECT_FALSE(FlowClassifyCFGEdges(&fe)) << p->error();
+    // Some further processing
+    EXPECT_THAT(p->error(), Eq("Fallthrough not permitted in WGSL"));
 }
 
 TEST_F(SpvParserCFGTest, ComputeBlockOrder_Nest_If_Contains_If) {
@@ -1535,54 +1386,6 @@ TEST_F(SpvParserCFGTest, ComputeBlockOrder_Nest_If_In_SwitchCase) {
 
      %49 = OpLabel
      OpBranch %99
-
-     %30 = OpLabel
-     OpBranch %49
-
-     %40 = OpLabel
-     OpBranch %49
-
-     %50 = OpLabel
-     OpSelectionMerge %79 None
-     OpBranchConditional %cond %60 %70
-
-     %79 = OpLabel
-     OpBranch %99
-
-     %60 = OpLabel
-     OpBranch %79
-
-     %70 = OpLabel
-     OpBranch %79
-
-     OpFunctionEnd
-  )";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    fe.RegisterBasicBlocks();
-    fe.ComputeBlockOrderAndPositions();
-
-    EXPECT_THAT(fe.block_order(), ElementsAre(10, 20, 30, 40, 49, 50, 60, 70, 79, 99)) << assembly;
-}
-
-TEST_F(SpvParserCFGTest, ComputeBlockOrder_Nest_IfFallthrough_In_SwitchCase) {
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None
-     OpSwitch %selector %50 20 %20 50 %50
-
-     %99 = OpLabel
-     OpReturn
-
-     %20 = OpLabel
-     OpSelectionMerge %49 None
-     OpBranchConditional %cond %30 %40
-
-     %49 = OpLabel
-     OpBranchConditional %cond %99 %50 ; fallthrough
 
      %30 = OpLabel
      OpBranch %49
@@ -2210,9 +2013,7 @@ TEST_F(SpvParserCFGTest, ComputeBlockOrder_Loop_Body_Switch_CaseContinues) {
     EXPECT_THAT(fe.block_order(), ElementsAre(10, 20, 30, 45, 40, 49, 50, 99)) << assembly;
 }
 
-// TODO(crbug.com/tint/1406): Re-enable with the typo fix (preceeded->preceded)
-// once that typo fix is rolled in Tint's SPIRV-Tools.
-TEST_F(SpvParserCFGTest, DISABLED_ComputeBlockOrder_Loop_BodyHasSwitchContinueBreak) {
+TEST_F(SpvParserCFGTest, ComputeBlockOrder_Loop_BodyHasSwitchContinueBreak) {
     auto assembly = CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -2227,9 +2028,6 @@ TEST_F(SpvParserCFGTest, DISABLED_ComputeBlockOrder_Loop_BodyHasSwitchContinueBr
      ; OpSwitch must be preceded by a selection merge
      OpSwitch %selector %99 50 %50 ; default is break, 50 is continue
 
-     %40 = OpLabel
-     OpBranch %50
-
      %50 = OpLabel
      OpBranch %20
 
@@ -2241,7 +2039,7 @@ TEST_F(SpvParserCFGTest, DISABLED_ComputeBlockOrder_Loop_BodyHasSwitchContinueBr
     auto p = parser(test::Assemble(assembly));
     EXPECT_FALSE(p->Parse());
     EXPECT_FALSE(p->success());
-    EXPECT_THAT(p->error(), HasSubstr("OpSwitch must be preceeded by an OpSelectionMerge"));
+    EXPECT_THAT(p->error(), HasSubstr("OpSwitch must be preceded by an OpSelectionMerge"));
 }
 
 TEST_F(SpvParserCFGTest, ComputeBlockOrder_Loop_Continue_Sequence) {
@@ -2381,9 +2179,7 @@ TEST_F(SpvParserCFGTest, ComputeBlockOrder_Loop_Continue_HasBreakUnless) {
     EXPECT_THAT(fe.block_order(), ElementsAre(10, 20, 30, 50, 99));
 }
 
-// TODO(crbug.com/tint/1406): Re-enable with the typo fix (preceeded->preceded)
-// once that typo fix is rolled in Tint's SPIRV-Tools.
-TEST_F(SpvParserCFGTest, DISABLED_ComputeBlockOrder_Loop_Continue_SwitchBreak) {
+TEST_F(SpvParserCFGTest, ComputeBlockOrder_Loop_Continue_SwitchBreak) {
     auto assembly = CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -2410,7 +2206,7 @@ TEST_F(SpvParserCFGTest, DISABLED_ComputeBlockOrder_Loop_Continue_SwitchBreak) {
     auto p = parser(test::Assemble(assembly));
     EXPECT_FALSE(p->Parse());
     EXPECT_FALSE(p->success());
-    EXPECT_THAT(p->error(), HasSubstr("OpSwitch must be preceeded by an OpSelectionMerge"));
+    EXPECT_THAT(p->error(), HasSubstr("OpSwitch must be preceded by an OpSelectionMerge"));
 }
 
 TEST_F(SpvParserCFGTest, ComputeBlockOrder_Loop_Loop) {
@@ -2802,14 +2598,15 @@ TEST_F(SpvParserCFGTest, VerifyHeaderContinueMergeOrder_HeaderDoesNotStrictlyDom
     fe.ComputeBlockOrderAndPositions();
     fe.RegisterMerges();
     EXPECT_FALSE(fe.VerifyHeaderContinueMergeOrder());
+
+    utils::StringStream result;
+    result << *fe.GetBlockInfo(50) << std::endl << *fe.GetBlockInfo(20) << std::endl;
     EXPECT_THAT(p->error(), Eq("Header 50 does not strictly dominate its merge block 20"))
-        << *fe.GetBlockInfo(50) << std::endl
-        << *fe.GetBlockInfo(20) << std::endl
-        << Dump(fe.block_order());
+        << result.str() << Dump(fe.block_order());
 }
 
 TEST_F(SpvParserCFGTest,
-       VerifyHeaderContinueMergeOrder_HeaderDoesNotStrictlyDominateContinueTarget) {  // NOLINT
+       VerifyHeaderContinueMergeOrder_HeaderDoesNotStrictlyDominateContinueTarget) {
     auto assembly = CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -2838,10 +2635,10 @@ TEST_F(SpvParserCFGTest,
     fe.ComputeBlockOrderAndPositions();
     fe.RegisterMerges();
     EXPECT_FALSE(fe.VerifyHeaderContinueMergeOrder());
+    utils::StringStream str;
+    str << *fe.GetBlockInfo(50) << std::endl << *fe.GetBlockInfo(20) << std::endl;
     EXPECT_THAT(p->error(), Eq("Loop header 50 does not dominate its continue target 20"))
-        << *fe.GetBlockInfo(50) << std::endl
-        << *fe.GetBlockInfo(20) << std::endl
-        << Dump(fe.block_order());
+        << str.str() << Dump(fe.block_order());
 }
 
 TEST_F(SpvParserCFGTest, VerifyHeaderContinueMergeOrder_MergeInsideContinueTarget) {
@@ -2956,10 +2753,15 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_FunctionIsOnlyIfSelectionAnd
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 2u);
+
+    utils::StringStream str;
+    str << constructs;
+
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,4) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ IfSelection [0,3) begin_id:10 end_id:99 depth:1 parent:Function@10 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[1].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[1].get());
@@ -3002,10 +2804,15 @@ TEST_F(SpvParserCFGTest,
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 2u);
+
+    utils::StringStream str;
+    str << constructs;
+
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,6) begin_id:5 end_id:0 depth:0 parent:null }
   Construct{ IfSelection [1,4) begin_id:10 end_id:99 depth:1 parent:Function@5 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(5)->construct, constructs[0].get());
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[1].get());
@@ -3046,10 +2853,15 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_SwitchSelection) {
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 2u);
+
+    utils::StringStream str;
+    str << constructs;
+
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,5) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ SwitchSelection [0,4) begin_id:10 end_id:99 depth:1 parent:Function@10 in-c-l-s:SwitchSelection@10 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[1].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[1].get());
@@ -3083,12 +2895,17 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_SingleBlockLoop) {
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 2u);
+
+    utils::StringStream str;
+    str << constructs;
+
     // A single-block loop consists *only* of a continue target with one block in
     // it.
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,3) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ Continue [1,2) begin_id:20 end_id:99 depth:1 parent:Function@10 in-c:Continue@20 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[0].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[1].get());
@@ -3129,11 +2946,16 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_MultiBlockLoop_HeaderIsNotCo
     fe.RegisterMerges();
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
+
+    utils::StringStream str;
+    str << constructs;
+
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,6) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ Continue [3,5) begin_id:40 end_id:99 depth:1 parent:Function@10 in-c:Continue@40 }
   Construct{ Loop [1,3) begin_id:20 end_id:40 depth:1 parent:Function@10 scope:[1,5) in-l:Loop@20 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[0].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[2].get());
@@ -3177,10 +2999,14 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_MultiBlockLoop_HeaderIsConti
     fe.RegisterMerges();
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
+
+    utils::StringStream str;
+    str << constructs;
+
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,6) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ Continue [1,5) begin_id:20 end_id:99 depth:1 parent:Function@10 in-c:Continue@20 }
-})")) << constructs;
+})")) << str.str();
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[0].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[1].get());
@@ -3224,13 +3050,18 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_MergeBlockIsAlsoSingleBlockL
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 3u);
+
+    utils::StringStream str;
+    str << constructs;
+
     // A single-block loop consists *only* of a continue target with one block in
     // it.
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,4) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ IfSelection [0,2) begin_id:10 end_id:50 depth:1 parent:Function@10 }
   Construct{ Continue [2,3) begin_id:50 end_id:99 depth:1 parent:Function@10 in-c:Continue@50 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[1].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[1].get());
@@ -3272,12 +3103,17 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_MergeBlockIsAlsoMultiBlockLo
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 4u);
+
+    utils::StringStream str;
+    str << constructs;
+
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,5) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ IfSelection [0,2) begin_id:10 end_id:50 depth:1 parent:Function@10 }
   Construct{ Continue [3,4) begin_id:60 end_id:99 depth:1 parent:Function@10 in-c:Continue@60 }
   Construct{ Loop [2,3) begin_id:50 end_id:60 depth:1 parent:Function@10 scope:[2,4) in-l:Loop@50 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[1].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[1].get());
@@ -3331,12 +3167,17 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_Nest_If_If) {
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 4u);
+
+    utils::StringStream str;
+    str << constructs;
+
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,9) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ IfSelection [0,8) begin_id:10 end_id:99 depth:1 parent:Function@10 }
   Construct{ IfSelection [1,3) begin_id:20 end_id:40 depth:2 parent:IfSelection@10 }
   Construct{ IfSelection [5,7) begin_id:50 end_id:89 depth:2 parent:IfSelection@10 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[1].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[2].get());
@@ -3391,13 +3232,18 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_Nest_Switch_If) {
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 4u);
+
+    utils::StringStream str;
+    str << constructs;
+
     // The ordering among siblings depends on the computed block order.
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,8) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ SwitchSelection [0,7) begin_id:10 end_id:99 depth:1 parent:Function@10 in-c-l-s:SwitchSelection@10 }
   Construct{ IfSelection [1,3) begin_id:50 end_id:89 depth:2 parent:SwitchSelection@10 in-c-l-s:SwitchSelection@10 }
   Construct{ IfSelection [4,6) begin_id:20 end_id:49 depth:2 parent:SwitchSelection@10 in-c-l-s:SwitchSelection@10 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[1].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[3].get());
@@ -3441,11 +3287,16 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_Nest_If_Switch) {
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 3u);
+
+    utils::StringStream str;
+    str << constructs;
+
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,5) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ IfSelection [0,4) begin_id:10 end_id:99 depth:1 parent:Function@10 }
   Construct{ SwitchSelection [1,3) begin_id:20 end_id:89 depth:2 parent:IfSelection@10 in-c-l-s:SwitchSelection@20 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[1].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[2].get());
@@ -3495,12 +3346,17 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_Nest_Loop_Loop) {
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 4u);
+
+    utils::StringStream str;
+    str << constructs;
+
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,8) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ Continue [4,6) begin_id:50 end_id:89 depth:1 parent:Function@10 in-c:Continue@50 }
   Construct{ Loop [1,4) begin_id:20 end_id:50 depth:1 parent:Function@10 scope:[1,6) in-l:Loop@20 }
   Construct{ Continue [2,3) begin_id:30 end_id:40 depth:2 parent:Loop@20 in-l:Loop@20 in-c:Continue@30 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[0].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[2].get());
@@ -3550,12 +3406,17 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_Nest_Loop_If) {
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 4u);
+
+    utils::StringStream str;
+    str << constructs;
+
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,7) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ Continue [5,6) begin_id:80 end_id:99 depth:1 parent:Function@10 in-c:Continue@80 }
   Construct{ Loop [1,5) begin_id:20 end_id:80 depth:1 parent:Function@10 scope:[1,6) in-l:Loop@20 }
   Construct{ IfSelection [2,4) begin_id:30 end_id:49 depth:2 parent:Loop@20 in-l:Loop@20 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[0].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[2].get());
@@ -3601,12 +3462,16 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_Nest_LoopContinue_If) {
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 4u);
+
+    utils::StringStream str;
+    str << constructs;
+
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,6) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ Continue [2,5) begin_id:30 end_id:99 depth:1 parent:Function@10 in-c:Continue@30 }
   Construct{ Loop [1,2) begin_id:20 end_id:30 depth:1 parent:Function@10 scope:[1,5) in-l:Loop@20 }
   Construct{ IfSelection [2,4) begin_id:30 end_id:49 depth:2 parent:Continue@30 in-c:Continue@30 }
-})")) << constructs;
+})")) << str.str();
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[0].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[2].get());
@@ -3645,11 +3510,15 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_Nest_If_SingleBlockLoop) {
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 3u);
+
+    utils::StringStream str;
+    str << constructs;
+
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,4) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ IfSelection [0,3) begin_id:10 end_id:99 depth:1 parent:Function@10 }
   Construct{ Continue [1,2) begin_id:20 end_id:89 depth:2 parent:IfSelection@10 in-c:Continue@20 }
-})")) << constructs;
+})")) << str.str();
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[1].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[2].get());
@@ -3694,12 +3563,17 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_Nest_If_MultiBlockLoop) {
     EXPECT_TRUE(fe.LabelControlFlowConstructs());
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 4u);
+
+    utils::StringStream str;
+    str << constructs;
+
     EXPECT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,7) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ IfSelection [0,6) begin_id:10 end_id:99 depth:1 parent:Function@10 }
   Construct{ Continue [3,5) begin_id:40 end_id:89 depth:2 parent:IfSelection@10 in-c:Continue@40 }
   Construct{ Loop [1,3) begin_id:20 end_id:40 depth:2 parent:IfSelection@10 scope:[1,5) in-l:Loop@20 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[1].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[3].get());
@@ -3744,12 +3618,17 @@ TEST_F(SpvParserCFGTest, LabelControlFlowConstructs_LoopInterallyDiverge) {
     ASSERT_TRUE(FlowLabelControlFlowConstructs(&fe)) << p->error();
     const auto& constructs = fe.constructs();
     EXPECT_EQ(constructs.Length(), 4u);
+
+    utils::StringStream str;
+    str << constructs;
+
     ASSERT_THAT(ToString(constructs), Eq(R"(ConstructList{
   Construct{ Function [0,6) begin_id:10 end_id:0 depth:0 parent:null }
   Construct{ Continue [4,5) begin_id:90 end_id:99 depth:1 parent:Function@10 in-c:Continue@90 }
   Construct{ Loop [1,4) begin_id:20 end_id:90 depth:1 parent:Function@10 scope:[1,5) in-l:Loop@20 }
   Construct{ IfSelection [1,4) begin_id:20 end_id:90 depth:2 parent:Loop@20 in-l:Loop@20 }
-})")) << constructs;
+})")) << str.str();
+
     // The block records the nearest enclosing construct.
     EXPECT_EQ(fe.GetBlockInfo(10)->construct, constructs[0].get());
     EXPECT_EQ(fe.GetBlockInfo(20)->construct, constructs[3].get());
@@ -3911,7 +3790,7 @@ TEST_F(SpvParserCFGTest, FindSwitchCaseHeaders_DefaultForTwoSwitches_AsCaseClaus
      OpSwitch %selector %80 60 %60
 
      %60 = OpLabel
-     OpBranch %89 ; fallthrough
+     OpBranch %89
 
      %80 = OpLabel ; default for both switches
      OpBranch %89
@@ -4655,9 +4534,8 @@ TEST_F(SpvParserCFGTest, ClassifyCFGEdges_BackEdge_MultiBlockLoop_SingleBlockCon
     EXPECT_EQ(bi40->succ_edge[20], EdgeKind::kBack);
 }
 
-TEST_F(
-    SpvParserCFGTest,
-    ClassifyCFGEdges_BackEdge_MultiBlockLoop_MultiBlockContinueConstruct_ContinueIsNotHeader) {  // NOLINT
+TEST_F(SpvParserCFGTest,
+       ClassifyCFGEdges_BackEdge_MultiBlockLoop_MultiBlockContinueConstruct_ContinueIsNotHeader) {
     auto assembly = CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -4693,9 +4571,8 @@ TEST_F(
     EXPECT_EQ(bi50->succ_edge[20], EdgeKind::kBack);
 }
 
-TEST_F(
-    SpvParserCFGTest,
-    ClassifyCFGEdges_BackEdge_MultiBlockLoop_MultiBlockContinueConstruct_ContinueIsHeader) {  // NOLINT
+TEST_F(SpvParserCFGTest,
+       ClassifyCFGEdges_BackEdge_MultiBlockLoop_MultiBlockContinueConstruct_ContinueIsHeader) {
     auto assembly = CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -4981,8 +4858,6 @@ TEST_F(SpvParserCFGTest, ClassifyCFGEdges_IfBreak_BypassesMerge_IsError) {
 }
 
 TEST_F(SpvParserCFGTest, ClassifyCFGEdges_IfBreak_EscapeSwitchCase_IsError) {
-    // Code generation assumes that you can't have kCaseFallThrough and kIfBreak
-    // from the same OpBranchConditional.
     // This checks one direction of that, where the IfBreak is shown it can't
     // escape a switch case.
     auto assembly = CommonTypes() + R"(
@@ -5943,440 +5818,6 @@ TEST_F(SpvParserCFGTest, ClassifyCFGEdges_LoopContinue_FromNestedLoopHeader_IsEr
                                "starting at block 30; branch bypasses merge block 59"));
 }
 
-TEST_F(SpvParserCFGTest, ClassifyCFGEdges_Fallthrough_CaseTailToCase) {
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None
-     OpSwitch %selector %99 20 %20 40 %40
-
-     %20 = OpLabel ; case 20
-     OpBranch %30
-
-     %30 = OpLabel
-     OpBranch %40 ; fallthrough
-
-     %40 = OpLabel ; case 40
-     OpBranch %99
-
-     %99 = OpLabel
-     OpReturn
-
-     OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_TRUE(FlowClassifyCFGEdges(&fe));
-
-    auto* bi = fe.GetBlockInfo(30);
-    ASSERT_NE(bi, nullptr);
-    EXPECT_EQ(bi->succ_edge.count(40), 1u);
-    EXPECT_EQ(bi->succ_edge[40], EdgeKind::kCaseFallThrough);
-}
-
-TEST_F(SpvParserCFGTest, ClassifyCFGEdges_Fallthrough_CaseTailToDefaultNotMerge) {
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None
-     OpSwitch %selector %40 20 %20
-
-     %20 = OpLabel ; case 20
-     OpBranch %30
-
-     %30 = OpLabel
-     OpBranch %40 ; fallthrough
-
-     %40 = OpLabel ; case 40
-     OpBranch %99
-
-     %99 = OpLabel
-     OpReturn
-
-     OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_TRUE(FlowClassifyCFGEdges(&fe));
-
-    auto* bi = fe.GetBlockInfo(30);
-    ASSERT_NE(bi, nullptr);
-    EXPECT_EQ(bi->succ_edge.count(40), 1u);
-    EXPECT_EQ(bi->succ_edge[40], EdgeKind::kCaseFallThrough);
-}
-
-TEST_F(SpvParserCFGTest, ClassifyCFGEdges_Fallthrough_DefaultToCase) {
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None
-     OpSwitch %selector %20 40 %40
-
-     %20 = OpLabel ; default
-     OpBranch %30
-
-     %30 = OpLabel
-     OpBranch %40 ; fallthrough
-
-     %40 = OpLabel ; case 40
-     OpBranch %99
-
-     %99 = OpLabel
-     OpReturn
-
-     OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_TRUE(FlowClassifyCFGEdges(&fe));
-
-    auto* bi = fe.GetBlockInfo(30);
-    ASSERT_NE(bi, nullptr);
-    EXPECT_EQ(bi->succ_edge.count(40), 1u);
-    EXPECT_EQ(bi->succ_edge[40], EdgeKind::kCaseFallThrough);
-}
-
-TEST_F(SpvParserCFGTest, ClassifyCFGEdges_Fallthrough_BranchConditionalWith_IfBreak_IsError) {
-    // Code generation assumes OpBranchConditional can't have kCaseFallThrough
-    // with kIfBreak.
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None ; Set up if-break to %99
-     OpBranchConditional %cond %20 %99
-
-     %20 = OpLabel
-     OpSelectionMerge %80 None ; switch-selection
-     OpSwitch %selector %80 30 %30 40 %40
-
-     %30 = OpLabel ; first case
-        ; branch to %99 would be an if-break, but it bypasess the switch merge
-        ; Also has case fall-through
-     OpBranchConditional %cond2 %99 %40
-
-     %40 = OpLabel ; second case
-     OpBranch %80
-
-     %80 = OpLabel ; switch-selection's merge
-     OpBranch %99
-
-     %99 = OpLabel ; if-selection's merge
-     OpReturn
-
-     OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_FALSE(FlowClassifyCFGEdges(&fe));
-    EXPECT_THAT(p->error(), Eq("Branch from block 30 to block 99 is an invalid exit from "
-                               "construct starting at block 20; branch bypasses merge block 80"));
-}
-
-TEST_F(SpvParserCFGTest, ClassifyCFGEdges_Fallthrough_BranchConditionalWith_Forward_IsError) {
-    // Code generation assumes OpBranchConditional can't have kCaseFallThrough
-    // with kForward.
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None ; switch-selection
-     OpSwitch %selector %99 20 %20 30 %30
-
-     ; Try to make branch to 35 a kForward branch
-     %20 = OpLabel ; first case
-     OpBranchConditional %cond2 %25 %30
-
-     %25 = OpLabel
-     OpBranch %99
-
-     %30 = OpLabel ; second case
-     OpBranch %99
-
-     %99 = OpLabel ; if-selection's merge
-     OpReturn
-
-     OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_FALSE(FlowClassifyCFGEdges(&fe));
-    EXPECT_THAT(p->error(), Eq("Control flow diverges at block 20 (to 25, 30) but it is not "
-                               "a structured header (it has no merge instruction)"));
-}
-
-TEST_F(SpvParserCFGTest,
-       ClassifyCFGEdges_Fallthrough_BranchConditionalWith_Back_LoopOnOutside_IsError) {  // NOLINT
-    // Code generation assumes OpBranchConditional can't have kCaseFallThrough
-    // with kBack.
-    //
-    // This test has the loop on the outside. The backedge coming from a case
-    // clause means the switch is inside the continue construct, and the nesting
-    // of the switch's merge means the backedge is coming from a block that is not
-    // at the end of the continue construct.
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpBranch %20
-
-     %20 = OpLabel
-     OpLoopMerge %99 %30 None
-     OpBranch %30
-
-     %30 = OpLabel  ; continue target and
-     OpSelectionMerge %80 None ; switch-selection
-     OpSwitch %selector %80 40 %40 50 %50
-
-     ; try to make a back edge with a fallthrough
-     %40 = OpLabel ; first case
-     OpBranchConditional %cond2 %20 %50
-
-     %50 = OpLabel ; second case
-     OpBranch %80
-
-     %80 = OpLabel ; switch merge
-     OpBranch %20  ; also backedge
-
-     %99 = OpLabel ; loop merge
-     OpReturn
-
-     OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_FALSE(FlowClassifyCFGEdges(&fe));
-    EXPECT_THAT(p->error(), Eq("Invalid exit (40->20) from continue construct: 40 is not the "
-                               "last block in the continue construct starting at 30 "
-                               "(violates post-dominance rule)"));
-}
-
-TEST_F(
-    SpvParserCFGTest,
-    FindSwitchCaseSelectionHeaders_Fallthrough_BranchConditionalWith_Back_LoopOnInside_FallthroughIsMerge_IsError) {  // NOLINT
-    // Code generation assumes OpBranchConditional can't have kCaseFallThrough
-    // with kBack.
-    //
-    // This test has the loop on the inside. The merge block is also the
-    // fallthrough target.
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel  ; continue target and
-     OpSelectionMerge %99 None ; switch-selection
-     OpSwitch %selector %99 20 %20 50 %50
-
-     %20 = OpLabel ; first case, and loop header
-     OpLoopMerge %50 %40 None
-     OpBranch %40
-
-     ; try to make a back edge with a fallthrough
-     %40 = OpLabel
-     OpBranchConditional %cond2 %20 %50
-
-     %50 = OpLabel ; second case.  also the loop merge ; header must dominate its merge block !
-     OpBranch %99
-
-     %99 = OpLabel ; switch merge
-     OpReturn
-
-     OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_FALSE(FlowFindSwitchCaseHeaders(&fe));
-    EXPECT_THAT(fe.block_order(), ElementsAre(10, 20, 40, 50, 99));
-    EXPECT_THAT(p->error(), Eq("Block 50 is a case block for switch-selection header 10 and "
-                               "also the merge block for 20 (violates dominance rule)"));
-}
-
-TEST_F(
-    SpvParserCFGTest,
-    ClassifyCFGEdges_Fallthrough_BranchConditionalWith_Back_LoopOnInside_FallthroughIsNotMerge_IsError) {  // NOLINT
-    // Code generation assumes OpBranchConditional can't have kCaseFallThrough
-    // with kBack.
-    //
-    // This test has the loop on the inside. The merge block is not the merge
-    // target But the block order gets messed up because of the weird
-    // connectivity.
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel  ; continue target and
-     OpSelectionMerge %99 None ; switch-selection
-     OpSwitch %selector %99 20 %20 50 %50
-
-     %20 = OpLabel ; first case, and loop header
-     OpLoopMerge %45 %40 None  ; move the merge to an unreachable block
-     OpBranch %40
-
-     ; try to make a back edge with a fallthrough
-     %40 = OpLabel
-     OpBranchConditional %cond2 %20 %50
-
-     %45 = OpLabel ; merge for the loop
-     OpUnreachable
-
-     %50 = OpLabel ; second case. target of fallthrough
-     OpBranch %99
-
-     %99 = OpLabel ; switch merge
-     OpReturn
-
-     OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_FALSE(FlowClassifyCFGEdges(&fe));
-    EXPECT_THAT(p->error(), Eq("Branch from 10 to 50 bypasses continue target 40 "
-                               "(dominance rule violated)"));
-}
-
-TEST_F(
-    SpvParserCFGTest,
-    ClassifyCFGEdges_Fallthrough_BranchConditionalWith_Back_LoopOnInside_NestedMerge_IsError) {  // NOLINT
-    // Code generation assumes OpBranchConditional can't have kCaseFallThrough
-    // with kBack.
-    //
-    // This test has the loop on the inside. The fallthrough is an invalid exit
-    // from the loop. However, the block order gets all messed up because going
-    // from 40 to 50 ends up pulling in 99
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel  ; continue target and
-     OpSelectionMerge %99 None ; switch-selection
-     OpSwitch %selector %99 20 %20 50 %50
-
-       %20 = OpLabel ; first case, and loop header
-       OpLoopMerge %49 %40 None
-       OpBranch %40
-
-       ; try to make a back edge with a fallthrough
-       %40 = OpLabel
-       OpBranchConditional %cond2 %20 %50
-
-       %49 = OpLabel ; loop merge
-       OpBranch %99
-
-     %50 = OpLabel ; second case
-     OpBranch %99
-
-     %99 = OpLabel ; switch merge
-     OpReturn
-
-     OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_FALSE(FlowClassifyCFGEdges(&fe));
-    EXPECT_THAT(fe.block_order(), ElementsAre(10, 20, 40, 50, 49, 99));
-    EXPECT_THAT(p->error(), Eq("Branch from 10 to 50 bypasses continue target 40 "
-                               "(dominance rule violated)"));
-}
-
-TEST_F(SpvParserCFGTest, ClassifyCFGEdges_Fallthrough_CaseNonTailToCase_TrueBranch) {
-    // This is an unusual one, and is an error. Structurally it looks like this:
-    //   switch (val) {
-    //   case 0: {
-    //        if (cond) {
-    //          fallthrough;
-    //        }
-    //        something = 1;
-    //      }
-    //   case 1: { }
-    //   }
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None
-     OpSwitch %selector %99 20 %20 50 %50
-
-     %20 = OpLabel
-     OpSelectionMerge %49 None
-     OpBranchConditional %cond %30 %49
-
-     %30 = OpLabel
-     OpBranch %50 ; attempt to fallthrough
-
-     %49 = OpLabel
-     OpBranch %99
-
-     %50 = OpLabel
-     OpBranch %99
-
-     %99 = OpLabel
-     OpReturn
-
-     OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_FALSE(FlowClassifyCFGEdges(&fe));
-    EXPECT_THAT(p->error(),
-                Eq("Branch from 10 to 50 bypasses header 20 (dominance rule violated)"));
-}
-
-TEST_F(SpvParserCFGTest, ClassifyCFGEdges_Fallthrough_CaseNonTailToCase_FalseBranch) {
-    // Like previous test, but taking the false branch.
-
-    // This is an unusual one, and is an error. Structurally it looks like this:
-    //   switch (val) {
-    //   case 0: {
-    //        if (cond) {
-    //          fallthrough;
-    //        }
-    //        something = 1;
-    //      }
-    //   case 1: { }
-    //   }
-    auto assembly = CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None
-     OpSwitch %selector %99 20 %20 50 %50
-
-     %20 = OpLabel
-     OpSelectionMerge %49 None
-     OpBranchConditional %cond %49 %30 ;; this is the difference
-
-     %30 = OpLabel
-     OpBranch %50 ; attempt to fallthrough
-
-     %49 = OpLabel
-     OpBranch %99
-
-     %50 = OpLabel
-     OpBranch %99
-
-     %99 = OpLabel
-     OpReturn
-
-     OpFunctionEnd
-)";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_FALSE(FlowClassifyCFGEdges(&fe));
-    EXPECT_THAT(p->error(),
-                Eq("Branch from 10 to 50 bypasses header 20 (dominance rule violated)"));
-}
-
 TEST_F(SpvParserCFGTest, ClassifyCFGEdges_Forward_IfToThen) {
     auto assembly = CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
@@ -6691,7 +6132,7 @@ TEST_F(SpvParserCFGTest, ClassifyCFGEdges_DomViolation_AfterContinueToContinueIn
 }
 
 TEST_F(SpvParserCFGTest,
-       FindSwitchCaseHeaders_DomViolation_SwitchCase_CantBeMergeForOtherConstruct) {  // NOLINT
+       FindSwitchCaseHeaders_DomViolation_SwitchCase_CantBeMergeForOtherConstruct) {
     auto assembly = CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -7402,8 +6843,7 @@ TEST_F(SpvParserCFGTest, ClassifyCFGEdges_IfBreak_WithForwardToPremerge) {
 }
 
 TEST_F(SpvParserCFGTest,
-       FindIfSelectionInternalHeaders_DomViolation_InteriorMerge_CantBeTrueHeader) {  // NOLINT -
-                                                                                      // line length
+       FindIfSelectionInternalHeaders_DomViolation_InteriorMerge_CantBeTrueHeader) {
     auto assembly = CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -7435,10 +6875,8 @@ TEST_F(SpvParserCFGTest,
                    "merge block for header block 20 (violates dominance rule)"));
 }
 
-TEST_F(
-    SpvParserCFGTest,
-    FindIfSelectionInternalHeaders_DomViolation_InteriorMerge_CantBeFalseHeader) {  // NOLINT - line
-                                                                                    // length
+TEST_F(SpvParserCFGTest,
+       FindIfSelectionInternalHeaders_DomViolation_InteriorMerge_CantBeFalseHeader) {
     auto assembly = CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -7754,7 +7192,7 @@ TEST_F(SpvParserCFGTest, EmitBody_IfBreak_FromThen_ForwardWithinThen) {
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
     auto* expect = R"(var_1 = 1u;
-var guard10 : bool = true;
+var guard10 = true;
 if (false) {
   var_1 = 2u;
   if (true) {
@@ -7811,7 +7249,7 @@ TEST_F(SpvParserCFGTest, EmitBody_IfBreak_FromElse_ForwardWithinElse) {
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
     auto* expect = R"(var_1 = 1u;
-var guard10 : bool = true;
+var guard10 = true;
 if (false) {
   var_1 = 2u;
   guard10 = false;
@@ -7882,7 +7320,7 @@ TEST_F(SpvParserCFGTest, EmitBody_IfBreak_FromThenWithForward_FromElseWithForwar
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
     auto* expect = R"(var_1 = 1u;
-var guard10 : bool = true;
+var guard10 = true;
 if (false) {
   var_1 = 2u;
   if (true) {
@@ -9127,7 +8565,7 @@ return;
     ASSERT_EQ(expect, got);
 }
 
-// First do no special control flow: no fallthroughs, breaks, continues.
+// First do no special control flow: no breaks, continues.
 TEST_F(SpvParserCFGTest, EmitBody_Switch_DefaultIsMerge_OneCase) {
     auto p = parser(test::Assemble(CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
@@ -9314,8 +8752,7 @@ return;
 
 TEST_F(SpvParserCFGTest, EmitBody_Switch_DefaultIsCase_WithDupCase) {
     // The default block is not the merge block and is the same as a case.
-    // We emit the default case separately, but just before the labeled
-    // case, and with a fallthrough.
+    // We emit the default case as part of the labeled case.
     auto p = parser(test::Assemble(CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -9356,10 +8793,7 @@ switch(42u) {
   case 20u: {
     var_1 = 20u;
   }
-  default: {
-    fallthrough;
-  }
-  case 30u: {
+  case 30u, default: {
     var_1 = 30u;
   }
 }
@@ -10118,9 +9552,7 @@ TEST_F(SpvParserCFGTest,
 }
 
 TEST_F(SpvParserCFGTest,
-       EmitBody_Branch_LoopBreak_MultiBlockLoop_FromContinueConstructEnd_Unconditional) {  // NOLINT
-                                                                                           // - line
-                                                                                           // length
+       EmitBody_Branch_LoopBreak_MultiBlockLoop_FromContinueConstructEnd_Unconditional) {
     auto p = parser(test::Assemble(CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -10163,10 +9595,46 @@ return;
     ASSERT_EQ(expect, got);
 }
 
-TEST_F(
-    SpvParserCFGTest,
-    EmitBody_Branch_LoopBreak_MultiBlockLoop_FromContinueConstructEnd_Conditional) {  // NOLINT -
-                                                                                      // line length
+TEST_F(SpvParserCFGTest,
+       EmitBody_Branch_LoopBreak_MultiBlockLoop_FromContinueConstructEnd_Conditional_BreakIf) {
+    auto p = parser(test::Assemble(CommonTypes() + R"(
+     %100 = OpFunction %void None %voidfn
+
+     %10 = OpLabel
+     OpBranch %20
+
+     %20 = OpLabel
+     OpLoopMerge %99 %80 None
+     OpBranch %80
+
+     %80 = OpLabel ; continue target
+     OpStore %var %uint_1
+     OpBranchConditional %cond %99 %20  ; exit, and backedge
+
+     %99 = OpLabel
+     OpReturn
+
+     OpFunctionEnd
+  )"));
+    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
+    auto fe = p->function_emitter(100);
+    EXPECT_TRUE(fe.EmitBody()) << p->error();
+    auto ast_body = fe.ast_body();
+    auto got = test::ToString(p->program(), ast_body);
+    auto* expect = R"(loop {
+
+  continuing {
+    var_1 = 1u;
+    break if false;
+  }
+}
+return;
+)";
+    ASSERT_EQ(expect, got);
+}
+
+TEST_F(SpvParserCFGTest,
+       EmitBody_Branch_LoopBreak_MultiBlockLoop_FromContinueConstructEnd_Conditional) {
     auto p = parser(test::Assemble(CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -10195,10 +9663,48 @@ TEST_F(
 
   continuing {
     var_1 = 1u;
-    if (false) {
-    } else {
-      break;
-    }
+    break if !(false);
+  }
+}
+return;
+)";
+    ASSERT_EQ(expect, got);
+}
+
+TEST_F(SpvParserCFGTest, EmitBody_Branch_LoopBreak_FromContinueConstructTail) {
+    auto p = parser(test::Assemble(CommonTypes() + R"(
+     %100 = OpFunction %void None %voidfn
+
+     %10 = OpLabel
+     OpBranch %20
+
+     %20 = OpLabel
+     OpLoopMerge %99 %50 None
+     OpBranchConditional %cond %30 %99
+     %30 = OpLabel
+     OpBranch %50
+     %50 = OpLabel
+     OpBranch %60
+     %60 = OpLabel
+     OpBranchConditional %cond %20 %99
+     %99 = OpLabel
+     OpReturn
+
+     OpFunctionEnd
+  )"));
+    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
+    auto fe = p->function_emitter(100);
+    EXPECT_TRUE(fe.EmitBody()) << p->error();
+    auto ast_body = fe.ast_body();
+    auto got = test::ToString(p->program(), ast_body);
+    auto* expect = R"(loop {
+  if (false) {
+  } else {
+    break;
+  }
+
+  continuing {
+    break if !(false);
   }
 }
 return;
@@ -10433,53 +9939,6 @@ return;
     ASSERT_EQ(expect, got);
 }
 
-TEST_F(SpvParserCFGTest, EmitBody_Branch_Fallthrough) {
-    auto p = parser(test::Assemble(CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpStore %var %uint_1
-     OpSelectionMerge %99 None
-     OpSwitch %selector %99 20 %20 30 %30
-
-     %20 = OpLabel
-     OpStore %var %uint_20
-     OpBranch %30 ; uncondtional fallthrough
-
-     %30 = OpLabel
-     OpStore %var %uint_30
-     OpBranch %99
-
-     %99 = OpLabel
-     OpStore %var %uint_7
-     OpReturn
-
-     OpFunctionEnd
-  )"));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_TRUE(fe.EmitBody()) << p->error();
-
-    auto ast_body = fe.ast_body();
-    auto got = test::ToString(p->program(), ast_body);
-    auto* expect = R"(var_1 = 1u;
-switch(42u) {
-  case 20u: {
-    var_1 = 20u;
-    fallthrough;
-  }
-  case 30u: {
-    var_1 = 30u;
-  }
-  default: {
-  }
-}
-var_1 = 7u;
-return;
-)";
-    ASSERT_EQ(expect, got);
-}
-
 TEST_F(SpvParserCFGTest, EmitBody_Branch_Forward) {
     auto p = parser(test::Assemble(CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
@@ -10517,7 +9976,6 @@ return;
 //                      If continue is forward, then it's a continue from a
 //                      continue which is also invalid.
 //      kIfBreak: invalid: loop and if must have distinct merge blocks
-//      kCaseFallThrough: invalid: loop header must dominate its merge
 //      kForward: impossible; would be a loop break
 //
 //    kSwitchBreak with:
@@ -10526,7 +9984,6 @@ return;
 //      kLoopBreak: invalid; only one kind of break allowed
 //      kLoopContinue: TESTED
 //      kIfBreak: invalid: switch and if must have distinct merge blocks
-//      kCaseFallThrough: TESTED
 //      kForward: TESTED
 //
 //    kLoopBreak with:
@@ -10535,7 +9992,6 @@ return;
 //      kLoopBreak: dup general case
 //      kLoopContinue: TESTED
 //      kIfBreak: invalid: switch and if must have distinct merge blocks
-//      kCaseFallThrough: not possible, because switch break conflicts with loop
 //      break kForward: TESTED
 //
 //    kLoopContinue with:
@@ -10544,7 +10000,6 @@ return;
 //      kLoopBreak: symmetry
 //      kLoopContinue: dup general case
 //      kIfBreak: TESTED
-//      kCaseFallThrough: TESTED
 //      kForward: TESTED
 //
 //    kIfBreak with:
@@ -10553,17 +10008,7 @@ return;
 //      kLoopBreak: symmetry
 //      kLoopContinue: symmetry
 //      kIfBreak: dup general case
-//      kCaseFallThrough: invalid; violates nesting or unique merges
 //      kForward: invalid: needs a merge instruction
-//
-//    kCaseFallThrough with:
-//      kBack : symmetry
-//      kSwitchBreak: symmetry
-//      kLoopBreak: symmetry
-//      kLoopContinue: symmetry
-//      kIfBreak: symmetry
-//      kCaseFallThrough: dup general case
-//      kForward: invalid (tested)
 //
 //    kForward with:
 //      kBack : symmetry
@@ -10571,7 +10016,6 @@ return;
 //      kLoopBreak: symmetry
 //      kLoopContinue: symmetry
 //      kIfBreak: symmetry
-//      kCaseFallThrough: symmetry
 //      kForward: dup general case
 
 TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_Back_SingleBlock_Back) {
@@ -10715,9 +10159,7 @@ loop {
   var_1 = 1u;
 
   continuing {
-    if (false) {
-      break;
-    }
+    break if false;
   }
 }
 var_1 = 5u;
@@ -10758,10 +10200,7 @@ loop {
   var_1 = 1u;
 
   continuing {
-    if (false) {
-    } else {
-      break;
-    }
+    break if !(false);
   }
 }
 var_1 = 5u;
@@ -11095,107 +10534,6 @@ return;
     ASSERT_EQ(expect, got);
 }
 
-TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_SwitchBreak_Fallthrough_OnTrue) {
-    auto p = parser(test::Assemble(CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpStore %var %uint_1
-     OpSelectionMerge %99 None
-     OpSwitch %selector %99 20 %20 30 %30
-
-     %20 = OpLabel
-     OpStore %var %uint_20
-     OpBranchConditional %cond %30 %99; fallthrough on true
-
-     %30 = OpLabel
-     OpStore %var %uint_30
-     OpBranch %99
-
-     %99 = OpLabel
-     OpStore %var %uint_7
-     OpReturn
-
-     OpFunctionEnd
-  )"));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_TRUE(fe.EmitBody()) << p->error();
-
-    auto ast_body = fe.ast_body();
-    auto got = test::ToString(p->program(), ast_body);
-    auto* expect = R"(var_1 = 1u;
-switch(42u) {
-  case 20u: {
-    var_1 = 20u;
-    if (false) {
-    } else {
-      break;
-    }
-    fallthrough;
-  }
-  case 30u: {
-    var_1 = 30u;
-  }
-  default: {
-  }
-}
-var_1 = 7u;
-return;
-)";
-    ASSERT_EQ(expect, got);
-}
-
-TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_SwitchBreak_Fallthrough_OnFalse) {
-    auto p = parser(test::Assemble(CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpStore %var %uint_1
-     OpSelectionMerge %99 None
-     OpSwitch %selector %99 20 %20 30 %30
-
-     %20 = OpLabel
-     OpStore %var %uint_20
-     OpBranchConditional %cond %99 %30; fallthrough on false
-
-     %30 = OpLabel
-     OpStore %var %uint_30
-     OpBranch %99
-
-     %99 = OpLabel
-     OpStore %var %uint_7
-     OpReturn
-
-     OpFunctionEnd
-  )"));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_TRUE(fe.EmitBody()) << p->error();
-
-    auto ast_body = fe.ast_body();
-    auto got = test::ToString(p->program(), ast_body);
-    auto* expect = R"(var_1 = 1u;
-switch(42u) {
-  case 20u: {
-    var_1 = 20u;
-    if (false) {
-      break;
-    }
-    fallthrough;
-  }
-  case 30u: {
-    var_1 = 30u;
-  }
-  default: {
-  }
-}
-var_1 = 7u;
-return;
-)";
-    ASSERT_EQ(expect, got);
-}
-
 TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_LoopBreak_SingleBlock_LoopBreak) {
     auto p = parser(test::Assemble(CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
@@ -11421,53 +10759,6 @@ return;
     ASSERT_EQ(expect, got);
 }
 
-TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_LoopBreak_Fallthrough_IsError) {
-    // It's an error because switch break conflicts with loop break.
-    auto p = parser(test::Assemble(CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpStore %var %uint_0
-     OpBranch %20
-
-     %20 = OpLabel
-     OpStore %var %uint_1
-     OpLoopMerge %99 %80 None
-     OpBranch %30
-
-     %30 = OpLabel
-     OpSelectionMerge %79 None
-     OpSwitch %selector %79 40 %40 50 %50
-
-     %40 = OpLabel
-     OpStore %var %uint_40
-     ; error: branch to 99 bypasses switch's merge
-     OpBranchConditional %cond %99 %50 ; loop break; fall through
-
-     %50 = OpLabel
-     OpStore %var %uint_50
-     OpBranch %79
-
-     %79 = OpLabel ; switch merge
-     OpBranch %80
-
-     %80 = OpLabel ; continue target
-     OpStore %var %uint_4
-     OpBranch %20
-
-     %99 = OpLabel
-     OpStore %var %uint_5
-     OpReturn
-
-     OpFunctionEnd
-  )"));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_FALSE(fe.EmitBody()) << p->error();
-    EXPECT_THAT(p->error(), Eq("Branch from block 40 to block 99 is an invalid exit from construct "
-                               "starting at block 30; branch bypasses merge block 79"));
-}
-
 TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_LoopBreak_Forward_OnTrue) {
     auto p = parser(test::Assemble(CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
@@ -11672,7 +10963,6 @@ return;
 
 TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_Continue_Continue_AfterHeader_Conditional) {
     // Create an intervening block so we actually require a "continue" statement
-    // instead of just an adjacent fallthrough to the continue target.
     auto p = parser(test::Assemble(CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
 
@@ -11733,9 +11023,8 @@ return;
     ASSERT_EQ(expect, got);
 }
 
-TEST_F(
-    SpvParserCFGTest,
-    EmitBody_BranchConditional_Continue_Continue_AfterHeader_Conditional_EmptyContinuing) {  // NOLINT
+TEST_F(SpvParserCFGTest,
+       EmitBody_BranchConditional_Continue_Continue_AfterHeader_Conditional_EmptyContinuing) {
     // Like the previous tests, but with an empty continuing clause.
     auto p = parser(test::Assemble(CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
@@ -11987,157 +11276,6 @@ return;
     ASSERT_EQ(expect, got);
 }
 
-TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_Continue_Fallthrough_OnTrue) {
-    auto p = parser(test::Assemble(CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpStore %var %uint_0
-     OpBranch %20
-
-     %20 = OpLabel
-     OpStore %var %uint_1
-     OpLoopMerge %99 %80 None
-     OpBranch %30
-
-     %30 = OpLabel
-     OpStore %var %uint_2
-     OpSelectionMerge %79 None
-     OpSwitch %selector %79 40 %40 50 %50
-
-     %40 = OpLabel
-     OpStore %var %uint_40
-     OpBranchConditional %cond %50 %80 ; loop continue; fall through on true
-
-     %50 = OpLabel
-     OpStore %var %uint_50
-     OpBranch %79
-
-     %79 = OpLabel ; switch merge
-     OpStore %var %uint_3
-     OpBranch %80
-
-     %80 = OpLabel ; continue target
-     OpStore %var %uint_4
-     OpBranch %20
-
-     %99 = OpLabel
-     OpStore %var %uint_5
-     OpReturn
-
-     OpFunctionEnd
-  )"));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_TRUE(fe.EmitBody()) << p->error();
-    auto ast_body = fe.ast_body();
-    auto got = test::ToString(p->program(), ast_body);
-    auto* expect = R"(var_1 = 0u;
-loop {
-  var_1 = 1u;
-  var_1 = 2u;
-  switch(42u) {
-    case 40u: {
-      var_1 = 40u;
-      if (false) {
-      } else {
-        continue;
-      }
-      fallthrough;
-    }
-    case 50u: {
-      var_1 = 50u;
-    }
-    default: {
-    }
-  }
-  var_1 = 3u;
-
-  continuing {
-    var_1 = 4u;
-  }
-}
-var_1 = 5u;
-return;
-)";
-    ASSERT_EQ(expect, got);
-}
-
-TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_Continue_Fallthrough_OnFalse) {
-    auto p = parser(test::Assemble(CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpStore %var %uint_0
-     OpBranch %20
-
-     %20 = OpLabel
-     OpStore %var %uint_1
-     OpLoopMerge %99 %80 None
-     OpBranch %30
-
-     %30 = OpLabel
-     OpStore %var %uint_2
-     OpSelectionMerge %79 None
-     OpSwitch %selector %79 40 %40 50 %50
-
-     %40 = OpLabel
-     OpStore %var %uint_40
-     OpBranchConditional %cond %80 %50 ; loop continue; fall through on false
-
-     %50 = OpLabel
-     OpStore %var %uint_50
-     OpBranch %79
-
-     %79 = OpLabel ; switch merge
-     OpStore %var %uint_3
-     OpBranch %80
-
-     %80 = OpLabel ; continue target
-     OpStore %var %uint_4
-     OpBranch %20
-
-     %99 = OpLabel
-     OpStore %var %uint_5
-     OpReturn
-
-     OpFunctionEnd
-  )"));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_TRUE(fe.EmitBody()) << p->error();
-    auto ast_body = fe.ast_body();
-    auto got = test::ToString(p->program(), ast_body);
-    auto* expect = R"(var_1 = 0u;
-loop {
-  var_1 = 1u;
-  var_1 = 2u;
-  switch(42u) {
-    case 40u: {
-      var_1 = 40u;
-      if (false) {
-        continue;
-      }
-      fallthrough;
-    }
-    case 50u: {
-      var_1 = 50u;
-    }
-    default: {
-    }
-  }
-  var_1 = 3u;
-
-  continuing {
-    var_1 = 4u;
-  }
-}
-var_1 = 5u;
-return;
-)";
-    ASSERT_EQ(expect, got);
-}
-
 TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_Continue_Forward_OnTrue) {
     auto p = parser(test::Assemble(CommonTypes() + R"(
      %100 = OpFunction %void None %voidfn
@@ -12316,91 +11454,6 @@ TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_IfBreak_IfBreak_DifferentIsE
     EXPECT_FALSE(FlowClassifyCFGEdges(&fe));
     EXPECT_THAT(p->error(), Eq("Branch from block 30 to block 99 is an invalid exit from construct "
                                "starting at block 20; branch bypasses merge block 89"));
-}
-
-TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_Fallthrough_Fallthrough_Same) {
-    auto p = parser(test::Assemble(CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpStore %var %uint_1
-     OpSelectionMerge %99 None
-     OpSwitch %selector %99 20 %20 30 %30
-
-     %20 = OpLabel
-     OpStore %var %uint_20
-     OpBranchConditional %cond %30 %30 ; fallthrough fallthrough
-
-     %30 = OpLabel
-     OpStore %var %uint_30
-     OpBranch %99
-
-     %99 = OpLabel
-     OpStore %var %uint_7
-     OpReturn
-
-     OpFunctionEnd
-  )"));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_TRUE(fe.EmitBody()) << p->error();
-
-    auto ast_body = fe.ast_body();
-    auto got = test::ToString(p->program(), ast_body);
-    auto* expect = R"(var_1 = 1u;
-switch(42u) {
-  case 20u: {
-    var_1 = 20u;
-    fallthrough;
-  }
-  case 30u: {
-    var_1 = 30u;
-  }
-  default: {
-  }
-}
-var_1 = 7u;
-return;
-)";
-    ASSERT_EQ(expect, got);
-}
-
-TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_Fallthrough_NotLastInCase_IsError) {
-    // See also
-    // ClassifyCFGEdges_Fallthrough_BranchConditionalWith_Forward_IsError.
-    auto p = parser(test::Assemble(CommonTypes() + R"(
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None
-     OpSwitch %selector %99 20 %20 40 %40
-
-     %20 = OpLabel ; case 30
-     OpSelectionMerge %39 None
-     OpBranchConditional %cond %40 %30 ; fallthrough and forward
-
-     %30 = OpLabel
-     OpBranch %39
-
-     %39 = OpLabel
-     OpBranch %99
-
-     %40 = OpLabel  ; case 40
-     OpBranch %99
-
-     %99 = OpLabel
-     OpReturn
-
-     OpFunctionEnd
-  )"));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
-    auto fe = p->function_emitter(100);
-    EXPECT_FALSE(fe.EmitBody());
-    // The weird forward branch pulls in 40 as part of the selection rather than
-    // as a case.
-    EXPECT_THAT(fe.block_order(), ElementsAre(10, 20, 40, 30, 39, 99));
-    EXPECT_THAT(p->error(),
-                Eq("Branch from 10 to 40 bypasses header 20 (dominance rule violated)"));
 }
 
 TEST_F(SpvParserCFGTest, EmitBody_BranchConditional_Forward_Forward_Same) {
@@ -13028,8 +12081,8 @@ TEST_F(SpvParserCFGTest, EmitBody_ContinueFromSingleBlockLoopToOuterLoop_IsError
     auto p = parser(test::Assemble(assembly));
     EXPECT_FALSE(p->Parse());
     EXPECT_FALSE(p->success());
-    EXPECT_THAT(p->error(), HasSubstr("block <ID> 20[%20] exits the continue headed by <ID> "
-                                      "20[%20], but not via a structured exit"))
+    EXPECT_THAT(p->error(), HasSubstr("block <ID> '20[%20]' exits the continue headed by <ID> "
+                                      "'20[%20]', but not via a structured exit"))
         << p->error();
 }
 

@@ -18,8 +18,8 @@
 #include <vector>
 
 #include "src/tint/program_builder.h"
-#include "src/tint/sem/abstract_float.h"
-#include "src/tint/sem/abstract_int.h"
+#include "src/tint/type/abstract_float.h"
+#include "src/tint/type/abstract_int.h"
 
 namespace tint::fuzzers::ast_fuzzer {
 
@@ -50,8 +50,7 @@ bool MutationWrapUnaryOperator::IsApplicable(const tint::Program& program,
         return false;
     }
 
-    const auto* expression_sem_node =
-        tint::As<sem::Expression>(program.Sem().Get(expression_ast_node));
+    const auto* expression_sem_node = program.Sem().GetVal(expression_ast_node);
 
     if (!expression_sem_node) {
         // Semantic information for the expression ast node is not present
@@ -94,18 +93,18 @@ protobufs::Mutation MutationWrapUnaryOperator::ToMessage() const {
 }
 
 std::vector<ast::UnaryOp> MutationWrapUnaryOperator::GetValidUnaryWrapper(
-    const sem::Expression& expr) {
+    const sem::ValueExpression& expr) {
     const auto* expr_type = expr.Type();
     if (expr_type->is_bool_scalar_or_vector()) {
         return {ast::UnaryOp::kNot};
     }
 
-    if (expr_type->is_signed_scalar_or_vector() ||
+    if (expr_type->is_signed_integer_scalar_or_vector() ||
         expr_type->is_abstract_integer_scalar_or_vector()) {
         return {ast::UnaryOp::kNegation, ast::UnaryOp::kComplement};
     }
 
-    if (expr_type->is_unsigned_scalar_or_vector()) {
+    if (expr_type->is_unsigned_integer_scalar_or_vector()) {
         return {ast::UnaryOp::kComplement};
     }
 

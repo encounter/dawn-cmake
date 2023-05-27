@@ -43,13 +43,15 @@ using alias = builder::alias<T>;
 struct ResolverInferredTypeTest : public resolver::TestHelper, public testing::Test {};
 
 struct Params {
-    builder::ast_expr_func_ptr create_value;
+    // builder::ast_expr_func_ptr_default_arg create_value;
+    builder::ast_expr_from_double_func_ptr create_value;
     builder::sem_type_func_ptr create_expected_type;
 };
 
 template <typename T>
 constexpr Params ParamsFor() {
-    return Params{DataType<T>::Expr, DataType<T>::Sem};
+    // return Params{builder::CreateExprWithDefaultArg<T>(), DataType<T>::Sem};
+    return Params{DataType<T>::ExprFromDouble, DataType<T>::Sem};
 }
 
 Params all_cases[] = {
@@ -80,7 +82,7 @@ TEST_P(ResolverInferredTypeParamTest, GlobalConst_Pass) {
 
     auto* expected_type = params.create_expected_type(*this);
 
-    // const a = <type constructor>;
+    // const a = <type initializer>;
     auto* ctor_expr = params.create_value(*this, 0);
     auto* a = GlobalConst("a", ctor_expr);
 
@@ -93,9 +95,9 @@ TEST_P(ResolverInferredTypeParamTest, GlobalVar_Pass) {
 
     auto* expected_type = params.create_expected_type(*this);
 
-    // var a = <type constructor>;
+    // var a = <type initializer>;
     auto* ctor_expr = params.create_value(*this, 0);
-    auto* var = GlobalVar("a", ast::StorageClass::kPrivate, ctor_expr);
+    auto* var = GlobalVar("a", builtin::AddressSpace::kPrivate, ctor_expr);
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
     EXPECT_EQ(TypeOf(var)->UnwrapRef(), expected_type);
@@ -106,7 +108,7 @@ TEST_P(ResolverInferredTypeParamTest, LocalLet_Pass) {
 
     auto* expected_type = params.create_expected_type(*this);
 
-    // let a = <type constructor>;
+    // let a = <type initializer>;
     auto* ctor_expr = params.create_value(*this, 0);
     auto* var = Let("a", ctor_expr);
     WrapInFunction(var);
@@ -120,9 +122,9 @@ TEST_P(ResolverInferredTypeParamTest, LocalVar_Pass) {
 
     auto* expected_type = params.create_expected_type(*this);
 
-    // var a = <type constructor>;
+    // var a = <type initializer>;
     auto* ctor_expr = params.create_value(*this, 0);
-    auto* var = Var("a", ast::StorageClass::kFunction, ctor_expr);
+    auto* var = Var("a", builtin::AddressSpace::kFunction, ctor_expr);
     WrapInFunction(var);
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
@@ -132,11 +134,12 @@ TEST_P(ResolverInferredTypeParamTest, LocalVar_Pass) {
 INSTANTIATE_TEST_SUITE_P(ResolverTest, ResolverInferredTypeParamTest, testing::ValuesIn(all_cases));
 
 TEST_F(ResolverInferredTypeTest, InferArray_Pass) {
-    auto* type = ty.array(ty.u32(), 10_u);
-    auto* expected_type = create<sem::Array>(create<sem::U32>(), 10u, 4u, 4u * 10u, 4u, 4u);
+    auto type = ty.array<u32, 10>();
+    auto* expected_type = create<type::Array>(
+        create<type::U32>(), create<type::ConstantArrayCount>(10u), 4u, 4u * 10u, 4u, 4u);
 
-    auto* ctor_expr = Construct(type);
-    auto* var = Var("a", ast::StorageClass::kFunction, ctor_expr);
+    auto* ctor_expr = Call(type);
+    auto* var = Var("a", builtin::AddressSpace::kFunction, ctor_expr);
     WrapInFunction(var);
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
@@ -147,15 +150,15 @@ TEST_F(ResolverInferredTypeTest, InferStruct_Pass) {
     auto* member = Member("x", ty.i32());
     auto* str = Structure("S", utils::Vector{member});
 
-    auto* expected_type =
-        create<sem::Struct>(str, str->name,
-                            sem::StructMemberList{create<sem::StructMember>(
-                                member, member->symbol, create<sem::I32>(), 0u, 0u, 0u, 4u)},
-                            0u, 4u, 4u);
+    auto* expected_type = create<sem::Struct>(
+        str, str->name->symbol,
+        utils::Vector{create<sem::StructMember>(member, member->name->symbol, create<type::I32>(),
+                                                0u, 0u, 0u, 4u, type::StructMemberAttributes{})},
+        0u, 4u, 4u);
 
-    auto* ctor_expr = Construct(ty.Of(str));
+    auto* ctor_expr = Call(ty.Of(str));
 
-    auto* var = Var("a", ast::StorageClass::kFunction, ctor_expr);
+    auto* var = Var("a", builtin::AddressSpace::kFunction, ctor_expr);
     WrapInFunction(var);
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();

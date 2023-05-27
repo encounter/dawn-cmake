@@ -1,11 +1,12 @@
 #version 310 es
 
-vec4 tint_atanh(vec4 x) {
-  return mix(atanh(x), vec4(0.0f), greaterThanEqual(x, vec4(1.0f)));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec4 inner;
+} prevent_dce;
 
 void atanh_f3e01b() {
-  vec4 res = tint_atanh(vec4(1.0f));
+  vec4 res = vec4(0.54930615425109863281f);
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -22,14 +23,15 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-vec4 tint_atanh(vec4 x) {
-  return mix(atanh(x), vec4(0.0f), greaterThanEqual(x, vec4(1.0f)));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec4 inner;
+} prevent_dce;
 
 void atanh_f3e01b() {
-  vec4 res = tint_atanh(vec4(1.0f));
+  vec4 res = vec4(0.54930615425109863281f);
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -42,12 +44,13 @@ void main() {
 }
 #version 310 es
 
-vec4 tint_atanh(vec4 x) {
-  return mix(atanh(x), vec4(0.0f), greaterThanEqual(x, vec4(1.0f)));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec4 inner;
+} prevent_dce;
 
 void atanh_f3e01b() {
-  vec4 res = tint_atanh(vec4(1.0f));
+  vec4 res = vec4(0.54930615425109863281f);
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

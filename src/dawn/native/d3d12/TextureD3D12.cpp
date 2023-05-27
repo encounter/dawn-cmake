@@ -22,14 +22,16 @@
 #include "dawn/native/DynamicUploader.h"
 #include "dawn/native/EnumMaskIterator.h"
 #include "dawn/native/Error.h"
+#include "dawn/native/IntegerTypes.h"
+#include "dawn/native/ResourceMemoryAllocation.h"
+#include "dawn/native/ToBackend.h"
+#include "dawn/native/d3d/D3DError.h"
 #include "dawn/native/d3d12/BufferD3D12.h"
 #include "dawn/native/d3d12/CommandRecordingContext.h"
-#include "dawn/native/d3d12/D3D11on12Util.h"
-#include "dawn/native/d3d12/D3D12Error.h"
 #include "dawn/native/d3d12/DeviceD3D12.h"
+#include "dawn/native/d3d12/Forward.h"
 #include "dawn/native/d3d12/HeapD3D12.h"
 #include "dawn/native/d3d12/ResourceAllocatorManagerD3D12.h"
-#include "dawn/native/d3d12/StagingBufferD3D12.h"
 #include "dawn/native/d3d12/StagingDescriptorAllocatorD3D12.h"
 #include "dawn/native/d3d12/TextureCopySplitter.h"
 #include "dawn/native/d3d12/UtilsD3D12.h"
@@ -108,345 +110,10 @@ D3D12_RESOURCE_DIMENSION D3D12TextureDimension(wgpu::TextureDimension dimension)
     }
 }
 
-DXGI_FORMAT D3D12TypelessTextureFormat(wgpu::TextureFormat format) {
-    switch (format) {
-        case wgpu::TextureFormat::R8Unorm:
-        case wgpu::TextureFormat::R8Snorm:
-        case wgpu::TextureFormat::R8Uint:
-        case wgpu::TextureFormat::R8Sint:
-            return DXGI_FORMAT_R8_TYPELESS;
-
-        case wgpu::TextureFormat::R16Uint:
-        case wgpu::TextureFormat::R16Sint:
-        case wgpu::TextureFormat::R16Float:
-        case wgpu::TextureFormat::Depth16Unorm:
-            return DXGI_FORMAT_R16_TYPELESS;
-
-        case wgpu::TextureFormat::RG8Unorm:
-        case wgpu::TextureFormat::RG8Snorm:
-        case wgpu::TextureFormat::RG8Uint:
-        case wgpu::TextureFormat::RG8Sint:
-            return DXGI_FORMAT_R8G8_TYPELESS;
-
-        case wgpu::TextureFormat::R32Uint:
-        case wgpu::TextureFormat::R32Sint:
-        case wgpu::TextureFormat::R32Float:
-            return DXGI_FORMAT_R32_TYPELESS;
-
-        case wgpu::TextureFormat::RG16Uint:
-        case wgpu::TextureFormat::RG16Sint:
-        case wgpu::TextureFormat::RG16Float:
-            return DXGI_FORMAT_R16G16_TYPELESS;
-
-        case wgpu::TextureFormat::RGBA8Unorm:
-        case wgpu::TextureFormat::RGBA8UnormSrgb:
-        case wgpu::TextureFormat::RGBA8Snorm:
-        case wgpu::TextureFormat::RGBA8Uint:
-        case wgpu::TextureFormat::RGBA8Sint:
-            return DXGI_FORMAT_R8G8B8A8_TYPELESS;
-
-        case wgpu::TextureFormat::BGRA8Unorm:
-        case wgpu::TextureFormat::BGRA8UnormSrgb:
-            return DXGI_FORMAT_B8G8R8A8_TYPELESS;
-
-        case wgpu::TextureFormat::RGB10A2Unorm:
-            return DXGI_FORMAT_R10G10B10A2_TYPELESS;
-
-        case wgpu::TextureFormat::RG11B10Ufloat:
-            return DXGI_FORMAT_R11G11B10_FLOAT;
-        case wgpu::TextureFormat::RGB9E5Ufloat:
-            return DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
-
-        case wgpu::TextureFormat::RG32Uint:
-        case wgpu::TextureFormat::RG32Sint:
-        case wgpu::TextureFormat::RG32Float:
-            return DXGI_FORMAT_R32G32_TYPELESS;
-
-        case wgpu::TextureFormat::RGBA16Uint:
-        case wgpu::TextureFormat::RGBA16Sint:
-        case wgpu::TextureFormat::RGBA16Float:
-            return DXGI_FORMAT_R16G16B16A16_TYPELESS;
-
-        case wgpu::TextureFormat::RGBA32Uint:
-        case wgpu::TextureFormat::RGBA32Sint:
-        case wgpu::TextureFormat::RGBA32Float:
-            return DXGI_FORMAT_R32G32B32A32_TYPELESS;
-
-        case wgpu::TextureFormat::Depth32Float:
-        case wgpu::TextureFormat::Depth24Plus:
-            return DXGI_FORMAT_R32_TYPELESS;
-
-        // DXGI_FORMAT_D24_UNORM_S8_UINT is the smallest format supported on D3D12 that has stencil,
-        // for which the typeless equivalent is DXGI_FORMAT_R24G8_TYPELESS.
-        case wgpu::TextureFormat::Stencil8:
-            return DXGI_FORMAT_R24G8_TYPELESS;
-        case wgpu::TextureFormat::Depth24PlusStencil8:
-        case wgpu::TextureFormat::Depth32FloatStencil8:
-            return DXGI_FORMAT_R32G8X24_TYPELESS;
-
-        case wgpu::TextureFormat::BC1RGBAUnorm:
-        case wgpu::TextureFormat::BC1RGBAUnormSrgb:
-            return DXGI_FORMAT_BC1_TYPELESS;
-
-        case wgpu::TextureFormat::BC2RGBAUnorm:
-        case wgpu::TextureFormat::BC2RGBAUnormSrgb:
-            return DXGI_FORMAT_BC2_TYPELESS;
-
-        case wgpu::TextureFormat::BC3RGBAUnorm:
-        case wgpu::TextureFormat::BC3RGBAUnormSrgb:
-            return DXGI_FORMAT_BC3_TYPELESS;
-
-        case wgpu::TextureFormat::BC4RSnorm:
-        case wgpu::TextureFormat::BC4RUnorm:
-            return DXGI_FORMAT_BC4_TYPELESS;
-
-        case wgpu::TextureFormat::BC5RGSnorm:
-        case wgpu::TextureFormat::BC5RGUnorm:
-            return DXGI_FORMAT_BC5_TYPELESS;
-
-        case wgpu::TextureFormat::BC6HRGBFloat:
-        case wgpu::TextureFormat::BC6HRGBUfloat:
-            return DXGI_FORMAT_BC6H_TYPELESS;
-
-        case wgpu::TextureFormat::BC7RGBAUnorm:
-        case wgpu::TextureFormat::BC7RGBAUnormSrgb:
-            return DXGI_FORMAT_BC7_TYPELESS;
-
-        case wgpu::TextureFormat::ETC2RGB8Unorm:
-        case wgpu::TextureFormat::ETC2RGB8UnormSrgb:
-        case wgpu::TextureFormat::ETC2RGB8A1Unorm:
-        case wgpu::TextureFormat::ETC2RGB8A1UnormSrgb:
-        case wgpu::TextureFormat::ETC2RGBA8Unorm:
-        case wgpu::TextureFormat::ETC2RGBA8UnormSrgb:
-        case wgpu::TextureFormat::EACR11Unorm:
-        case wgpu::TextureFormat::EACR11Snorm:
-        case wgpu::TextureFormat::EACRG11Unorm:
-        case wgpu::TextureFormat::EACRG11Snorm:
-
-        case wgpu::TextureFormat::ASTC4x4Unorm:
-        case wgpu::TextureFormat::ASTC4x4UnormSrgb:
-        case wgpu::TextureFormat::ASTC5x4Unorm:
-        case wgpu::TextureFormat::ASTC5x4UnormSrgb:
-        case wgpu::TextureFormat::ASTC5x5Unorm:
-        case wgpu::TextureFormat::ASTC5x5UnormSrgb:
-        case wgpu::TextureFormat::ASTC6x5Unorm:
-        case wgpu::TextureFormat::ASTC6x5UnormSrgb:
-        case wgpu::TextureFormat::ASTC6x6Unorm:
-        case wgpu::TextureFormat::ASTC6x6UnormSrgb:
-        case wgpu::TextureFormat::ASTC8x5Unorm:
-        case wgpu::TextureFormat::ASTC8x5UnormSrgb:
-        case wgpu::TextureFormat::ASTC8x6Unorm:
-        case wgpu::TextureFormat::ASTC8x6UnormSrgb:
-        case wgpu::TextureFormat::ASTC8x8Unorm:
-        case wgpu::TextureFormat::ASTC8x8UnormSrgb:
-        case wgpu::TextureFormat::ASTC10x5Unorm:
-        case wgpu::TextureFormat::ASTC10x5UnormSrgb:
-        case wgpu::TextureFormat::ASTC10x6Unorm:
-        case wgpu::TextureFormat::ASTC10x6UnormSrgb:
-        case wgpu::TextureFormat::ASTC10x8Unorm:
-        case wgpu::TextureFormat::ASTC10x8UnormSrgb:
-        case wgpu::TextureFormat::ASTC10x10Unorm:
-        case wgpu::TextureFormat::ASTC10x10UnormSrgb:
-        case wgpu::TextureFormat::ASTC12x10Unorm:
-        case wgpu::TextureFormat::ASTC12x10UnormSrgb:
-        case wgpu::TextureFormat::ASTC12x12Unorm:
-        case wgpu::TextureFormat::ASTC12x12UnormSrgb:
-
-        case wgpu::TextureFormat::R8BG8Biplanar420Unorm:
-        case wgpu::TextureFormat::Undefined:
-            UNREACHABLE();
-    }
-}
-
 }  // namespace
 
-DXGI_FORMAT D3D12TextureFormat(wgpu::TextureFormat format) {
-    switch (format) {
-        case wgpu::TextureFormat::R8Unorm:
-            return DXGI_FORMAT_R8_UNORM;
-        case wgpu::TextureFormat::R8Snorm:
-            return DXGI_FORMAT_R8_SNORM;
-        case wgpu::TextureFormat::R8Uint:
-            return DXGI_FORMAT_R8_UINT;
-        case wgpu::TextureFormat::R8Sint:
-            return DXGI_FORMAT_R8_SINT;
-
-        case wgpu::TextureFormat::R16Uint:
-            return DXGI_FORMAT_R16_UINT;
-        case wgpu::TextureFormat::R16Sint:
-            return DXGI_FORMAT_R16_SINT;
-        case wgpu::TextureFormat::R16Float:
-            return DXGI_FORMAT_R16_FLOAT;
-        case wgpu::TextureFormat::RG8Unorm:
-            return DXGI_FORMAT_R8G8_UNORM;
-        case wgpu::TextureFormat::RG8Snorm:
-            return DXGI_FORMAT_R8G8_SNORM;
-        case wgpu::TextureFormat::RG8Uint:
-            return DXGI_FORMAT_R8G8_UINT;
-        case wgpu::TextureFormat::RG8Sint:
-            return DXGI_FORMAT_R8G8_SINT;
-
-        case wgpu::TextureFormat::R32Uint:
-            return DXGI_FORMAT_R32_UINT;
-        case wgpu::TextureFormat::R32Sint:
-            return DXGI_FORMAT_R32_SINT;
-        case wgpu::TextureFormat::R32Float:
-            return DXGI_FORMAT_R32_FLOAT;
-        case wgpu::TextureFormat::RG16Uint:
-            return DXGI_FORMAT_R16G16_UINT;
-        case wgpu::TextureFormat::RG16Sint:
-            return DXGI_FORMAT_R16G16_SINT;
-        case wgpu::TextureFormat::RG16Float:
-            return DXGI_FORMAT_R16G16_FLOAT;
-        case wgpu::TextureFormat::RGBA8Unorm:
-            return DXGI_FORMAT_R8G8B8A8_UNORM;
-        case wgpu::TextureFormat::RGBA8UnormSrgb:
-            return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-        case wgpu::TextureFormat::RGBA8Snorm:
-            return DXGI_FORMAT_R8G8B8A8_SNORM;
-        case wgpu::TextureFormat::RGBA8Uint:
-            return DXGI_FORMAT_R8G8B8A8_UINT;
-        case wgpu::TextureFormat::RGBA8Sint:
-            return DXGI_FORMAT_R8G8B8A8_SINT;
-        case wgpu::TextureFormat::BGRA8Unorm:
-            return DXGI_FORMAT_B8G8R8A8_UNORM;
-        case wgpu::TextureFormat::BGRA8UnormSrgb:
-            return DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
-        case wgpu::TextureFormat::RGB10A2Unorm:
-            return DXGI_FORMAT_R10G10B10A2_UNORM;
-        case wgpu::TextureFormat::RG11B10Ufloat:
-            return DXGI_FORMAT_R11G11B10_FLOAT;
-        case wgpu::TextureFormat::RGB9E5Ufloat:
-            return DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
-
-        case wgpu::TextureFormat::RG32Uint:
-            return DXGI_FORMAT_R32G32_UINT;
-        case wgpu::TextureFormat::RG32Sint:
-            return DXGI_FORMAT_R32G32_SINT;
-        case wgpu::TextureFormat::RG32Float:
-            return DXGI_FORMAT_R32G32_FLOAT;
-        case wgpu::TextureFormat::RGBA16Uint:
-            return DXGI_FORMAT_R16G16B16A16_UINT;
-        case wgpu::TextureFormat::RGBA16Sint:
-            return DXGI_FORMAT_R16G16B16A16_SINT;
-        case wgpu::TextureFormat::RGBA16Float:
-            return DXGI_FORMAT_R16G16B16A16_FLOAT;
-
-        case wgpu::TextureFormat::RGBA32Uint:
-            return DXGI_FORMAT_R32G32B32A32_UINT;
-        case wgpu::TextureFormat::RGBA32Sint:
-            return DXGI_FORMAT_R32G32B32A32_SINT;
-        case wgpu::TextureFormat::RGBA32Float:
-            return DXGI_FORMAT_R32G32B32A32_FLOAT;
-
-        case wgpu::TextureFormat::Depth16Unorm:
-            return DXGI_FORMAT_D16_UNORM;
-        case wgpu::TextureFormat::Depth32Float:
-        case wgpu::TextureFormat::Depth24Plus:
-            return DXGI_FORMAT_D32_FLOAT;
-        // DXGI_FORMAT_D24_UNORM_S8_UINT is the smallest format supported on D3D12 that has stencil.
-        case wgpu::TextureFormat::Stencil8:
-            return DXGI_FORMAT_D24_UNORM_S8_UINT;
-        case wgpu::TextureFormat::Depth24PlusStencil8:
-        case wgpu::TextureFormat::Depth32FloatStencil8:
-            return DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
-
-        case wgpu::TextureFormat::BC1RGBAUnorm:
-            return DXGI_FORMAT_BC1_UNORM;
-        case wgpu::TextureFormat::BC1RGBAUnormSrgb:
-            return DXGI_FORMAT_BC1_UNORM_SRGB;
-        case wgpu::TextureFormat::BC2RGBAUnorm:
-            return DXGI_FORMAT_BC2_UNORM;
-        case wgpu::TextureFormat::BC2RGBAUnormSrgb:
-            return DXGI_FORMAT_BC2_UNORM_SRGB;
-        case wgpu::TextureFormat::BC3RGBAUnorm:
-            return DXGI_FORMAT_BC3_UNORM;
-        case wgpu::TextureFormat::BC3RGBAUnormSrgb:
-            return DXGI_FORMAT_BC3_UNORM_SRGB;
-        case wgpu::TextureFormat::BC4RSnorm:
-            return DXGI_FORMAT_BC4_SNORM;
-        case wgpu::TextureFormat::BC4RUnorm:
-            return DXGI_FORMAT_BC4_UNORM;
-        case wgpu::TextureFormat::BC5RGSnorm:
-            return DXGI_FORMAT_BC5_SNORM;
-        case wgpu::TextureFormat::BC5RGUnorm:
-            return DXGI_FORMAT_BC5_UNORM;
-        case wgpu::TextureFormat::BC6HRGBFloat:
-            return DXGI_FORMAT_BC6H_SF16;
-        case wgpu::TextureFormat::BC6HRGBUfloat:
-            return DXGI_FORMAT_BC6H_UF16;
-        case wgpu::TextureFormat::BC7RGBAUnorm:
-            return DXGI_FORMAT_BC7_UNORM;
-        case wgpu::TextureFormat::BC7RGBAUnormSrgb:
-            return DXGI_FORMAT_BC7_UNORM_SRGB;
-
-        case wgpu::TextureFormat::R8BG8Biplanar420Unorm:
-            return DXGI_FORMAT_NV12;
-
-        case wgpu::TextureFormat::ETC2RGB8Unorm:
-        case wgpu::TextureFormat::ETC2RGB8UnormSrgb:
-        case wgpu::TextureFormat::ETC2RGB8A1Unorm:
-        case wgpu::TextureFormat::ETC2RGB8A1UnormSrgb:
-        case wgpu::TextureFormat::ETC2RGBA8Unorm:
-        case wgpu::TextureFormat::ETC2RGBA8UnormSrgb:
-        case wgpu::TextureFormat::EACR11Unorm:
-        case wgpu::TextureFormat::EACR11Snorm:
-        case wgpu::TextureFormat::EACRG11Unorm:
-        case wgpu::TextureFormat::EACRG11Snorm:
-
-        case wgpu::TextureFormat::ASTC4x4Unorm:
-        case wgpu::TextureFormat::ASTC4x4UnormSrgb:
-        case wgpu::TextureFormat::ASTC5x4Unorm:
-        case wgpu::TextureFormat::ASTC5x4UnormSrgb:
-        case wgpu::TextureFormat::ASTC5x5Unorm:
-        case wgpu::TextureFormat::ASTC5x5UnormSrgb:
-        case wgpu::TextureFormat::ASTC6x5Unorm:
-        case wgpu::TextureFormat::ASTC6x5UnormSrgb:
-        case wgpu::TextureFormat::ASTC6x6Unorm:
-        case wgpu::TextureFormat::ASTC6x6UnormSrgb:
-        case wgpu::TextureFormat::ASTC8x5Unorm:
-        case wgpu::TextureFormat::ASTC8x5UnormSrgb:
-        case wgpu::TextureFormat::ASTC8x6Unorm:
-        case wgpu::TextureFormat::ASTC8x6UnormSrgb:
-        case wgpu::TextureFormat::ASTC8x8Unorm:
-        case wgpu::TextureFormat::ASTC8x8UnormSrgb:
-        case wgpu::TextureFormat::ASTC10x5Unorm:
-        case wgpu::TextureFormat::ASTC10x5UnormSrgb:
-        case wgpu::TextureFormat::ASTC10x6Unorm:
-        case wgpu::TextureFormat::ASTC10x6UnormSrgb:
-        case wgpu::TextureFormat::ASTC10x8Unorm:
-        case wgpu::TextureFormat::ASTC10x8UnormSrgb:
-        case wgpu::TextureFormat::ASTC10x10Unorm:
-        case wgpu::TextureFormat::ASTC10x10UnormSrgb:
-        case wgpu::TextureFormat::ASTC12x10Unorm:
-        case wgpu::TextureFormat::ASTC12x10UnormSrgb:
-        case wgpu::TextureFormat::ASTC12x12Unorm:
-        case wgpu::TextureFormat::ASTC12x12UnormSrgb:
-
-        case wgpu::TextureFormat::Undefined:
-            UNREACHABLE();
-    }
-}
-
-MaybeError ValidateTextureDescriptorCanBeWrapped(const TextureDescriptor* descriptor) {
-    DAWN_INVALID_IF(descriptor->dimension != wgpu::TextureDimension::e2D,
-                    "Texture dimension (%s) is not %s.", descriptor->dimension,
-                    wgpu::TextureDimension::e2D);
-
-    DAWN_INVALID_IF(descriptor->mipLevelCount != 1, "Mip level count (%u) is not 1.",
-                    descriptor->mipLevelCount);
-
-    DAWN_INVALID_IF(descriptor->size.depthOrArrayLayers != 1, "Array layer count (%u) is not 1.",
-                    descriptor->size.depthOrArrayLayers);
-
-    DAWN_INVALID_IF(descriptor->sampleCount != 1, "Sample count (%u) is not 1.",
-                    descriptor->sampleCount);
-
-    return {};
-}
-
-MaybeError ValidateD3D12TextureCanBeWrapped(ID3D12Resource* d3d12Resource,
-                                            const TextureDescriptor* dawnDescriptor) {
+MaybeError ValidateTextureCanBeWrapped(ID3D12Resource* d3d12Resource,
+                                       const TextureDescriptor* dawnDescriptor) {
     const D3D12_RESOURCE_DESC d3dDescriptor = d3d12Resource->GetDesc();
     DAWN_INVALID_IF(
         (dawnDescriptor->size.width != d3dDescriptor.Width) ||
@@ -457,7 +124,7 @@ MaybeError ValidateD3D12TextureCanBeWrapped(ID3D12Resource* d3d12Resource,
         d3dDescriptor.Width, d3dDescriptor.Height, dawnDescriptor->size.width,
         dawnDescriptor->size.height, dawnDescriptor->size.depthOrArrayLayers);
 
-    const DXGI_FORMAT dxgiFormatFromDescriptor = D3D12TextureFormat(dawnDescriptor->format);
+    const DXGI_FORMAT dxgiFormatFromDescriptor = d3d::DXGITextureFormat(dawnDescriptor->format);
     DAWN_INVALID_IF(dxgiFormatFromDescriptor != d3dDescriptor.Format,
                     "D3D12 texture format (%x) is not compatible with Dawn descriptor format (%s).",
                     d3dDescriptor.Format, dawnDescriptor->format);
@@ -476,7 +143,7 @@ MaybeError ValidateD3D12TextureCanBeWrapped(ID3D12Resource* d3d12Resource,
 }
 
 // https://docs.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_shared_resource_compatibility_tier
-MaybeError ValidateD3D12VideoTextureCanBeShared(Device* device, DXGI_FORMAT textureFormat) {
+MaybeError ValidateVideoTextureCanBeShared(Device* device, DXGI_FORMAT textureFormat) {
     const bool supportsSharedResourceCapabilityTier1 =
         device->GetDeviceInfo().supportsSharedResourceCapabilityTier1;
     switch (textureFormat) {
@@ -490,7 +157,7 @@ MaybeError ValidateD3D12VideoTextureCanBeShared(Device* device, DXGI_FORMAT text
             break;
     }
 
-    return DAWN_FORMAT_VALIDATION_ERROR("DXGI format does not support cross-API sharing.");
+    return DAWN_VALIDATION_ERROR("DXGI format does not support cross-API sharing.");
 }
 
 // static
@@ -506,21 +173,17 @@ ResultOrError<Ref<Texture>> Texture::Create(Device* device, const TextureDescrip
 }
 
 // static
-ResultOrError<Ref<Texture>> Texture::CreateExternalImage(
-    Device* device,
-    const TextureDescriptor* descriptor,
-    ComPtr<ID3D12Resource> d3d12Texture,
-    ComPtr<ID3D12Fence> d3d12Fence,
-    Ref<D3D11on12ResourceCacheEntry> d3d11on12Resource,
-    uint64_t fenceWaitValue,
-    uint64_t fenceSignalValue,
-    bool isSwapChainTexture,
-    bool isInitialized) {
+ResultOrError<Ref<Texture>> Texture::CreateExternalImage(Device* device,
+                                                         const TextureDescriptor* descriptor,
+                                                         ComPtr<IUnknown> d3dTexture,
+                                                         std::vector<Ref<d3d::Fence>> waitFences,
+                                                         bool isSwapChainTexture,
+                                                         bool isInitialized) {
     Ref<Texture> dawnTexture =
         AcquireRef(new Texture(device, descriptor, TextureState::OwnedExternal));
-    DAWN_TRY(dawnTexture->InitializeAsExternalTexture(
-        std::move(d3d12Texture), std::move(d3d12Fence), std::move(d3d11on12Resource),
-        fenceWaitValue, fenceSignalValue, isSwapChainTexture));
+
+    DAWN_TRY(dawnTexture->InitializeAsExternalTexture(std::move(d3dTexture), std::move(waitFences),
+                                                      isSwapChainTexture));
 
     // Importing a multi-planar format must be initialized. This is required because
     // a shared multi-planar format cannot be initialized by Dawn.
@@ -544,12 +207,12 @@ ResultOrError<Ref<Texture>> Texture::Create(Device* device,
     return std::move(dawnTexture);
 }
 
-MaybeError Texture::InitializeAsExternalTexture(ComPtr<ID3D12Resource> d3d12Texture,
-                                                ComPtr<ID3D12Fence> d3d12Fence,
-                                                Ref<D3D11on12ResourceCacheEntry> d3d11on12Resource,
-                                                uint64_t fenceWaitValue,
-                                                uint64_t fenceSignalValue,
+MaybeError Texture::InitializeAsExternalTexture(ComPtr<IUnknown> d3dTexture,
+                                                std::vector<Ref<d3d::Fence>> waitFences,
                                                 bool isSwapChainTexture) {
+    ComPtr<ID3D12Resource> d3d12Texture;
+    DAWN_TRY(CheckHRESULT(d3dTexture.As(&d3d12Texture), "texture is not a valid ID3D12Resource"));
+
     D3D12_RESOURCE_DESC desc = d3d12Texture->GetDesc();
     mD3D12ResourceFlags = desc.Flags;
 
@@ -560,10 +223,7 @@ MaybeError Texture::InitializeAsExternalTexture(ComPtr<ID3D12Resource> d3d12Text
     // memory management.
     mResourceAllocation = {info, 0, std::move(d3d12Texture), nullptr};
 
-    mD3D12Fence = std::move(d3d12Fence);
-    mD3D11on12Resource = std::move(d3d11on12Resource);
-    mFenceWaitValue = fenceWaitValue;
-    mFenceSignalValue = fenceSignalValue;
+    mWaitFences = std::move(waitFences);
     mSwapChainTexture = isSwapChainTexture;
 
     SetLabelHelper("Dawn_ExternalTexture");
@@ -597,8 +257,9 @@ MaybeError Texture::InitializeAsInternalTexture() {
         (GetFormat().HasDepthOrStencil() &&
          (GetInternalUsage() & wgpu::TextureUsage::TextureBinding) != 0);
 
-    DXGI_FORMAT dxgiFormat = needsTypelessFormat ? D3D12TypelessTextureFormat(GetFormat().format)
-                                                 : D3D12TextureFormat(GetFormat().format);
+    DXGI_FORMAT dxgiFormat = needsTypelessFormat
+                                 ? d3d::DXGITypelessTextureFormat(GetFormat().format)
+                                 : d3d::DXGITextureFormat(GetFormat().format);
 
     resourceDescriptor.MipLevels = static_cast<UINT16>(GetNumMipLevels());
     resourceDescriptor.Format = dxgiFormat;
@@ -608,9 +269,19 @@ MaybeError Texture::InitializeAsInternalTexture() {
     resourceDescriptor.Flags = D3D12ResourceFlags(GetInternalUsage(), GetFormat());
     mD3D12ResourceFlags = resourceDescriptor.Flags;
 
+    uint32_t bytesPerBlock = 0;
+    if (GetFormat().IsColor()) {
+        bytesPerBlock = GetFormat().GetAspectInfo(wgpu::TextureAspect::All).block.byteSize;
+    }
+    bool forceAllocateAsCommittedResource =
+        (device->IsToggleEnabled(
+            Toggle::DisableSubAllocationFor2DTextureWithCopyDstOrRenderAttachment)) &&
+        GetDimension() == wgpu::TextureDimension::e2D &&
+        (GetInternalUsage() & (wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::RenderAttachment));
     DAWN_TRY_ASSIGN(mResourceAllocation,
                     device->AllocateMemory(D3D12_HEAP_TYPE_DEFAULT, resourceDescriptor,
-                                           D3D12_RESOURCE_STATE_COMMON));
+                                           D3D12_RESOURCE_STATE_COMMON, bytesPerBlock,
+                                           forceAllocateAsCommittedResource));
 
     SetLabelImpl();
 
@@ -645,61 +316,47 @@ MaybeError Texture::InitializeAsSwapChainTexture(ComPtr<ID3D12Resource> d3d12Tex
 }
 
 Texture::Texture(Device* device, const TextureDescriptor* descriptor, TextureState state)
-    : TextureBase(device, descriptor, state),
+    : Base(device, descriptor, state),
       mSubresourceStateAndDecay(
           GetFormat().aspects,
           GetArrayLayers(),
           GetNumMipLevels(),
           {D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_COMMON, kMaxExecutionSerial, false}) {}
 
-Texture::~Texture() {}
+Texture::~Texture() = default;
 
 void Texture::DestroyImpl() {
     TextureBase::DestroyImpl();
-
-    Device* device = ToBackend(GetDevice());
-
-    // In PIX's D3D12-only mode, there is no way to determine frame boundaries
-    // for WebGPU since Dawn does not manage DXGI swap chains. Without assistance,
-    // PIX will wait forever for a present that never happens.
-    // If we know we're dealing with a swapbuffer texture, inform PIX we've
-    // "presented" the texture so it can determine frame boundaries and use its
-    // contents for the UI.
-    if (mSwapChainTexture) {
-        ID3D12SharingContract* d3dSharingContract = device->GetSharingContract();
-        if (d3dSharingContract != nullptr) {
-            d3dSharingContract->Present(mResourceAllocation.GetD3D12Resource(), 0, 0);
-        }
-    }
-
-    device->DeallocateMemory(mResourceAllocation);
-
-    // Now that we've deallocated the memory, the texture is no longer a swap chain texture.
-    // We can set mSwapChainTexture to false to avoid passing a nullptr to
-    // ID3D12SharingContract::Present.
+    ToBackend(GetDevice())->DeallocateMemory(mResourceAllocation);
+    // Set mSwapChainTexture to false to prevent ever calling ID3D12SharingContract::Present again.
     mSwapChainTexture = false;
+}
 
-    // Signal the fence on destroy after all uses of the texture.
-    if (mD3D12Fence != nullptr && mFenceSignalValue != 0) {
-        // Enqueue a fence wait if we haven't already; otherwise the fence signal will be racy.
-        if (mFenceWaitValue != UINT64_MAX) {
-            device->ConsumedError(
-                CheckHRESULT(device->GetCommandQueue()->Wait(mD3D12Fence.Get(), mFenceWaitValue),
-                             "D3D12 fence wait"));
+ResultOrError<ExecutionSerial> Texture::EndAccess() {
+    Device* device = ToBackend(GetDevice());
+    // Synchronize if texture access wasn't synchronized already due to ExecuteCommandLists.
+    if (!mSignalFenceValue.has_value()) {
+        // Needed to ensure that command allocator doesn't get destroyed before pending commands
+        // are submitted due to calling NextSerial(). No-op if there are no pending commands.
+        DAWN_TRY(device->ExecutePendingCommandContext());
+        // If there were pending commands that used this texture mSignalFenceValue will be set,
+        // but if it's still not set, generate a signal fence after waiting on wait fences.
+        if (!mSignalFenceValue.has_value()) {
+            DAWN_TRY(SynchronizeImportedTextureBeforeUse());
+            DAWN_TRY(SynchronizeImportedTextureAfterUse());
         }
-        device->ConsumedError(
-            CheckHRESULT(device->GetCommandQueue()->Signal(mD3D12Fence.Get(), mFenceSignalValue),
-                         "D3D12 fence signal"));
+        DAWN_TRY(device->NextSerial());
+        ASSERT(mSignalFenceValue.has_value());
     }
-
-    // Now that the texture has been destroyed. It should release the refptr of the d3d11on12
-    // resource and the fence.
-    mD3D11on12Resource = nullptr;
-    mD3D12Fence = nullptr;
+    ExecutionSerial ret = mSignalFenceValue.value();
+    ASSERT(ret <= device->GetLastSubmittedCommandSerial());
+    // Explicitly call reset() since std::move() on optional doesn't make it std::nullopt.
+    mSignalFenceValue.reset();
+    return ret;
 }
 
 DXGI_FORMAT Texture::GetD3D12Format() const {
-    return D3D12TextureFormat(GetFormat().format);
+    return d3d::DXGITextureFormat(GetFormat().format);
 }
 
 ID3D12Resource* Texture::GetD3D12Resource() const {
@@ -732,26 +389,37 @@ DXGI_FORMAT Texture::GetD3D12CopyableSubresourceFormat(Aspect aspect) const {
 }
 
 MaybeError Texture::SynchronizeImportedTextureBeforeUse() {
-    if (mD3D11on12Resource != nullptr) {
-        DAWN_TRY(mD3D11on12Resource->AcquireKeyedMutex());
-    }
-    // Perform the wait only on the first call. We can use UINT64_MAX as a sentinel value since it's
-    // also used by the D3D runtime to indicate device removed according to:
-    // https://docs.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12fence-getcompletedvalue#return-value
-    if (mD3D12Fence != nullptr && mFenceWaitValue != UINT64_MAX) {
+    // Perform the wait only on the first call.
+    Device* device = ToBackend(GetDevice());
+    for (Ref<d3d::Fence>& fence : mWaitFences) {
         DAWN_TRY(CheckHRESULT(
-            ToBackend(GetDevice())->GetCommandQueue()->Wait(mD3D12Fence.Get(), mFenceWaitValue),
-            "D3D12 fence wait"));
-        mFenceWaitValue = UINT64_MAX;
+                     device->GetCommandQueue()->Wait(
+                         static_cast<Fence*>(fence.Get())->GetD3D12Fence(), fence->GetFenceValue()),
+                     "D3D12 fence wait"););
+        // Keep D3D12 fence alive since we'll clear the waitFences list below.
+        device->ReferenceUntilUnused(static_cast<Fence*>(fence.Get())->GetD3D12Fence());
     }
+    mWaitFences.clear();
     return {};
 }
 
-void Texture::SynchronizeImportedTextureAfterUse() {
-    if (mD3D11on12Resource != nullptr) {
-        mD3D11on12Resource->ReleaseKeyedMutex();
+MaybeError Texture::SynchronizeImportedTextureAfterUse() {
+    // In PIX's D3D12-only mode, there is no way to determine frame boundaries
+    // for WebGPU since Dawn does not manage DXGI swap chains. Without assistance,
+    // PIX will wait forever for a present that never happens.
+    // If we know we're dealing with a swapbuffer texture, inform PIX we've
+    // "presented" the texture so it can determine frame boundaries and use its
+    // contents for the UI.
+    Device* device = ToBackend(GetDevice());
+    if (mSwapChainTexture) {
+        ID3D12SharingContract* d3dSharingContract = device->GetSharingContract();
+        if (d3dSharingContract != nullptr) {
+            d3dSharingContract->Present(mResourceAllocation.GetD3D12Resource(), 0, 0);
+        }
     }
-    // Defer signaling the fence until destroy after all uses of the fence.
+    // NextSerial() will be called after this - this is also checked in EndAccess().
+    mSignalFenceValue = device->GetPendingCommandSerial();
+    return {};
 }
 
 void Texture::TrackUsageAndTransitionNow(CommandRecordingContext* commandContext,
@@ -963,7 +631,7 @@ D3D12_RENDER_TARGET_VIEW_DESC Texture::GetRTVDescriptor(const Format& format,
                                                         uint32_t baseSlice,
                                                         uint32_t sliceCount) const {
     D3D12_RENDER_TARGET_VIEW_DESC rtvDesc;
-    rtvDesc.Format = D3D12TextureFormat(format.format);
+    rtvDesc.Format = d3d::DXGITextureFormat(format.format);
     if (IsMultisampledTexture()) {
         ASSERT(GetDimension() == wgpu::TextureDimension::e2D);
         ASSERT(GetNumMipLevels() == 1);
@@ -1169,7 +837,7 @@ MaybeError Texture::ClearTexture(CommandRecordingContext* commandContext,
                     textureCopy.aspect = aspect;
                     RecordBufferTextureCopyWithBufferHandle(
                         BufferTextureCopyDirection::B2T, commandList,
-                        ToBackend(uploadHandle.stagingBuffer)->GetResource(),
+                        ToBackend(uploadHandle.stagingBuffer)->GetD3D12Resource(),
                         uploadHandle.startOffset, bytesPerRow, largestMipSize.height, textureCopy,
                         copySize);
                 }
@@ -1192,17 +860,17 @@ void Texture::SetLabelImpl() {
     SetLabelHelper("Dawn_InternalTexture");
 }
 
-void Texture::EnsureSubresourceContentInitialized(CommandRecordingContext* commandContext,
-                                                  const SubresourceRange& range) {
+MaybeError Texture::EnsureSubresourceContentInitialized(CommandRecordingContext* commandContext,
+                                                        const SubresourceRange& range) {
     if (!ToBackend(GetDevice())->IsToggleEnabled(Toggle::LazyClearResourceOnFirstUse)) {
-        return;
+        return {};
     }
     if (!IsSubresourceContentInitialized(range)) {
         // If subresource has not been initialized, clear it to black as it could contain
         // dirty bits from recycled memory
-        GetDevice()->ConsumedError(
-            ClearTexture(commandContext, range, TextureBase::ClearValue::Zero));
+        DAWN_TRY(ClearTexture(commandContext, range, TextureBase::ClearValue::Zero));
     }
+    return {};
 }
 
 bool Texture::StateAndDecay::operator==(const Texture::StateAndDecay& other) const {
@@ -1218,7 +886,7 @@ Ref<TextureView> TextureView::Create(TextureBase* texture,
 
 TextureView::TextureView(TextureBase* texture, const TextureViewDescriptor* descriptor)
     : TextureViewBase(texture, descriptor) {
-    mSrvDesc.Format = D3D12TextureFormat(descriptor->format);
+    mSrvDesc.Format = d3d::DXGITextureFormat(descriptor->format);
     mSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
     UINT planeSlice = 0;
@@ -1309,7 +977,7 @@ TextureView::TextureView(TextureBase* texture, const TextureViewDescriptor* desc
         const Aspect planeAspect = ConvertViewAspect(GetFormat(), descriptor->aspect);
         planeSlice = GetAspectIndex(planeAspect);
         mSrvDesc.Format =
-            D3D12TextureFormat(texture->GetFormat().GetAspectInfo(planeAspect).format);
+            d3d::DXGITextureFormat(texture->GetFormat().GetAspectInfo(planeAspect).format);
     }
 
     // Currently we always use D3D12_TEX2D_ARRAY_SRV because we cannot specify base array layer
@@ -1378,7 +1046,7 @@ TextureView::TextureView(TextureBase* texture, const TextureViewDescriptor* desc
 }
 
 DXGI_FORMAT TextureView::GetD3D12Format() const {
-    return D3D12TextureFormat(GetFormat().format);
+    return d3d::DXGITextureFormat(GetFormat().format);
 }
 
 const D3D12_SHADER_RESOURCE_VIEW_DESC& TextureView::GetSRVDescriptor() const {

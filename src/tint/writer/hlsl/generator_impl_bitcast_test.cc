@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "src/tint/utils/string_stream.h"
 #include "src/tint/writer/hlsl/test_helper.h"
 
 using namespace tint::number_suffixes;  // NOLINT
@@ -22,36 +23,39 @@ namespace {
 using HlslGeneratorImplTest_Bitcast = TestHelper;
 
 TEST_F(HlslGeneratorImplTest_Bitcast, EmitExpression_Bitcast_Float) {
-    auto* bitcast = create<ast::BitcastExpression>(ty.f32(), Expr(1_i));
-    WrapInFunction(bitcast);
+    auto* a = Let("a", Expr(1_i));
+    auto* bitcast = Bitcast<f32>(Expr("a"));
+    WrapInFunction(a, bitcast);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, bitcast)) << gen.error();
-    EXPECT_EQ(out.str(), "asfloat(1)");
+    utils::StringStream out;
+    ASSERT_TRUE(gen.EmitExpression(out, bitcast)) << gen.Diagnostics();
+    EXPECT_EQ(out.str(), "asfloat(a)");
 }
 
 TEST_F(HlslGeneratorImplTest_Bitcast, EmitExpression_Bitcast_Int) {
-    auto* bitcast = create<ast::BitcastExpression>(ty.i32(), Expr(1_u));
-    WrapInFunction(bitcast);
+    auto* a = Let("a", Expr(1_u));
+    auto* bitcast = Bitcast<i32>(Expr("a"));
+    WrapInFunction(a, bitcast);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, bitcast)) << gen.error();
-    EXPECT_EQ(out.str(), "asint(1u)");
+    utils::StringStream out;
+    ASSERT_TRUE(gen.EmitExpression(out, bitcast)) << gen.Diagnostics();
+    EXPECT_EQ(out.str(), "asint(a)");
 }
 
 TEST_F(HlslGeneratorImplTest_Bitcast, EmitExpression_Bitcast_Uint) {
-    auto* bitcast = create<ast::BitcastExpression>(ty.u32(), Expr(1_i));
-    WrapInFunction(bitcast);
+    auto* a = Let("a", Expr(1_i));
+    auto* bitcast = Bitcast<u32>(Expr("a"));
+    WrapInFunction(a, bitcast);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, bitcast)) << gen.error();
-    EXPECT_EQ(out.str(), "asuint(1)");
+    utils::StringStream out;
+    ASSERT_TRUE(gen.EmitExpression(out, bitcast)) << gen.Diagnostics();
+    EXPECT_EQ(out.str(), "asuint(a)");
 }
 
 }  // namespace

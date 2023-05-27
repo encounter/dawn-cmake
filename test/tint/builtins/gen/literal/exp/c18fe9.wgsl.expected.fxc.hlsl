@@ -1,7 +1,10 @@
 SKIP: FAILED
 
+RWByteAddressBuffer prevent_dce : register(u0, space2);
+
 void exp_c18fe9() {
-  float16_t res = exp(float16_t(0.0h));
+  float16_t res = float16_t(2.716796875h);
+  prevent_dce.Store<float16_t>(0u, res);
 }
 
 struct tint_symbol {
@@ -30,7 +33,3 @@ void compute_main() {
   exp_c18fe9();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x00000189289FB7F0(2,3-11): error X3000: unrecognized identifier 'float16_t'
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x00000189289FB7F0(2,13-15): error X3000: unrecognized identifier 'res'
-

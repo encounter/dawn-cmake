@@ -17,17 +17,14 @@
 
 #include <vector>
 
-#include "src/tint/sem/expression.h"
-
-// Forward declarations
-namespace tint::ast {
-class IndexAccessorExpression;
-}  // namespace tint::ast
+#include "src/tint/ast/index_accessor_expression.h"
+#include "src/tint/sem/value_expression.h"
 
 namespace tint::sem {
 
 /// IndexAccessorExpression holds the semantic information for a ast::IndexAccessorExpression node.
-class IndexAccessorExpression final : public Castable<IndexAccessorExpression, Expression> {
+class IndexAccessorExpression final
+    : public utils::Castable<IndexAccessorExpression, ValueExpression> {
   public:
     /// Constructor
     /// @param declaration the AST node
@@ -38,29 +35,34 @@ class IndexAccessorExpression final : public Castable<IndexAccessorExpression, E
     /// @param statement the statement that owns this expression
     /// @param constant the constant value of the expression. May be null
     /// @param has_side_effects whether this expression may have side effects
-    /// @param source_var the (optional) source variable for this expression
+    /// @param root_ident the (optional) root identifier for this expression
     IndexAccessorExpression(const ast::IndexAccessorExpression* declaration,
-                            const sem::Type* type,
+                            const type::Type* type,
                             EvaluationStage stage,
-                            const Expression* object,
-                            const Expression* index,
+                            const ValueExpression* object,
+                            const ValueExpression* index,
                             const Statement* statement,
-                            const Constant* constant,
+                            const constant::Value* constant,
                             bool has_side_effects,
-                            const Variable* source_var = nullptr);
+                            const Variable* root_ident = nullptr);
 
     /// Destructor
     ~IndexAccessorExpression() override;
 
+    /// @returns the AST node
+    const ast::IndexAccessorExpression* Declaration() const {
+        return static_cast<const ast::IndexAccessorExpression*>(declaration_);
+    }
+
     /// @returns the object expression that is being indexed
-    Expression const* Object() const { return object_; }
+    ValueExpression const* Object() const { return object_; }
 
     /// @returns the index expression
-    Expression const* Index() const { return index_; }
+    ValueExpression const* Index() const { return index_; }
 
   private:
-    Expression const* const object_;
-    Expression const* const index_;
+    ValueExpression const* const object_;
+    ValueExpression const* const index_;
 };
 
 }  // namespace tint::sem

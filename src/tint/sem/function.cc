@@ -15,35 +15,25 @@
 #include "src/tint/sem/function.h"
 
 #include "src/tint/ast/function.h"
-#include "src/tint/sem/depth_texture.h"
-#include "src/tint/sem/external_texture.h"
-#include "src/tint/sem/multisampled_texture.h"
-#include "src/tint/sem/sampled_texture.h"
-#include "src/tint/sem/storage_texture.h"
+#include "src/tint/ast/identifier.h"
+#include "src/tint/ast/must_use_attribute.h"
 #include "src/tint/sem/variable.h"
+#include "src/tint/type/depth_texture.h"
+#include "src/tint/type/external_texture.h"
+#include "src/tint/type/multisampled_texture.h"
+#include "src/tint/type/sampled_texture.h"
+#include "src/tint/type/storage_texture.h"
 #include "src/tint/utils/transform.h"
 
 TINT_INSTANTIATE_TYPEINFO(tint::sem::Function);
 
 namespace tint::sem {
-namespace {
 
-utils::VectorRef<const Parameter*> SetOwner(utils::VectorRef<Parameter*> parameters,
-                                            const tint::sem::CallTarget* owner) {
-    for (auto* parameter : parameters) {
-        parameter->SetOwner(owner);
-    }
-    return parameters;
-}
-
-}  // namespace
-
-Function::Function(const ast::Function* declaration,
-                   Type* return_type,
-                   utils::VectorRef<Parameter*> parameters)
-    : Base(return_type, SetOwner(std::move(parameters), this), EvaluationStage::kRuntime),
+Function::Function(const ast::Function* declaration)
+    : Base(EvaluationStage::kRuntime,
+           ast::HasAttribute<ast::MustUseAttribute>(declaration->attributes)),
       declaration_(declaration),
-      workgroup_size_{WorkgroupDimension{1}, WorkgroupDimension{1}, WorkgroupDimension{1}} {}
+      workgroup_size_{1, 1, 1} {}
 
 Function::~Function() = default;
 
@@ -66,12 +56,12 @@ Function::VariableBindings Function::TransitivelyReferencedUniformVariables() co
     VariableBindings ret;
 
     for (auto* global : TransitivelyReferencedGlobals()) {
-        if (global->StorageClass() != ast::StorageClass::kUniform) {
+        if (global->AddressSpace() != builtin::AddressSpace::kUniform) {
             continue;
         }
 
-        if (global->Declaration()->HasBindingPoint()) {
-            ret.push_back({global, global->BindingPoint()});
+        if (auto bp = global->BindingPoint()) {
+            ret.push_back({global, *bp});
         }
     }
     return ret;
@@ -81,12 +71,12 @@ Function::VariableBindings Function::TransitivelyReferencedStorageBufferVariable
     VariableBindings ret;
 
     for (auto* global : TransitivelyReferencedGlobals()) {
-        if (global->StorageClass() != ast::StorageClass::kStorage) {
+        if (global->AddressSpace() != builtin::AddressSpace::kStorage) {
             continue;
         }
 
-        if (global->Declaration()->HasBindingPoint()) {
-            ret.push_back({global, global->BindingPoint()});
+        if (auto bp = global->BindingPoint()) {
+            ret.push_back({global, *bp});
         }
     }
     return ret;
@@ -108,11 +98,11 @@ Function::TransitivelyReferencedBuiltinVariables() const {
 }
 
 Function::VariableBindings Function::TransitivelyReferencedSamplerVariables() const {
-    return TransitivelyReferencedSamplerVariablesImpl(ast::SamplerKind::kSampler);
+    return TransitivelyReferencedSamplerVariablesImpl(type::SamplerKind::kSampler);
 }
 
 Function::VariableBindings Function::TransitivelyReferencedComparisonSamplerVariables() const {
-    return TransitivelyReferencedSamplerVariablesImpl(ast::SamplerKind::kComparisonSampler);
+    return TransitivelyReferencedSamplerVariablesImpl(type::SamplerKind::kComparisonSampler);
 }
 
 Function::VariableBindings Function::TransitivelyReferencedSampledTextureVariables() const {
@@ -124,13 +114,13 @@ Function::VariableBindings Function::TransitivelyReferencedMultisampledTextureVa
 }
 
 Function::VariableBindings Function::TransitivelyReferencedVariablesOfType(
-    const tint::TypeInfo* type) const {
+    const tint::utils::TypeInfo* type) const {
     VariableBindings ret;
     for (auto* global : TransitivelyReferencedGlobals()) {
         auto* unwrapped_type = global->Type()->UnwrapRef();
         if (unwrapped_type->TypeInfo().Is(type)) {
-            if (global->Declaration()->HasBindingPoint()) {
-                ret.push_back({global, global->BindingPoint()});
+            if (auto bp = global->BindingPoint()) {
+                ret.push_back({global, *bp});
             }
         }
     }
@@ -139,7 +129,7 @@ Function::VariableBindings Function::TransitivelyReferencedVariablesOfType(
 
 bool Function::HasAncestorEntryPoint(Symbol symbol) const {
     for (const auto* point : ancestor_entry_points_) {
-        if (point->Declaration()->symbol == symbol) {
+        if (point->Declaration()->name->symbol == symbol) {
             return true;
         }
     }
@@ -147,18 +137,18 @@ bool Function::HasAncestorEntryPoint(Symbol symbol) const {
 }
 
 Function::VariableBindings Function::TransitivelyReferencedSamplerVariablesImpl(
-    ast::SamplerKind kind) const {
+    type::SamplerKind kind) const {
     VariableBindings ret;
 
     for (auto* global : TransitivelyReferencedGlobals()) {
         auto* unwrapped_type = global->Type()->UnwrapRef();
-        auto* sampler = unwrapped_type->As<sem::Sampler>();
+        auto* sampler = unwrapped_type->As<type::Sampler>();
         if (sampler == nullptr || sampler->kind() != kind) {
             continue;
         }
 
-        if (global->Declaration()->HasBindingPoint()) {
-            ret.push_back({global, global->BindingPoint()});
+        if (auto bp = global->BindingPoint()) {
+            ret.push_back({global, *bp});
         }
     }
     return ret;
@@ -170,20 +160,20 @@ Function::VariableBindings Function::TransitivelyReferencedSampledTextureVariabl
 
     for (auto* global : TransitivelyReferencedGlobals()) {
         auto* unwrapped_type = global->Type()->UnwrapRef();
-        auto* texture = unwrapped_type->As<sem::Texture>();
+        auto* texture = unwrapped_type->As<type::Texture>();
         if (texture == nullptr) {
             continue;
         }
 
-        auto is_multisampled = texture->Is<sem::MultisampledTexture>();
-        auto is_sampled = texture->Is<sem::SampledTexture>();
+        auto is_multisampled = texture->Is<type::MultisampledTexture>();
+        auto is_sampled = texture->Is<type::SampledTexture>();
 
         if ((multisampled && !is_multisampled) || (!multisampled && !is_sampled)) {
             continue;
         }
 
-        if (global->Declaration()->HasBindingPoint()) {
-            ret.push_back({global, global->BindingPoint()});
+        if (auto bp = global->BindingPoint()) {
+            ret.push_back({global, *bp});
         }
     }
 

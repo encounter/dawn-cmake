@@ -119,7 +119,7 @@ TEST_F(SpvModuleScopeVarParserTest, NoVar) {
     EXPECT_THAT(module_ast, Not(HasSubstr("Variable"))) << module_ast;
 }
 
-TEST_F(SpvModuleScopeVarParserTest, BadStorageClass_NotAWebGPUStorageClass) {
+TEST_F(SpvModuleScopeVarParserTest, BadAddressSpace_NotAWebGPUAddressSpace) {
     auto p = parser(test::Assemble(Preamble() + FragMain() + R"(
     %float = OpTypeFloat 32
     %ptr = OpTypePointer CrossWorkgroup %float
@@ -135,7 +135,7 @@ TEST_F(SpvModuleScopeVarParserTest, BadStorageClass_NotAWebGPUStorageClass) {
     EXPECT_THAT(p->error(), HasSubstr("unknown SPIR-V storage class: 5"));
 }
 
-TEST_F(SpvModuleScopeVarParserTest, BadStorageClass_Function) {
+TEST_F(SpvModuleScopeVarParserTest, BadAddressSpace_Function) {
     auto p = parser(test::Assemble(Preamble() + FragMain() + R"(
     %float = OpTypeFloat 32
     %ptr = OpTypePointer Function %float
@@ -347,7 +347,7 @@ TEST_F(SpvModuleScopeVarParserTest, BuiltinPosition_StorePosition) {
     EXPECT_TRUE(p->BuildAndParseInternalModule());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("gl_Position = vec4<f32>();")) << module_str;
+    EXPECT_THAT(module_str, HasSubstr("gl_Position = vec4f();")) << module_str;
 }
 
 TEST_F(SpvModuleScopeVarParserTest, BuiltinPosition_StorePosition_PerVertexStructOutOfOrderDecl) {
@@ -389,7 +389,7 @@ TEST_F(SpvModuleScopeVarParserTest, BuiltinPosition_StorePosition_PerVertexStruc
     EXPECT_TRUE(p->BuildAndParseInternalModule());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("gl_Position = vec4<f32>();")) << module_str;
+    EXPECT_THAT(module_str, HasSubstr("gl_Position = vec4f();")) << module_str;
 }
 
 TEST_F(SpvModuleScopeVarParserTest, BuiltinPosition_StorePositionMember_OneAccessChain) {
@@ -449,7 +449,7 @@ TEST_F(SpvModuleScopeVarParserTest, BuiltinPointSize_Write1_IsErased) {
     EXPECT_TRUE(p->BuildAndParseInternalModule());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_EQ(module_str, R"(var<private> gl_Position : vec4<f32>;
+    EXPECT_EQ(module_str, R"(var<private> gl_Position : vec4f;
 
 fn main_1() {
   return;
@@ -457,7 +457,7 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  gl_Position : vec4<f32>,
+  gl_Position : vec4f,
 }
 
 @vertex
@@ -507,7 +507,7 @@ TEST_F(SpvModuleScopeVarParserTest, BuiltinPointSize_ReadReplaced) {
     const auto module_str = test::ToString(p->program());
     EXPECT_EQ(module_str, R"(var<private> x_900 : f32;
 
-var<private> gl_Position : vec4<f32>;
+var<private> gl_Position : vec4f;
 
 fn main_1() {
   x_900 = 1.0f;
@@ -516,7 +516,7 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  gl_Position : vec4<f32>,
+  gl_Position : vec4f,
 }
 
 @vertex
@@ -564,7 +564,7 @@ TEST_F(SpvModuleScopeVarParserTest, BuiltinPointSize_WriteViaCopyObjectPostAcces
     EXPECT_TRUE(p->BuildAndParseInternalModule()) << p->error();
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_EQ(module_str, R"(var<private> gl_Position : vec4<f32>;
+    EXPECT_EQ(module_str, R"(var<private> gl_Position : vec4f;
 
 fn main_1() {
   return;
@@ -572,7 +572,7 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  gl_Position : vec4<f32>,
+  gl_Position : vec4f,
 }
 
 @vertex
@@ -623,7 +623,7 @@ TEST_F(SpvModuleScopeVarParserTest, BuiltinPointSize_Loose_Write1_IsErased) {
     EXPECT_TRUE(p->BuildAndParseInternalModule());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_EQ(module_str, R"(var<private> x_2 : vec4<f32>;
+    EXPECT_EQ(module_str, R"(var<private> x_2 : vec4f;
 
 fn main_1() {
   return;
@@ -631,7 +631,7 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  x_2_1 : vec4<f32>,
+  x_2_1 : vec4f,
 }
 
 @vertex
@@ -676,7 +676,7 @@ TEST_F(SpvModuleScopeVarParserTest, BuiltinPointSize_Loose_ReadReplaced_Vertex) 
     EXPECT_TRUE(p->BuildAndParseInternalModule());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_EQ(module_str, R"(var<private> x_2 : vec4<f32>;
+    EXPECT_EQ(module_str, R"(var<private> x_2 : vec4f;
 
 var<private> x_900 : f32;
 
@@ -687,7 +687,7 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  x_2_1 : vec4<f32>,
+  x_2_1 : vec4f,
 }
 
 @vertex
@@ -735,7 +735,7 @@ TEST_F(SpvModuleScopeVarParserTest, BuiltinPointSize_Loose_WriteViaCopyObjectPri
     EXPECT_TRUE(p->BuildAndParseInternalModule()) << p->error();
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_EQ(module_str, R"(var<private> x_2 : vec4<f32>;
+    EXPECT_EQ(module_str, R"(var<private> x_2 : vec4f;
 
 fn main_1() {
   return;
@@ -743,7 +743,7 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  x_2_1 : vec4<f32>,
+  x_2_1 : vec4f,
 }
 
 @vertex
@@ -771,7 +771,7 @@ TEST_F(SpvModuleScopeVarParserTest,
     EXPECT_TRUE(p->BuildAndParseInternalModule()) << p->error();
     EXPECT_TRUE(p->error().empty()) << p->error();
     const auto module_str = test::ToString(p->program());
-    EXPECT_EQ(module_str, R"(var<private> x_2 : vec4<f32>;
+    EXPECT_EQ(module_str, R"(var<private> x_2 : vec4f;
 
 fn main_1() {
   return;
@@ -779,7 +779,7 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  x_2_1 : vec4<f32>,
+  x_2_1 : vec4f,
 }
 
 @vertex
@@ -881,15 +881,15 @@ TEST_F(SpvModuleScopeVarParserTest, ScalarInitializers) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr(R"(var<private> x_1 : bool = true;
+    EXPECT_THAT(module_str, HasSubstr(R"(var<private> x_1 = true;
 
-var<private> x_2 : bool = false;
+var<private> x_2 = false;
 
-var<private> x_3 : i32 = -1i;
+var<private> x_3 = -1i;
 
-var<private> x_4 : u32 = 1u;
+var<private> x_4 = 1u;
 
-var<private> x_5 : f32 = 1.5f;
+var<private> x_5 = 1.5f;
 )"));
 }
 
@@ -908,13 +908,13 @@ TEST_F(SpvModuleScopeVarParserTest, ScalarNullInitializers) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr(R"(var<private> x_1 : bool = false;
+    EXPECT_THAT(module_str, HasSubstr(R"(var<private> x_1 = false;
 
-var<private> x_2 : i32 = 0i;
+var<private> x_2 = 0i;
 
-var<private> x_3 : u32 = 0u;
+var<private> x_3 = 0u;
 
-var<private> x_4 : f32 = 0.0f;
+var<private> x_4 = 0.0f;
 )"));
 }
 
@@ -933,13 +933,13 @@ TEST_F(SpvModuleScopeVarParserTest, ScalarUndefInitializers) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr(R"(var<private> x_1 : bool = false;
+    EXPECT_THAT(module_str, HasSubstr(R"(var<private> x_1 = false;
 
-var<private> x_2 : i32 = 0i;
+var<private> x_2 = 0i;
 
-var<private> x_3 : u32 = 0u;
+var<private> x_3 = 0u;
 
-var<private> x_4 : f32 = 0.0f;
+var<private> x_4 = 0.0f;
 )"));
 
     // This example module emits ok, but is not valid SPIR-V in the first place.
@@ -956,7 +956,7 @@ TEST_F(SpvModuleScopeVarParserTest, VectorInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : vec2<f32> = vec2<f32>(1.5f, 2.0f);"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = vec2f(1.5f, 2.0f);"));
 }
 
 TEST_F(SpvModuleScopeVarParserTest, VectorBoolNullInitializer) {
@@ -968,7 +968,7 @@ TEST_F(SpvModuleScopeVarParserTest, VectorBoolNullInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : vec2<bool> = vec2<bool>();"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = vec2<bool>();"));
 }
 
 TEST_F(SpvModuleScopeVarParserTest, VectorBoolUndefInitializer) {
@@ -980,7 +980,7 @@ TEST_F(SpvModuleScopeVarParserTest, VectorBoolUndefInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : vec2<bool> = vec2<bool>();"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = vec2<bool>();"));
 
     // This example module emits ok, but is not valid SPIR-V in the first place.
     p->DeliberatelyInvalidSpirv();
@@ -995,7 +995,7 @@ TEST_F(SpvModuleScopeVarParserTest, VectorUintNullInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : vec2<u32> = vec2<u32>();"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = vec2u();"));
 }
 
 TEST_F(SpvModuleScopeVarParserTest, VectorUintUndefInitializer) {
@@ -1007,7 +1007,7 @@ TEST_F(SpvModuleScopeVarParserTest, VectorUintUndefInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : vec2<u32> = vec2<u32>();"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = vec2u();"));
 
     // This example module emits ok, but is not valid SPIR-V in the first place.
     p->DeliberatelyInvalidSpirv();
@@ -1022,7 +1022,7 @@ TEST_F(SpvModuleScopeVarParserTest, VectorIntNullInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : vec2<i32> = vec2<i32>();"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = vec2i();"));
 }
 
 TEST_F(SpvModuleScopeVarParserTest, VectorIntUndefInitializer) {
@@ -1034,7 +1034,7 @@ TEST_F(SpvModuleScopeVarParserTest, VectorIntUndefInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : vec2<i32> = vec2<i32>();"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = vec2i();"));
 
     // This example module emits ok, but is not valid SPIR-V in the first place.
     p->DeliberatelyInvalidSpirv();
@@ -1049,7 +1049,7 @@ TEST_F(SpvModuleScopeVarParserTest, VectorFloatNullInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : vec2<f32> = vec2<f32>();"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = vec2f();"));
 }
 
 TEST_F(SpvModuleScopeVarParserTest, VectorFloatUndefInitializer) {
@@ -1061,7 +1061,7 @@ TEST_F(SpvModuleScopeVarParserTest, VectorFloatUndefInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : vec2<f32> = vec2<f32>();"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = vec2f();"));
 
     // This example module emits ok, but is not valid SPIR-V in the first place.
     p->DeliberatelyInvalidSpirv();
@@ -1082,10 +1082,10 @@ TEST_F(SpvModuleScopeVarParserTest, MatrixInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : mat3x2<f32> = mat3x2<f32>("
-                                      "vec2<f32>(1.5f, 2.0f), "
-                                      "vec2<f32>(2.0f, 3.0f), "
-                                      "vec2<f32>(3.0f, 4.0f));"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = mat3x2f("
+                                      "vec2f(1.5f, 2.0f), "
+                                      "vec2f(2.0f, 3.0f), "
+                                      "vec2f(3.0f, 4.0f));"));
 }
 
 TEST_F(SpvModuleScopeVarParserTest, MatrixNullInitializer) {
@@ -1097,7 +1097,7 @@ TEST_F(SpvModuleScopeVarParserTest, MatrixNullInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : mat3x2<f32> = mat3x2<f32>();"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = mat3x2f();"));
 }
 
 TEST_F(SpvModuleScopeVarParserTest, MatrixUndefInitializer) {
@@ -1109,7 +1109,7 @@ TEST_F(SpvModuleScopeVarParserTest, MatrixUndefInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : mat3x2<f32> = mat3x2<f32>();"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = mat3x2f();"));
 
     // This example module emits ok, but is not valid SPIR-V in the first place.
     p->DeliberatelyInvalidSpirv();
@@ -1125,8 +1125,7 @@ TEST_F(SpvModuleScopeVarParserTest, ArrayInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str,
-                HasSubstr("var<private> x_200 : array<u32, 2u> = array<u32, 2u>(1u, 2u);"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = array<u32, 2u>(1u, 2u);"));
 }
 
 TEST_F(SpvModuleScopeVarParserTest, ArrayNullInitializer) {
@@ -1138,7 +1137,7 @@ TEST_F(SpvModuleScopeVarParserTest, ArrayNullInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : array<u32, 2u> = array<u32, 2u>();"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = array<u32, 2u>();"));
 }
 
 TEST_F(SpvModuleScopeVarParserTest, ArrayUndefInitializer) {
@@ -1150,7 +1149,7 @@ TEST_F(SpvModuleScopeVarParserTest, ArrayUndefInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : array<u32, 2u> = array<u32, 2u>();"));
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = array<u32, 2u>();"));
 
     // This example module emits ok, but is not valid SPIR-V in the first place.
     p->DeliberatelyInvalidSpirv();
@@ -1167,8 +1166,7 @@ TEST_F(SpvModuleScopeVarParserTest, StructInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str,
-                HasSubstr("var<private> x_200 : S = S(1u, 1.5f, array<u32, 2u>(1u, 2u));"))
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = S(1u, 1.5f, array<u32, 2u>(1u, 2u));"))
         << module_str;
 }
 
@@ -1181,7 +1179,7 @@ TEST_F(SpvModuleScopeVarParserTest, StructNullInitializer) {
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error();
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : S = S(0u, 0.0f, array<u32, 2u>());"))
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = S(0u, 0.0f, array<u32, 2u>());"))
         << module_str;
 }
 
@@ -1195,7 +1193,7 @@ TEST_F(SpvModuleScopeVarParserTest, StructUndefInitializer) {
     EXPECT_TRUE(p->error().empty());
 
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 : S = S(0u, 0.0f, array<u32, 2u>());"))
+    EXPECT_THAT(module_str, HasSubstr("var<private> x_200 = S(0u, 0.0f, array<u32, 2u>());"))
         << module_str;
 
     // This example module emits ok, but is not valid SPIR-V in the first place.
@@ -1251,11 +1249,14 @@ TEST_F(SpvModuleScopeVarParserTest, StructMember_NonReadableDecoration_Dropped) 
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    EXPECT_THAT(module_str, HasSubstr(R"(type Arr = @stride(4) array<u32, 2u>;
+    EXPECT_THAT(module_str, HasSubstr(R"(alias Arr = @stride(4) array<u32, 2u>;
 
 struct S {
+  /* @offset(0) */
   field0 : u32,
+  /* @offset(4) */
   field1 : f32,
+  /* @offset(8) */
   field2 : Arr,
 }
 
@@ -1286,7 +1287,8 @@ TEST_F(SpvModuleScopeVarParserTest, ColMajorDecoration_Dropped) {
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
     EXPECT_THAT(module_str, HasSubstr(R"(struct S {
-  field0 : mat3x2<f32>,
+  /* @offset(0) */
+  field0 : mat3x2f,
 }
 
 @group(0) @binding(0) var<storage, read_write> myvar : S;
@@ -1301,6 +1303,7 @@ TEST_F(SpvModuleScopeVarParserTest, MatrixStrideDecoration_Natural_Dropped) {
      OpDecorate %s Block
      OpMemberDecorate %s 0 MatrixStride 8
      OpMemberDecorate %s 0 Offset 0
+     OpMemberDecorate %s 0 ColMajor
      %void = OpTypeVoid
      %voidfn = OpTypeFunction %void
      %float = OpTypeFloat 32
@@ -1315,7 +1318,8 @@ TEST_F(SpvModuleScopeVarParserTest, MatrixStrideDecoration_Natural_Dropped) {
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
     EXPECT_THAT(module_str, HasSubstr(R"(struct S {
-  field0 : mat3x2<f32>,
+  /* @offset(0) */
+  field0 : mat3x2f,
 }
 
 @group(0) @binding(0) var<storage, read_write> myvar : S;
@@ -1330,6 +1334,7 @@ TEST_F(SpvModuleScopeVarParserTest, MatrixStrideDecoration) {
      OpDecorate %s Block
      OpMemberDecorate %s 0 MatrixStride 64
      OpMemberDecorate %s 0 Offset 0
+     OpMemberDecorate %s 0 ColMajor
      %void = OpTypeVoid
      %voidfn = OpTypeFunction %void
      %float = OpTypeFloat 32
@@ -1344,8 +1349,9 @@ TEST_F(SpvModuleScopeVarParserTest, MatrixStrideDecoration) {
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
     EXPECT_THAT(module_str, HasSubstr(R"(struct S {
+  /* @offset(0) */
   @stride(64) @internal(disable_validation__ignore_stride)
-  field0 : mat3x2<f32>,
+  field0 : mat3x2f,
 }
 
 @group(0) @binding(0) var<storage, read_write> myvar : S;
@@ -1397,7 +1403,9 @@ TEST_F(SpvModuleScopeVarParserTest, StorageBuffer_NonWritable_AllMembers) {
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
     EXPECT_THAT(module_str, HasSubstr(R"(struct S {
+  /* @offset(0) */
   field0 : f32,
+  /* @offset(4) */
   field1 : f32,
 }
 
@@ -1426,7 +1434,9 @@ TEST_F(SpvModuleScopeVarParserTest, StorageBuffer_NonWritable_NotAllMembers) {
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
     EXPECT_THAT(module_str, HasSubstr(R"(struct S {
+  /* @offset(0) */
   field0 : f32,
+  /* @offset(4) */
   field1 : f32,
 }
 
@@ -1457,7 +1467,9 @@ TEST_F(SpvModuleScopeVarParserTest,
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
     EXPECT_THAT(module_str, HasSubstr(R"(struct S {
+  /* @offset(0) */
   field0 : f32,
+  /* @offset(4) */
   field1 : f32,
 }
 
@@ -1646,7 +1658,7 @@ TEST_F(SpvModuleScopeVarParserTest, SampleId_I32_Load_Direct) {
         R"(var<private> x_1 : i32;
 
 fn main_1() {
-  let x_2 : i32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
@@ -1759,7 +1771,7 @@ TEST_F(SpvModuleScopeVarParserTest, SampleId_I32_Load_AccessChain) {
     const std::string expected = R"(var<private> x_1 : i32;
 
 fn main_1() {
-  let x_2 : i32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
@@ -1794,7 +1806,7 @@ TEST_F(SpvModuleScopeVarParserTest, SampleId_I32_FunctParam) {
     // as a function parameter.
     EXPECT_FALSE(p->Parse());
     EXPECT_FALSE(p->success());
-    EXPECT_THAT(p->error(), HasSubstr("Invalid storage class for pointer operand 1"));
+    EXPECT_THAT(p->error(), HasSubstr("Invalid storage class for pointer operand '1"));
 }
 
 TEST_F(SpvModuleScopeVarParserTest, SampleId_U32_Load_Direct) {
@@ -1812,7 +1824,7 @@ TEST_F(SpvModuleScopeVarParserTest, SampleId_U32_Load_Direct) {
     const std::string expected = R"(var<private> x_1 : u32;
 
 fn main_1() {
-  let x_2 : u32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
@@ -1841,8 +1853,8 @@ TEST_F(SpvModuleScopeVarParserTest, SampleId_U32_Load_CopyObject) {
     const std::string expected = R"(var<private> x_1 : u32;
 
 fn main_1() {
-  let x_11 : ptr<private, u32> = &(x_1);
-  let x_2 : u32 = *(x_11);
+  let x_11 = &(x_1);
+  let x_2 = *(x_11);
   return;
 }
 
@@ -1871,7 +1883,7 @@ TEST_F(SpvModuleScopeVarParserTest, SampleId_U32_Load_AccessChain) {
     const std::string expected = R"(var<private> x_1 : u32;
 
 fn main_1() {
-  let x_2 : u32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
@@ -1904,7 +1916,7 @@ TEST_F(SpvModuleScopeVarParserTest, SampleId_U32_FunctParam) {
     // This example is invalid because you can't pass pointer-to-Input
     // as a function parameter.
     EXPECT_FALSE(p->Parse());
-    EXPECT_THAT(p->error(), HasSubstr("Invalid storage class for pointer operand 1"));
+    EXPECT_THAT(p->error(), HasSubstr("Invalid storage class for pointer operand '1"));
 }
 
 // Returns the start of a shader for testing SampleMask
@@ -1985,7 +1997,7 @@ TEST_F(SpvModuleScopeVarParserTest, SampleMask_In_U32_Direct) {
     const std::string expected = R"(var<private> x_1 : array<u32, 1u>;
 
 fn main_1() {
-  let x_3 : u32 = x_1[0i];
+  let x_3 = x_1[0i];
   return;
 }
 
@@ -2017,7 +2029,7 @@ TEST_F(SpvModuleScopeVarParserTest, SampleMask_In_U32_CopyObject) {
     const std::string expected = R"(var<private> x_1 : array<u32, 1u>;
 
 fn main_1() {
-  let x_4 : u32 = x_1[0i];
+  let x_4 = x_1[0i];
   return;
 }
 
@@ -2049,7 +2061,7 @@ TEST_F(SpvModuleScopeVarParserTest, SampleMask_In_U32_AccessChain) {
     const std::string expected = R"(var<private> x_1 : array<u32, 1u>;
 
 fn main_1() {
-  let x_4 : u32 = x_1[0i];
+  let x_4 = x_1[0i];
   return;
 }
 
@@ -2080,7 +2092,7 @@ TEST_F(SpvModuleScopeVarParserTest, SampleMask_In_I32_Direct) {
     const std::string expected = R"(var<private> x_1 : array<i32, 1u>;
 
 fn main_1() {
-  let x_3 : i32 = x_1[0i];
+  let x_3 = x_1[0i];
   return;
 }
 
@@ -2112,7 +2124,7 @@ TEST_F(SpvModuleScopeVarParserTest, SampleMask_In_I32_CopyObject) {
     const std::string expected = R"(var<private> x_1 : array<i32, 1u>;
 
 fn main_1() {
-  let x_4 : i32 = x_1[0i];
+  let x_4 = x_1[0i];
   return;
 }
 
@@ -2144,7 +2156,7 @@ TEST_F(SpvModuleScopeVarParserTest, SampleMask_In_I32_AccessChain) {
     const std::string expected = R"(var<private> x_1 : array<i32, 1u>;
 
 fn main_1() {
-  let x_4 : i32 = x_1[0i];
+  let x_4 = x_1[0i];
   return;
 }
 
@@ -2410,18 +2422,18 @@ TEST_F(SpvModuleScopeVarParserTest, SampleMask_In_WithStride) {
     ASSERT_TRUE(p->BuildAndParseInternalModule()) << p->error() << assembly;
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    const std::string expected = R"(type Arr = @stride(4) array<u32, 1u>;
+    const std::string expected = R"(alias Arr = @stride(4) array<u32, 1u>;
 
-type Arr_1 = @stride(4) array<u32, 2u>;
+alias Arr_1 = @stride(4) array<u32, 2u>;
 
-type Arr_2 = @stride(4) array<i32, 1u>;
+alias Arr_2 = @stride(4) array<i32, 1u>;
 
-type Arr_3 = @stride(4) array<i32, 2u>;
+alias Arr_3 = @stride(4) array<i32, 2u>;
 
 var<private> x_1 : Arr;
 
 fn main_1() {
-  let x_3 : u32 = x_1[0i];
+  let x_3 = x_1[0i];
   return;
 }
 
@@ -2449,13 +2461,13 @@ TEST_F(SpvModuleScopeVarParserTest, SampleMask_Out_WithStride) {
     ASSERT_TRUE(p->BuildAndParseInternalModule()) << p->error() << assembly;
     EXPECT_TRUE(p->error().empty());
     const auto module_str = test::ToString(p->program());
-    const std::string expected = R"(type Arr = @stride(4) array<u32, 1u>;
+    const std::string expected = R"(alias Arr = @stride(4) array<u32, 1u>;
 
-type Arr_1 = @stride(4) array<u32, 2u>;
+alias Arr_1 = @stride(4) array<u32, 2u>;
 
-type Arr_2 = @stride(4) array<i32, 1u>;
+alias Arr_2 = @stride(4) array<i32, 1u>;
 
-type Arr_3 = @stride(4) array<i32, 2u>;
+alias Arr_3 = @stride(4) array<i32, 2u>;
 
 var<private> x_1 : Arr;
 
@@ -2515,16 +2527,16 @@ TEST_F(SpvModuleScopeVarParserTest, VertexIndex_I32_Load_Direct) {
     const auto module_str = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : i32;
 
-var<private> x_4 : vec4<f32>;
+var<private> x_4 : vec4f;
 
 fn main_1() {
-  let x_2 : i32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
 struct main_out {
   @builtin(position)
-  x_4_1 : vec4<f32>,
+  x_4_1 : vec4f,
 }
 
 @vertex
@@ -2572,12 +2584,12 @@ TEST_F(SpvModuleScopeVarParserTest, VertexIndex_UsedTwice_DifferentConstructs) {
     const auto module_str = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : u32;
 
-var<private> x_5 : vec4<f32>;
+var<private> x_5 : vec4f;
 
 fn main_1() {
-  let x_2 : u32 = x_1;
+  let x_2 = x_1;
   if (true) {
-    let x_3 : u32 = x_1;
+    let x_3 = x_1;
     if (true) {
     }
   }
@@ -2586,7 +2598,7 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  x_5_1 : vec4<f32>,
+  x_5_1 : vec4f,
 }
 
 @vertex
@@ -2614,17 +2626,17 @@ TEST_F(SpvModuleScopeVarParserTest, VertexIndex_I32_Load_CopyObject) {
     const auto module_str = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : i32;
 
-var<private> x_4 : vec4<f32>;
+var<private> x_4 : vec4f;
 
 fn main_1() {
-  let x_14 : ptr<private, i32> = &(x_1);
-  let x_2 : i32 = *(x_14);
+  let x_14 = &(x_1);
+  let x_2 = *(x_14);
   return;
 }
 
 struct main_out {
   @builtin(position)
-  x_4_1 : vec4<f32>,
+  x_4_1 : vec4f,
 }
 
 @vertex
@@ -2652,16 +2664,16 @@ TEST_F(SpvModuleScopeVarParserTest, VertexIndex_I32_Load_AccessChain) {
     const auto module_str = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : i32;
 
-var<private> x_4 : vec4<f32>;
+var<private> x_4 : vec4f;
 
 fn main_1() {
-  let x_2 : i32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
 struct main_out {
   @builtin(position)
-  x_4_1 : vec4<f32>,
+  x_4_1 : vec4f,
 }
 
 @vertex
@@ -2688,16 +2700,16 @@ TEST_F(SpvModuleScopeVarParserTest, VertexIndex_U32_Load_Direct) {
     const auto module_str = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : u32;
 
-var<private> x_4 : vec4<f32>;
+var<private> x_4 : vec4f;
 
 fn main_1() {
-  let x_2 : u32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
 struct main_out {
   @builtin(position)
-  x_4_1 : vec4<f32>,
+  x_4_1 : vec4f,
 }
 
 @vertex
@@ -2725,17 +2737,17 @@ TEST_F(SpvModuleScopeVarParserTest, VertexIndex_U32_Load_CopyObject) {
     const auto module_str = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : u32;
 
-var<private> x_4 : vec4<f32>;
+var<private> x_4 : vec4f;
 
 fn main_1() {
-  let x_14 : ptr<private, u32> = &(x_1);
-  let x_2 : u32 = *(x_14);
+  let x_14 = &(x_1);
+  let x_2 = *(x_14);
   return;
 }
 
 struct main_out {
   @builtin(position)
-  x_4_1 : vec4<f32>,
+  x_4_1 : vec4f,
 }
 
 @vertex
@@ -2763,16 +2775,16 @@ TEST_F(SpvModuleScopeVarParserTest, VertexIndex_U32_Load_AccessChain) {
     const auto module_str = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : u32;
 
-var<private> x_4 : vec4<f32>;
+var<private> x_4 : vec4f;
 
 fn main_1() {
-  let x_2 : u32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
 struct main_out {
   @builtin(position)
-  x_4_1 : vec4<f32>,
+  x_4_1 : vec4f,
 }
 
 @vertex
@@ -2806,7 +2818,7 @@ TEST_F(SpvModuleScopeVarParserTest, VertexIndex_U32_FunctParam) {
     // This example is invalid because you can't pass pointer-to-Input
     // as a function parameter.
     EXPECT_FALSE(p->Parse());
-    EXPECT_THAT(p->error(), HasSubstr("Invalid storage class for pointer operand 1"));
+    EXPECT_THAT(p->error(), HasSubstr("Invalid storage class for pointer operand '1"));
 }
 
 // Returns the start of a shader for testing InstanceIndex,
@@ -2847,23 +2859,23 @@ TEST_F(SpvModuleScopeVarParserTest, InstanceIndex_I32_Load_Direct) {
     const auto module_str = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : i32;
 
-var<private> position : vec4<f32>;
+var<private> position_1 : vec4f;
 
 fn main_1() {
-  let x_2 : i32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
 struct main_out {
   @builtin(position)
-  position_1 : vec4<f32>,
+  position_1_1 : vec4f,
 }
 
 @vertex
 fn main(@builtin(instance_index) x_1_param : u32) -> main_out {
   x_1 = bitcast<i32>(x_1_param);
   main_1();
-  return main_out(position);
+  return main_out(position_1);
 }
 )";
     EXPECT_EQ(module_str, expected) << module_str;
@@ -2884,24 +2896,24 @@ TEST_F(SpvModuleScopeVarParserTest, InstanceIndex_I32_Load_CopyObject) {
     const auto module_str = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : i32;
 
-var<private> position : vec4<f32>;
+var<private> position_1 : vec4f;
 
 fn main_1() {
-  let x_14 : ptr<private, i32> = &(x_1);
-  let x_2 : i32 = *(x_14);
+  let x_14 = &(x_1);
+  let x_2 = *(x_14);
   return;
 }
 
 struct main_out {
   @builtin(position)
-  position_1 : vec4<f32>,
+  position_1_1 : vec4f,
 }
 
 @vertex
 fn main(@builtin(instance_index) x_1_param : u32) -> main_out {
   x_1 = bitcast<i32>(x_1_param);
   main_1();
-  return main_out(position);
+  return main_out(position_1);
 }
 )";
     EXPECT_EQ(module_str, expected) << module_str;
@@ -2922,23 +2934,23 @@ TEST_F(SpvModuleScopeVarParserTest, InstanceIndex_I32_Load_AccessChain) {
     const auto module_str = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : i32;
 
-var<private> position : vec4<f32>;
+var<private> position_1 : vec4f;
 
 fn main_1() {
-  let x_2 : i32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
 struct main_out {
   @builtin(position)
-  position_1 : vec4<f32>,
+  position_1_1 : vec4f,
 }
 
 @vertex
 fn main(@builtin(instance_index) x_1_param : u32) -> main_out {
   x_1 = bitcast<i32>(x_1_param);
   main_1();
-  return main_out(position);
+  return main_out(position_1);
 }
 )";
     EXPECT_EQ(module_str, expected) << module_str;
@@ -2964,7 +2976,7 @@ TEST_F(SpvModuleScopeVarParserTest, InstanceIndex_I32_FunctParam) {
     // This example is invalid because you can't pass pointer-to-Input
     // as a function parameter.
     EXPECT_FALSE(p->Parse());
-    EXPECT_THAT(p->error(), HasSubstr("Invalid storage class for pointer operand 1"));
+    EXPECT_THAT(p->error(), HasSubstr("Invalid storage class for pointer operand '1"));
 }
 
 TEST_F(SpvModuleScopeVarParserTest, InstanceIndex_U32_Load_Direct) {
@@ -2981,23 +2993,23 @@ TEST_F(SpvModuleScopeVarParserTest, InstanceIndex_U32_Load_Direct) {
     const auto module_str = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : u32;
 
-var<private> position : vec4<f32>;
+var<private> position_1 : vec4f;
 
 fn main_1() {
-  let x_2 : u32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
 struct main_out {
   @builtin(position)
-  position_1 : vec4<f32>,
+  position_1_1 : vec4f,
 }
 
 @vertex
 fn main(@builtin(instance_index) x_1_param : u32) -> main_out {
   x_1 = x_1_param;
   main_1();
-  return main_out(position);
+  return main_out(position_1);
 }
 )";
     EXPECT_EQ(module_str, expected);
@@ -3018,24 +3030,24 @@ TEST_F(SpvModuleScopeVarParserTest, InstanceIndex_U32_Load_CopyObject) {
     const auto module_str = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : u32;
 
-var<private> position : vec4<f32>;
+var<private> position_1 : vec4f;
 
 fn main_1() {
-  let x_14 : ptr<private, u32> = &(x_1);
-  let x_2 : u32 = *(x_14);
+  let x_14 = &(x_1);
+  let x_2 = *(x_14);
   return;
 }
 
 struct main_out {
   @builtin(position)
-  position_1 : vec4<f32>,
+  position_1_1 : vec4f,
 }
 
 @vertex
 fn main(@builtin(instance_index) x_1_param : u32) -> main_out {
   x_1 = x_1_param;
   main_1();
-  return main_out(position);
+  return main_out(position_1);
 }
 )";
     EXPECT_EQ(module_str, expected);
@@ -3056,23 +3068,23 @@ TEST_F(SpvModuleScopeVarParserTest, InstanceIndex_U32_Load_AccessChain) {
     const auto module_str = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : u32;
 
-var<private> position : vec4<f32>;
+var<private> position_1 : vec4f;
 
 fn main_1() {
-  let x_2 : u32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
 struct main_out {
   @builtin(position)
-  position_1 : vec4<f32>,
+  position_1_1 : vec4f,
 }
 
 @vertex
 fn main(@builtin(instance_index) x_1_param : u32) -> main_out {
   x_1 = x_1_param;
   main_1();
-  return main_out(position);
+  return main_out(position_1);
 }
 )";
     EXPECT_EQ(module_str, expected);
@@ -3098,12 +3110,20 @@ TEST_F(SpvModuleScopeVarParserTest, InstanceIndex_U32_FunctParam) {
     // This example is invalid because you can't pass pointer-to-Input
     // as a function parameter.
     EXPECT_FALSE(p->Parse());
-    EXPECT_THAT(p->error(), HasSubstr("Invalid storage class for pointer operand 1"));
+    EXPECT_THAT(p->error(), HasSubstr("Invalid storage class for pointer operand '1"));
 }
 
 // Returns the start of a shader for testing LocalInvocationIndex,
 // parameterized by store type of %int or %uint
 std::string ComputeBuiltinInputPreamble(std::string builtin, std::string store_type) {
+    std::string ptr_component_type;
+    if (store_type == "%v3int") {
+        ptr_component_type = " %ptr_comp_ty = OpTypePointer Input %int\n";
+    }
+    if (store_type == "%v3uint") {
+        ptr_component_type = " %ptr_comp_ty = OpTypePointer Input %uint\n";
+    }
+
     return R"(
     OpCapability Shader
     OpMemoryModel Logical Simple
@@ -3116,10 +3136,11 @@ std::string ComputeBuiltinInputPreamble(std::string builtin, std::string store_t
     %float = OpTypeFloat 32
     %uint = OpTypeInt 32 0
     %int = OpTypeInt 32 1
+    %int_1 = OpConstant %int 1
     %v3uint = OpTypeVector %uint 3
     %v3int = OpTypeVector %int 3
     %ptr_ty = OpTypePointer Input )" +
-           store_type + R"(
+           store_type + ptr_component_type + R"(
     %1 = OpVariable %ptr_ty Input
 )";
 }
@@ -3142,10 +3163,10 @@ std::string WgslType(std::string spirv_type) {
         return "i32";
     }
     if (spirv_type == "%v3uint") {
-        return "vec3<u32>";
+        return "vec3u";
     }
     if (spirv_type == "%v3int") {
-        return "vec3<i32>";
+        return "vec3i";
     }
     return "error";
 }
@@ -3157,11 +3178,11 @@ std::string UnsignedWgslType(std::string wgsl_type) {
     if (wgsl_type == "i32") {
         return "u32";
     }
-    if (wgsl_type == "vec3<u32>") {
-        return "vec3<u32>";
+    if (wgsl_type == "vec3u") {
+        return "vec3u";
     }
-    if (wgsl_type == "vec3<i32>") {
-        return "vec3<u32>";
+    if (wgsl_type == "vec3i") {
+        return "vec3u";
     }
     return "error";
 }
@@ -3173,11 +3194,11 @@ std::string SignedWgslType(std::string wgsl_type) {
     if (wgsl_type == "i32") {
         return "i32";
     }
-    if (wgsl_type == "vec3<u32>") {
-        return "vec3<i32>";
+    if (wgsl_type == "vec3u") {
+        return "vec3i";
     }
-    if (wgsl_type == "vec3<i32>") {
-        return "vec3<i32>";
+    if (wgsl_type == "vec3i") {
+        return "vec3i";
     }
     return "error";
 }
@@ -3207,7 +3228,7 @@ TEST_P(SpvModuleScopeVarParserTest_ComputeBuiltin, Load_Direct) {
     std::string expected = R"(var<private> x_1 : ${wgsl_type};
 
 fn main_1() {
-  let x_2 : ${wgsl_type} = x_1;
+  let x_2 = x_1;
   return;
 }
 
@@ -3252,8 +3273,8 @@ TEST_P(SpvModuleScopeVarParserTest_ComputeBuiltin, Load_CopyObject) {
     std::string expected = R"(var<private> x_1 : ${wgsl_type};
 
 fn main_1() {
-  let x_13 : ptr<private, ${wgsl_type}> = &(x_1);
-  let x_2 : ${wgsl_type} = *(x_13);
+  let x_13 = &(x_1);
+  let x_2 = *(x_13);
   return;
 }
 
@@ -3298,7 +3319,7 @@ TEST_P(SpvModuleScopeVarParserTest_ComputeBuiltin, Load_AccessChain) {
     std::string expected = R"(var<private> x_1 : ${wgsl_type};
 
 fn main_1() {
-  let x_2 : ${wgsl_type} = x_1;
+  let x_2 = x_1;
   return;
 }
 
@@ -3329,14 +3350,84 @@ INSTANTIATE_TEST_SUITE_P(Samples,
                              {"LocalInvocationId", "%v3int", "local_invocation_id"},
                              {"GlobalInvocationId", "%v3uint", "global_invocation_id"},
                              {"GlobalInvocationId", "%v3int", "global_invocation_id"},
+                             {"NumWorkgroups", "%v3uint", "num_workgroups"},
+                             {"NumWorkgroups", "%v3int", "num_workgroups"},
                              {"WorkgroupId", "%v3uint", "workgroup_id"},
                              {"WorkgroupId", "%v3int", "workgroup_id"}}));
 
-// TODO(dneto): crbug.com/tint/752
-// NumWorkgroups support is blocked by crbug.com/tint/752
-// When the AST supports NumWorkgroups, add these cases:
-//        {"NumWorkgroups", "%uint", "num_workgroups"}
-//        {"NumWorkgroups", "%int", "num_workgroups"}
+// For compute shader builtins that are vectors, test loading one component.
+struct ComputeBuiltinInputVectorCase {
+    std::string spirv_builtin;
+    std::string spirv_store_type;
+    std::string spirv_component_store_type;
+    std::string wgsl_builtin;
+};
+inline std::ostream& operator<<(std::ostream& o, ComputeBuiltinInputVectorCase c) {
+    return o << "ComputeBuiltinInputVectorCase(" << c.spirv_builtin << " " << c.spirv_store_type
+             << " " << c.spirv_component_store_type << " " << c.wgsl_builtin << ")";
+}
+
+using SpvModuleScopeVarParserTest_ComputeBuiltinVector =
+    SpvParserTestBase<::testing::TestWithParam<ComputeBuiltinInputVectorCase>>;
+
+TEST_P(SpvModuleScopeVarParserTest_ComputeBuiltinVector, Load_Component_Direct) {
+    const auto wgsl_type = WgslType(GetParam().spirv_store_type);
+    const auto wgsl_component_type = WgslType(GetParam().spirv_component_store_type);
+    const auto wgsl_builtin = GetParam().wgsl_builtin;
+    const auto unsigned_wgsl_type = UnsignedWgslType(wgsl_type);
+    const auto signed_wgsl_type = SignedWgslType(wgsl_type);
+    const std::string assembly =
+        ComputeBuiltinInputPreamble(GetParam().spirv_builtin, GetParam().spirv_store_type) +
+        R"(
+    %main = OpFunction %void None %voidfn
+    %entry = OpLabel
+    %3 = OpAccessChain %ptr_comp_ty %1 %int_1
+    %2 = OpLoad )" +
+        GetParam().spirv_component_store_type + R"( %3
+    OpReturn
+    OpFunctionEnd
+ )";
+    auto p = parser(test::Assemble(assembly));
+    ASSERT_TRUE(p->BuildAndParseInternalModule()) << p->error() << assembly;
+    EXPECT_TRUE(p->error().empty());
+    const auto module_str = test::ToString(p->program());
+    std::string expected = R"(var<private> x_1 : ${wgsl_type};
+
+fn main_1() {
+  let x_2 = x_1.y;
+  return;
+}
+
+@compute @workgroup_size(1i, 1i, 1i)
+fn main(@builtin(${wgsl_builtin}) x_1_param : ${unsigned_wgsl_type}) {
+  x_1 = ${assignment_value};
+  main_1();
+}
+)";
+
+    expected = utils::ReplaceAll(expected, "${wgsl_type}", wgsl_type);
+    expected = utils::ReplaceAll(expected, "${wgsl_component_type}", wgsl_component_type);
+    expected = utils::ReplaceAll(expected, "${unsigned_wgsl_type}", unsigned_wgsl_type);
+    expected = utils::ReplaceAll(expected, "${wgsl_builtin}", wgsl_builtin);
+    expected = utils::ReplaceAll(expected, "${assignment_value}",
+                                 (wgsl_type == unsigned_wgsl_type)
+                                     ? "x_1_param"
+                                     : "bitcast<" + signed_wgsl_type + ">(x_1_param)");
+
+    EXPECT_EQ(module_str, expected) << module_str;
+}
+
+INSTANTIATE_TEST_SUITE_P(Samples,
+                         SpvModuleScopeVarParserTest_ComputeBuiltinVector,
+                         ::testing::ValuesIn(std::vector<ComputeBuiltinInputVectorCase>{
+                             {"LocalInvocationId", "%v3uint", "%uint", "local_invocation_id"},
+                             {"LocalInvocationId", "%v3int", "%int", "local_invocation_id"},
+                             {"GlobalInvocationId", "%v3uint", "%uint", "global_invocation_id"},
+                             {"GlobalInvocationId", "%v3int", "%int", "global_invocation_id"},
+                             {"NumWorkgroups", "%v3uint", "%uint", "num_workgroups"},
+                             {"NumWorkgroups", "%v3int", "%int", "num_workgroups"},
+                             {"WorkgroupId", "%v3uint", "%uint", "workgroup_id"},
+                             {"WorkgroupId", "%v3int", "%int", "workgroup_id"}}));
 
 TEST_F(SpvModuleScopeVarParserTest, RegisterInputOutputVars) {
     const std::string assembly =
@@ -3489,7 +3580,7 @@ TEST_F(SpvModuleScopeVarParserTest, OutputVarsConvertedToPrivate_WithInitializer
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto got = test::ToString(p->program());
-    const std::string expected = "var<private> x_1 : u32 = 1u;";
+    const std::string expected = "var<private> x_1 = 1u;";
     EXPECT_THAT(got, HasSubstr(expected)) << got;
 }
 
@@ -3509,7 +3600,7 @@ TEST_F(SpvModuleScopeVarParserTest, Builtin_Output_Initializer_SameSignednessAsW
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto got = test::ToString(p->program());
-    const std::string expected = "var<private> x_1 : array<u32, 1u> = array<u32, 1u>(2u);";
+    const std::string expected = "var<private> x_1 = array<u32, 1u>(2u);";
     EXPECT_THAT(got, HasSubstr(expected)) << got;
 }
 
@@ -3529,7 +3620,7 @@ TEST_F(SpvModuleScopeVarParserTest, Builtin_Output_Initializer_OppositeSignednes
     ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
     EXPECT_TRUE(p->error().empty());
     const auto got = test::ToString(p->program());
-    const std::string expected = "var<private> x_1 : array<i32, 1u> = array<i32, 1u>(14i);";
+    const std::string expected = "var<private> x_1 = array<i32, 1u>(14i);";
     EXPECT_THAT(got, HasSubstr(expected)) << got;
 }
 
@@ -3653,16 +3744,16 @@ TEST_F(SpvModuleScopeVarParserTest, EntryPointWrapping_BuiltinVar_Input_SameSign
     const auto got = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : u32;
 
-var<private> x_4 : vec4<f32>;
+var<private> x_4 : vec4f;
 
 fn main_1() {
-  let x_2 : u32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
 struct main_out {
   @builtin(position)
-  x_4_1 : vec4<f32>,
+  x_4_1 : vec4f,
 }
 
 @vertex
@@ -3702,16 +3793,16 @@ TEST_F(SpvModuleScopeVarParserTest, EntryPointWrapping_BuiltinVar_Input_Opposite
     const auto got = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : i32;
 
-var<private> x_4 : vec4<f32>;
+var<private> x_4 : vec4f;
 
 fn main_1() {
-  let x_2 : i32 = x_1;
+  let x_2 = x_1;
   return;
 }
 
 struct main_out {
   @builtin(position)
-  x_4_1 : vec4<f32>,
+  x_4_1 : vec4f,
 }
 
 @vertex
@@ -3827,7 +3918,7 @@ TEST_F(SpvModuleScopeVarParserTest,
     EXPECT_TRUE(p->error().empty());
     const auto got = test::ToString(p->program());
     const std::string expected =
-        R"(var<private> x_1 : array<u32, 1u> = array<u32, 1u>();
+        R"(var<private> x_1 = array<u32, 1u>();
 
 fn main_1() {
   return;
@@ -3873,7 +3964,7 @@ TEST_F(SpvModuleScopeVarParserTest,
     EXPECT_TRUE(p->error().empty());
     const auto got = test::ToString(p->program());
     const std::string expected =
-        R"(var<private> x_1 : array<i32, 1u> = array<i32, 1u>();
+        R"(var<private> x_1 = array<i32, 1u>();
 
 fn main_1() {
   return;
@@ -3916,7 +4007,7 @@ TEST_F(SpvModuleScopeVarParserTest, EntryPointWrapping_BuiltinVar_FragDepth_Out_
     ASSERT_TRUE(p->Parse()) << p->error() << assembly;
     EXPECT_TRUE(p->error().empty());
     const auto got = test::ToString(p->program());
-    const std::string expected = R"(var<private> x_1 : f32 = 0.0f;
+    const std::string expected = R"(var<private> x_1 = 0.0f;
 
 fn main_1() {
   return;
@@ -3950,7 +4041,7 @@ TEST_F(SpvModuleScopeVarParserTest, BuiltinPosition_BuiltIn_Position) {
     EXPECT_TRUE(p->error().empty());
 
     const auto got = test::ToString(p->program());
-    const std::string expected = R"(var<private> gl_Position : vec4<f32>;
+    const std::string expected = R"(var<private> gl_Position : vec4f;
 
 fn main_1() {
   return;
@@ -3958,7 +4049,7 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  gl_Position : vec4<f32>,
+  gl_Position : vec4f,
 }
 
 @vertex
@@ -4019,7 +4110,7 @@ TEST_F(SpvModuleScopeVarParserTest, BuiltinPosition_BuiltIn_Position_Initializer
 
     const auto got = test::ToString(p->program());
     const std::string expected =
-        R"(var<private> gl_Position : vec4<f32> = vec4<f32>(1.0f, 2.0f, 3.0f, 4.0f);
+        R"(var<private> gl_Position = vec4f(1.0f, 2.0f, 3.0f, 4.0f);
 
 fn main_1() {
   return;
@@ -4027,7 +4118,7 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  gl_Position : vec4<f32>,
+  gl_Position : vec4f,
 }
 
 @vertex
@@ -4037,6 +4128,35 @@ fn main() -> main_out {
 }
 )";
     EXPECT_EQ(got, expected) << got;
+}
+
+TEST_F(SpvModuleScopeVarParserTest, BuiltinPosition_MultiplePerVertexVariables) {
+    // This is not currently supported, so just make sure we produce a meaningful error instead of
+    // crashing.
+    const std::string assembly = R"(
+  OpCapability Shader
+  OpMemoryModel Logical Simple
+  OpEntryPoint Vertex %main "main" %1
+  OpDecorate %struct Block
+  OpMemberDecorate %struct 0 BuiltIn Position
+  %void = OpTypeVoid
+  %voidfn = OpTypeFunction %void
+  %f32 = OpTypeFloat 32
+  %vec4f = OpTypeVector %f32 4
+  %struct = OpTypeStruct %vec4f
+  %struct_out_ptr = OpTypePointer Output %struct
+  %1 = OpVariable %struct_out_ptr Output
+  %2 = OpVariable %struct_out_ptr Output
+  %main = OpFunction %void None %voidfn
+  %entry = OpLabel
+  OpReturn
+  OpFunctionEnd
+)";
+    auto p = parser(test::Assemble(assembly));
+
+    EXPECT_FALSE(p->Parse());
+    EXPECT_FALSE(p->success());
+    EXPECT_EQ(p->error(), "unsupported: multiple Position built-in variables in the same module");
 }
 
 TEST_F(SpvModuleScopeVarParserTest, Input_FlattenArray_OneLevel) {
@@ -4076,7 +4196,7 @@ TEST_F(SpvModuleScopeVarParserTest, Input_FlattenArray_OneLevel) {
     const auto got = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : array<f32, 3u>;
 
-var<private> x_2 : vec4<f32>;
+var<private> x_2 : vec4f;
 
 fn main_1() {
   return;
@@ -4084,7 +4204,7 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  x_2_1 : vec4<f32>,
+  x_2_1 : vec4f,
 }
 
 @vertex
@@ -4132,9 +4252,9 @@ TEST_F(SpvModuleScopeVarParserTest, Input_FlattenMatrix) {
     EXPECT_TRUE(p->error().empty());
 
     const auto got = test::ToString(p->program());
-    const std::string expected = R"(var<private> x_1 : mat2x4<f32>;
+    const std::string expected = R"(var<private> x_1 : mat2x4f;
 
-var<private> x_2 : vec4<f32>;
+var<private> x_2 : vec4f;
 
 fn main_1() {
   return;
@@ -4142,11 +4262,11 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  x_2_1 : vec4<f32>,
+  x_2_1 : vec4f,
 }
 
 @vertex
-fn main(@location(9) x_1_param : vec4<f32>, @location(10) x_1_param_1 : vec4<f32>) -> main_out {
+fn main(@location(9) x_1_param : vec4f, @location(10) x_1_param_1 : vec4f) -> main_out {
   x_1[0i] = x_1_param;
   x_1[1i] = x_1_param_1;
   main_1();
@@ -4196,12 +4316,12 @@ TEST_F(SpvModuleScopeVarParserTest, Input_FlattenStruct_LocOnVariable) {
     const auto got = test::ToString(p->program());
     const std::string expected = R"(struct Communicators {
   alice : f32,
-  bob : vec4<f32>,
+  bob : vec4f,
 }
 
 var<private> x_1 : Communicators;
 
-var<private> x_2 : vec4<f32>;
+var<private> x_2 : vec4f;
 
 fn main_1() {
   return;
@@ -4209,11 +4329,11 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  x_2_1 : vec4<f32>,
+  x_2_1 : vec4f,
 }
 
 @vertex
-fn main(@location(9) x_1_param : f32, @location(10) x_1_param_1 : vec4<f32>) -> main_out {
+fn main(@location(9) x_1_param : f32, @location(10) x_1_param_1 : vec4f) -> main_out {
   x_1.alice = x_1_param;
   x_1.bob = x_1_param_1;
   main_1();
@@ -4258,9 +4378,9 @@ TEST_F(SpvModuleScopeVarParserTest, Input_FlattenNested) {
     EXPECT_TRUE(p->error().empty());
 
     const auto got = test::ToString(p->program());
-    const std::string expected = R"(var<private> x_1 : array<mat2x4<f32>, 2u>;
+    const std::string expected = R"(var<private> x_1 : array<mat2x4f, 2u>;
 
-var<private> x_2 : vec4<f32>;
+var<private> x_2 : vec4f;
 
 fn main_1() {
   return;
@@ -4268,11 +4388,11 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  x_2_1 : vec4<f32>,
+  x_2_1 : vec4f,
 }
 
 @vertex
-fn main(@location(7) x_1_param : vec4<f32>, @location(8) x_1_param_1 : vec4<f32>, @location(9) x_1_param_2 : vec4<f32>, @location(10) x_1_param_3 : vec4<f32>) -> main_out {
+fn main(@location(7) x_1_param : vec4f, @location(8) x_1_param_1 : vec4f, @location(9) x_1_param_2 : vec4f, @location(10) x_1_param_3 : vec4f) -> main_out {
   x_1[0i][0i] = x_1_param;
   x_1[0i][1i] = x_1_param_1;
   x_1[1i][0i] = x_1_param_2;
@@ -4321,7 +4441,7 @@ TEST_F(SpvModuleScopeVarParserTest, Output_FlattenArray_OneLevel) {
     const auto got = test::ToString(p->program());
     const std::string expected = R"(var<private> x_1 : array<f32, 3u>;
 
-var<private> x_2 : vec4<f32>;
+var<private> x_2 : vec4f;
 
 fn main_1() {
   return;
@@ -4335,7 +4455,7 @@ struct main_out {
   @location(6)
   x_1_3 : f32,
   @builtin(position)
-  x_2_1 : vec4<f32>,
+  x_2_1 : vec4f,
 }
 
 @vertex
@@ -4380,9 +4500,9 @@ TEST_F(SpvModuleScopeVarParserTest, Output_FlattenMatrix) {
     EXPECT_TRUE(p->error().empty());
 
     const auto got = test::ToString(p->program());
-    const std::string expected = R"(var<private> x_1 : mat2x4<f32>;
+    const std::string expected = R"(var<private> x_1 : mat2x4f;
 
-var<private> x_2 : vec4<f32>;
+var<private> x_2 : vec4f;
 
 fn main_1() {
   return;
@@ -4390,11 +4510,11 @@ fn main_1() {
 
 struct main_out {
   @location(9)
-  x_1_1 : vec4<f32>,
+  x_1_1 : vec4f,
   @location(10)
-  x_1_2 : vec4<f32>,
+  x_1_2 : vec4f,
   @builtin(position)
-  x_2_1 : vec4<f32>,
+  x_2_1 : vec4f,
 }
 
 @vertex
@@ -4446,12 +4566,12 @@ TEST_F(SpvModuleScopeVarParserTest, Output_FlattenStruct_LocOnVariable) {
     const auto got = test::ToString(p->program());
     const std::string expected = R"(struct Communicators {
   alice : f32,
-  bob : vec4<f32>,
+  bob : vec4f,
 }
 
 var<private> x_1 : Communicators;
 
-var<private> x_2 : vec4<f32>;
+var<private> x_2 : vec4f;
 
 fn main_1() {
   return;
@@ -4461,9 +4581,9 @@ struct main_out {
   @location(9)
   x_1_1 : f32,
   @location(10)
-  x_1_2 : vec4<f32>,
+  x_1_2 : vec4f,
   @builtin(position)
-  x_2_1 : vec4<f32>,
+  x_2_1 : vec4f,
 }
 
 @vertex
@@ -4519,14 +4639,14 @@ TEST_F(SpvModuleScopeVarParserTest, FlattenStruct_LocOnMembers) {
     const auto got = test::ToString(p->program());
     const std::string expected = R"(struct Communicators {
   alice : f32,
-  bob : vec4<f32>,
+  bob : vec4f,
 }
 
 var<private> x_1 : Communicators;
 
 var<private> x_3 : Communicators;
 
-var<private> x_2 : vec4<f32>;
+var<private> x_2 : vec4f;
 
 fn main_1() {
   return;
@@ -4534,15 +4654,15 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  x_2_1 : vec4<f32>,
+  x_2_1 : vec4f,
   @location(9)
   x_3_1 : f32,
   @location(11)
-  x_3_2 : vec4<f32>,
+  x_3_2 : vec4f,
 }
 
 @vertex
-fn main(@location(9) x_1_param : f32, @location(11) x_1_param_1 : vec4<f32>) -> main_out {
+fn main(@location(9) x_1_param : f32, @location(11) x_1_param_1 : vec4f) -> main_out {
   x_1.alice = x_1_param;
   x_1.bob = x_1_param_1;
   main_1();
@@ -4599,17 +4719,17 @@ TEST_F(SpvModuleScopeVarParserTest, EntryPointWrapping_Interpolation_Flat_Vertex
     const std::string expected =
         R"(var<private> x_1 : u32;
 
-var<private> x_2 : vec2<u32>;
+var<private> x_2 : vec2u;
 
 var<private> x_3 : i32;
 
-var<private> x_4 : vec2<i32>;
+var<private> x_4 : vec2i;
 
 var<private> x_5 : f32;
 
-var<private> x_6 : vec2<f32>;
+var<private> x_6 : vec2f;
 
-var<private> x_10 : vec4<f32>;
+var<private> x_10 : vec4f;
 
 fn main_1() {
   return;
@@ -4617,11 +4737,11 @@ fn main_1() {
 
 struct main_out {
   @builtin(position)
-  x_10_1 : vec4<f32>,
+  x_10_1 : vec4f,
 }
 
 @vertex
-fn main(@location(1) @interpolate(flat) x_1_param : u32, @location(2) @interpolate(flat) x_2_param : vec2<u32>, @location(3) @interpolate(flat) x_3_param : i32, @location(4) @interpolate(flat) x_4_param : vec2<i32>, @location(5) @interpolate(flat) x_5_param : f32, @location(6) @interpolate(flat) x_6_param : vec2<f32>) -> main_out {
+fn main(@location(1) @interpolate(flat) x_1_param : u32, @location(2) @interpolate(flat) x_2_param : vec2u, @location(3) @interpolate(flat) x_3_param : i32, @location(4) @interpolate(flat) x_4_param : vec2i, @location(5) @interpolate(flat) x_5_param : f32, @location(6) @interpolate(flat) x_6_param : vec2f) -> main_out {
   x_1 = x_1_param;
   x_2 = x_2_param;
   x_3 = x_3_param;
@@ -4682,17 +4802,17 @@ TEST_F(SpvModuleScopeVarParserTest, EntryPointWrapping_Interpolation_Flat_Vertex
     const std::string expected =
         R"(var<private> x_1 : u32;
 
-var<private> x_2 : vec2<u32>;
+var<private> x_2 : vec2u;
 
 var<private> x_3 : i32;
 
-var<private> x_4 : vec2<i32>;
+var<private> x_4 : vec2i;
 
 var<private> x_5 : f32;
 
-var<private> x_6 : vec2<f32>;
+var<private> x_6 : vec2f;
 
-var<private> x_10 : vec4<f32>;
+var<private> x_10 : vec4f;
 
 fn main_1() {
   return;
@@ -4702,17 +4822,17 @@ struct main_out {
   @location(1) @interpolate(flat)
   x_1_1 : u32,
   @location(2) @interpolate(flat)
-  x_2_1 : vec2<u32>,
+  x_2_1 : vec2u,
   @location(3) @interpolate(flat)
   x_3_1 : i32,
   @location(4) @interpolate(flat)
-  x_4_1 : vec2<i32>,
+  x_4_1 : vec2i,
   @location(5) @interpolate(flat)
   x_5_1 : f32,
   @location(6) @interpolate(flat)
-  x_6_1 : vec2<f32>,
+  x_6_1 : vec2f,
   @builtin(position)
-  x_10_1 : vec4<f32>,
+  x_10_1 : vec4f,
 }
 
 @vertex
@@ -5129,17 +5249,17 @@ TEST_F(SpvModuleScopeVarParserTest, EntryPointWrapping_Interpolation_Default_Ver
     const std::string expected =
         R"(var<private> x_1 : u32;
 
-var<private> x_2 : vec2<u32>;
+var<private> x_2 : vec2u;
 
 var<private> x_3 : i32;
 
-var<private> x_4 : vec2<i32>;
+var<private> x_4 : vec2i;
 
 var<private> x_5 : f32;
 
-var<private> x_6 : vec2<f32>;
+var<private> x_6 : vec2f;
 
-var<private> x_10 : vec4<f32>;
+var<private> x_10 : vec4f;
 
 fn main_1() {
   return;
@@ -5149,17 +5269,17 @@ struct main_out {
   @location(1) @interpolate(flat)
   x_1_1 : u32,
   @location(2) @interpolate(flat)
-  x_2_1 : vec2<u32>,
+  x_2_1 : vec2u,
   @location(3) @interpolate(flat)
   x_3_1 : i32,
   @location(4) @interpolate(flat)
-  x_4_1 : vec2<i32>,
+  x_4_1 : vec2i,
   @location(5)
   x_5_1 : f32,
   @location(6)
-  x_6_1 : vec2<f32>,
+  x_6_1 : vec2f,
   @builtin(position)
-  x_10_1 : vec4<f32>,
+  x_10_1 : vec4f,
 }
 
 @vertex
@@ -5211,22 +5331,22 @@ TEST_F(SpvModuleScopeVarParserTest, EntryPointWrapping_Interpolation_Default_Fra
     const std::string expected =
         R"(var<private> x_1 : u32;
 
-var<private> x_2 : vec2<u32>;
+var<private> x_2 : vec2u;
 
 var<private> x_3 : i32;
 
-var<private> x_4 : vec2<i32>;
+var<private> x_4 : vec2i;
 
 var<private> x_5 : f32;
 
-var<private> x_6 : vec2<f32>;
+var<private> x_6 : vec2f;
 
 fn main_1() {
   return;
 }
 
 @fragment
-fn main(@location(1) @interpolate(flat) x_1_param : u32, @location(2) @interpolate(flat) x_2_param : vec2<u32>, @location(3) @interpolate(flat) x_3_param : i32, @location(4) @interpolate(flat) x_4_param : vec2<i32>, @location(5) x_5_param : f32, @location(6) x_6_param : vec2<f32>) {
+fn main(@location(1) @interpolate(flat) x_1_param : u32, @location(2) @interpolate(flat) x_2_param : vec2u, @location(3) @interpolate(flat) x_3_param : i32, @location(4) @interpolate(flat) x_4_param : vec2i, @location(5) x_5_param : f32, @location(6) x_6_param : vec2f) {
   x_1 = x_1_param;
   x_2 = x_2_param;
   x_3 = x_3_param;

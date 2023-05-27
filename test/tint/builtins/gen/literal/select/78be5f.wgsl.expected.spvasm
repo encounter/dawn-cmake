@@ -12,6 +12,9 @@
                OpExecutionMode %compute_main LocalSize 1 1 1
                OpName %value "value"
                OpName %vertex_point_size "vertex_point_size"
+               OpName %prevent_dce_block "prevent_dce_block"
+               OpMemberName %prevent_dce_block 0 "inner"
+               OpName %prevent_dce "prevent_dce"
                OpName %select_78be5f "select_78be5f"
                OpName %res "res"
                OpName %vertex_main_inner "vertex_main_inner"
@@ -20,6 +23,10 @@
                OpName %compute_main "compute_main"
                OpDecorate %value BuiltIn Position
                OpDecorate %vertex_point_size BuiltIn PointSize
+               OpDecorate %prevent_dce_block Block
+               OpMemberDecorate %prevent_dce_block 0 Offset 0
+               OpDecorate %prevent_dce DescriptorSet 2
+               OpDecorate %prevent_dce Binding 0
       %float = OpTypeFloat 32
     %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
@@ -28,26 +35,27 @@
 %_ptr_Output_float = OpTypePointer Output %float
           %8 = OpConstantNull %float
 %vertex_point_size = OpVariable %_ptr_Output_float Output %8
-       %void = OpTypeVoid
-          %9 = OpTypeFunction %void
     %v3float = OpTypeVector %float 3
-       %bool = OpTypeBool
-       %true = OpConstantTrue %bool
+%prevent_dce_block = OpTypeStruct %v3float
+%_ptr_StorageBuffer_prevent_dce_block = OpTypePointer StorageBuffer %prevent_dce_block
+%prevent_dce = OpVariable %_ptr_StorageBuffer_prevent_dce_block StorageBuffer
+       %void = OpTypeVoid
+         %13 = OpTypeFunction %void
     %float_1 = OpConstant %float 1
          %18 = OpConstantComposite %v3float %float_1 %float_1 %float_1
-     %v3bool = OpTypeVector %bool 3
-%_ptr_Function_v3bool = OpTypePointer Function %v3bool
-         %22 = OpConstantNull %v3bool
 %_ptr_Function_v3float = OpTypePointer Function %v3float
-         %26 = OpConstantNull %v3float
+         %21 = OpConstantNull %v3float
+       %uint = OpTypeInt 32 0
+     %uint_0 = OpConstant %uint 0
+%_ptr_StorageBuffer_v3float = OpTypePointer StorageBuffer %v3float
          %27 = OpTypeFunction %v4float
-%select_78be5f = OpFunction %void None %9
-         %12 = OpLabel
-         %20 = OpVariable %_ptr_Function_v3bool Function %22
-        %res = OpVariable %_ptr_Function_v3float Function %26
-         %23 = OpCompositeConstruct %v3bool %true %true %true
-         %13 = OpSelect %v3float %23 %18 %18
-               OpStore %res %13
+%select_78be5f = OpFunction %void None %13
+         %16 = OpLabel
+        %res = OpVariable %_ptr_Function_v3float Function %21
+               OpStore %res %18
+         %25 = OpAccessChain %_ptr_StorageBuffer_v3float %prevent_dce %uint_0
+         %26 = OpLoad %v3float %res
+               OpStore %25 %26
                OpReturn
                OpFunctionEnd
 %vertex_main_inner = OpFunction %v4float None %27
@@ -55,19 +63,19 @@
          %30 = OpFunctionCall %void %select_78be5f
                OpReturnValue %5
                OpFunctionEnd
-%vertex_main = OpFunction %void None %9
+%vertex_main = OpFunction %void None %13
          %32 = OpLabel
          %33 = OpFunctionCall %v4float %vertex_main_inner
                OpStore %value %33
                OpStore %vertex_point_size %float_1
                OpReturn
                OpFunctionEnd
-%fragment_main = OpFunction %void None %9
+%fragment_main = OpFunction %void None %13
          %35 = OpLabel
          %36 = OpFunctionCall %void %select_78be5f
                OpReturn
                OpFunctionEnd
-%compute_main = OpFunction %void None %9
+%compute_main = OpFunction %void None %13
          %38 = OpLabel
          %39 = OpFunctionCall %void %select_78be5f
                OpReturn

@@ -1,22 +1,12 @@
 #version 310 es
 
-uvec2 tint_first_trailing_bit(uvec2 v) {
-  uvec2 x = uvec2(v);
-  uvec2 b16 = mix(uvec2(16u), uvec2(0u), bvec2((x & uvec2(65535u))));
-  x = (x >> b16);
-  uvec2 b8 = mix(uvec2(8u), uvec2(0u), bvec2((x & uvec2(255u))));
-  x = (x >> b8);
-  uvec2 b4 = mix(uvec2(4u), uvec2(0u), bvec2((x & uvec2(15u))));
-  x = (x >> b4);
-  uvec2 b2 = mix(uvec2(2u), uvec2(0u), bvec2((x & uvec2(3u))));
-  x = (x >> b2);
-  uvec2 b1 = mix(uvec2(1u), uvec2(0u), bvec2((x & uvec2(1u))));
-  uvec2 is_zero = mix(uvec2(0u), uvec2(4294967295u), equal(x, uvec2(0u)));
-  return uvec2((((((b16 | b8) | b4) | b2) | b1) | is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uvec2 inner;
+} prevent_dce;
 
 void firstTrailingBit_45eb10() {
-  uvec2 res = tint_first_trailing_bit(uvec2(1u));
+  uvec2 res = uvec2(0u);
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -33,25 +23,15 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-uvec2 tint_first_trailing_bit(uvec2 v) {
-  uvec2 x = uvec2(v);
-  uvec2 b16 = mix(uvec2(16u), uvec2(0u), bvec2((x & uvec2(65535u))));
-  x = (x >> b16);
-  uvec2 b8 = mix(uvec2(8u), uvec2(0u), bvec2((x & uvec2(255u))));
-  x = (x >> b8);
-  uvec2 b4 = mix(uvec2(4u), uvec2(0u), bvec2((x & uvec2(15u))));
-  x = (x >> b4);
-  uvec2 b2 = mix(uvec2(2u), uvec2(0u), bvec2((x & uvec2(3u))));
-  x = (x >> b2);
-  uvec2 b1 = mix(uvec2(1u), uvec2(0u), bvec2((x & uvec2(1u))));
-  uvec2 is_zero = mix(uvec2(0u), uvec2(4294967295u), equal(x, uvec2(0u)));
-  return uvec2((((((b16 | b8) | b4) | b2) | b1) | is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uvec2 inner;
+} prevent_dce;
 
 void firstTrailingBit_45eb10() {
-  uvec2 res = tint_first_trailing_bit(uvec2(1u));
+  uvec2 res = uvec2(0u);
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -64,23 +44,13 @@ void main() {
 }
 #version 310 es
 
-uvec2 tint_first_trailing_bit(uvec2 v) {
-  uvec2 x = uvec2(v);
-  uvec2 b16 = mix(uvec2(16u), uvec2(0u), bvec2((x & uvec2(65535u))));
-  x = (x >> b16);
-  uvec2 b8 = mix(uvec2(8u), uvec2(0u), bvec2((x & uvec2(255u))));
-  x = (x >> b8);
-  uvec2 b4 = mix(uvec2(4u), uvec2(0u), bvec2((x & uvec2(15u))));
-  x = (x >> b4);
-  uvec2 b2 = mix(uvec2(2u), uvec2(0u), bvec2((x & uvec2(3u))));
-  x = (x >> b2);
-  uvec2 b1 = mix(uvec2(1u), uvec2(0u), bvec2((x & uvec2(1u))));
-  uvec2 is_zero = mix(uvec2(0u), uvec2(4294967295u), equal(x, uvec2(0u)));
-  return uvec2((((((b16 | b8) | b4) | b2) | b1) | is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uvec2 inner;
+} prevent_dce;
 
 void firstTrailingBit_45eb10() {
-  uvec2 res = tint_first_trailing_bit(uvec2(1u));
+  uvec2 res = uvec2(0u);
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

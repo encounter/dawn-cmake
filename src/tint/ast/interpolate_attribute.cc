@@ -25,8 +25,8 @@ namespace tint::ast {
 InterpolateAttribute::InterpolateAttribute(ProgramID pid,
                                            NodeID nid,
                                            const Source& src,
-                                           InterpolationType ty,
-                                           InterpolationSampling smpl)
+                                           const Expression* ty,
+                                           const Expression* smpl)
     : Base(pid, nid, src), type(ty), sampling(smpl) {}
 
 InterpolateAttribute::~InterpolateAttribute() = default;
@@ -38,47 +38,9 @@ std::string InterpolateAttribute::Name() const {
 const InterpolateAttribute* InterpolateAttribute::Clone(CloneContext* ctx) const {
     // Clone arguments outside of create() call to have deterministic ordering
     auto src = ctx->Clone(source);
-    return ctx->dst->create<InterpolateAttribute>(src, type, sampling);
-}
-
-std::ostream& operator<<(std::ostream& out, InterpolationType type) {
-    switch (type) {
-        case InterpolationType::kPerspective: {
-            out << "perspective";
-            break;
-        }
-        case InterpolationType::kLinear: {
-            out << "linear";
-            break;
-        }
-        case InterpolationType::kFlat: {
-            out << "flat";
-            break;
-        }
-    }
-    return out;
-}
-
-std::ostream& operator<<(std::ostream& out, InterpolationSampling sampling) {
-    switch (sampling) {
-        case InterpolationSampling::kNone: {
-            out << "none";
-            break;
-        }
-        case InterpolationSampling::kCenter: {
-            out << "center";
-            break;
-        }
-        case InterpolationSampling::kCentroid: {
-            out << "centroid";
-            break;
-        }
-        case InterpolationSampling::kSample: {
-            out << "sample";
-            break;
-        }
-    }
-    return out;
+    auto* ty = ctx->Clone(type);
+    auto* smpl = ctx->Clone(sampling);
+    return ctx->dst->create<InterpolateAttribute>(src, ty, smpl);
 }
 
 }  // namespace tint::ast

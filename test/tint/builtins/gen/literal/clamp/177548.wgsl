@@ -23,9 +23,8 @@
 
 // fn clamp(vec<2, ia>, vec<2, ia>, vec<2, ia>) -> vec<2, ia>
 fn clamp_177548() {
-  var res = clamp(vec2(1.0), vec2(1.0), vec2(1.0));
+  var res = clamp(vec2(1), vec2(1), vec2(1));
 }
-
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {
   clamp_177548();

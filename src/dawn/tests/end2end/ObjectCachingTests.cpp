@@ -12,10 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <vector>
+
 #include "dawn/tests/DawnTest.h"
 
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
+
+namespace dawn {
+namespace {
 
 class ObjectCachingTest : public DawnTest {};
 
@@ -104,16 +109,16 @@ TEST_P(ObjectCachingTest, PipelineLayoutDeduplication) {
 // Test that ShaderModules are correctly deduplicated.
 TEST_P(ObjectCachingTest, ShaderModuleDeduplication) {
     wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
-        @fragment fn main() -> @location(0) vec4<f32> {
-            return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+        @fragment fn main() -> @location(0) vec4f {
+            return vec4f(0.0, 1.0, 0.0, 1.0);
         })");
     wgpu::ShaderModule sameModule = utils::CreateShaderModule(device, R"(
-        @fragment fn main() -> @location(0) vec4<f32> {
-            return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+        @fragment fn main() -> @location(0) vec4f {
+            return vec4f(0.0, 1.0, 0.0, 1.0);
         })");
     wgpu::ShaderModule otherModule = utils::CreateShaderModule(device, R"(
-        @fragment fn main() -> @location(0) vec4<f32> {
-            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        @fragment fn main() -> @location(0) vec4f {
+            return vec4f(0.0, 0.0, 0.0, 0.0);
         })");
 
     EXPECT_NE(module.Get(), otherModule.Get());
@@ -155,6 +160,46 @@ TEST_P(ObjectCachingTest, ComputePipelineDeduplicationOnShaderModule) {
     wgpu::ComputePipeline otherPipeline = device.CreateComputePipeline(&desc);
 
     EXPECT_NE(pipeline.Get(), otherPipeline.Get());
+    EXPECT_EQ(pipeline.Get() == samePipeline.Get(), !UsesWire());
+}
+
+// Test that ComputePipeline are correctly deduplicated wrt. their constants override values
+TEST_P(ObjectCachingTest, ComputePipelineDeduplicationOnOverrides) {
+    wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
+        override x: u32 = 1u;
+        var<workgroup> i : u32;
+        @compute @workgroup_size(x) fn main() {
+            i = 0u;
+        })");
+
+    wgpu::PipelineLayout layout = utils::MakeBasicPipelineLayout(device, nullptr);
+
+    wgpu::ComputePipelineDescriptor desc;
+    desc.compute.entryPoint = "main";
+    desc.layout = layout;
+    desc.compute.module = module;
+
+    std::vector<wgpu::ConstantEntry> constants{{nullptr, "x", 16}};
+    desc.compute.constantCount = constants.size();
+    desc.compute.constants = constants.data();
+    wgpu::ComputePipeline pipeline = device.CreateComputePipeline(&desc);
+
+    std::vector<wgpu::ConstantEntry> sameConstants{{nullptr, "x", 16}};
+    desc.compute.constantCount = sameConstants.size();
+    desc.compute.constants = sameConstants.data();
+    wgpu::ComputePipeline samePipeline = device.CreateComputePipeline(&desc);
+
+    desc.compute.constantCount = 0;
+    desc.compute.constants = nullptr;
+    wgpu::ComputePipeline otherPipeline1 = device.CreateComputePipeline(&desc);
+
+    std::vector<wgpu::ConstantEntry> otherConstants{{nullptr, "x", 4}};
+    desc.compute.constantCount = otherConstants.size();
+    desc.compute.constants = otherConstants.data();
+    wgpu::ComputePipeline otherPipeline2 = device.CreateComputePipeline(&desc);
+
+    EXPECT_NE(pipeline.Get(), otherPipeline1.Get());
+    EXPECT_NE(pipeline.Get(), otherPipeline2.Get());
     EXPECT_EQ(pipeline.Get() == samePipeline.Get(), !UsesWire());
 }
 
@@ -210,8 +255,8 @@ TEST_P(ObjectCachingTest, RenderPipelineDeduplicationOnLayout) {
     utils::ComboRenderPipelineDescriptor desc;
     desc.cTargets[0].writeMask = wgpu::ColorWriteMask::None;
     desc.vertex.module = utils::CreateShaderModule(device, R"(
-        @vertex fn main() -> @builtin(position) vec4<f32> {
-            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        @vertex fn main() -> @builtin(position) vec4f {
+            return vec4f(0.0, 0.0, 0.0, 0.0);
         })");
     desc.cFragment.module = utils::CreateShaderModule(device, R"(
         @fragment fn main() {
@@ -233,16 +278,16 @@ TEST_P(ObjectCachingTest, RenderPipelineDeduplicationOnLayout) {
 // Test that RenderPipelines are correctly deduplicated wrt. their vertex module
 TEST_P(ObjectCachingTest, RenderPipelineDeduplicationOnVertexModule) {
     wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
-        @vertex fn main() -> @builtin(position) vec4<f32> {
-            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        @vertex fn main() -> @builtin(position) vec4f {
+            return vec4f(0.0, 0.0, 0.0, 0.0);
         })");
     wgpu::ShaderModule sameModule = utils::CreateShaderModule(device, R"(
-        @vertex fn main() -> @builtin(position) vec4<f32> {
-            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        @vertex fn main() -> @builtin(position) vec4f {
+            return vec4f(0.0, 0.0, 0.0, 0.0);
         })");
     wgpu::ShaderModule otherModule = utils::CreateShaderModule(device, R"(
-        @vertex fn main() -> @builtin(position) vec4<f32> {
-            return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+        @vertex fn main() -> @builtin(position) vec4f {
+            return vec4f(1.0, 1.0, 1.0, 1.0);
         })");
 
     EXPECT_NE(module.Get(), otherModule.Get());
@@ -276,8 +321,8 @@ TEST_P(ObjectCachingTest, RenderPipelineDeduplicationOnFragmentModule) {
         @fragment fn main() {
         })");
     wgpu::ShaderModule otherModule = utils::CreateShaderModule(device, R"(
-        @fragment fn main() -> @location(0) vec4<f32> {
-            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        @fragment fn main() -> @location(0) vec4f {
+            return vec4f(0.0, 0.0, 0.0, 0.0);
         })");
 
     EXPECT_NE(module.Get(), otherModule.Get());
@@ -285,8 +330,8 @@ TEST_P(ObjectCachingTest, RenderPipelineDeduplicationOnFragmentModule) {
 
     utils::ComboRenderPipelineDescriptor desc;
     desc.vertex.module = utils::CreateShaderModule(device, R"(
-        @vertex fn main() -> @builtin(position) vec4<f32> {
-            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        @vertex fn main() -> @builtin(position) vec4f {
+            return vec4f(0.0, 0.0, 0.0, 0.0);
         })");
 
     desc.cFragment.module = module;
@@ -300,6 +345,48 @@ TEST_P(ObjectCachingTest, RenderPipelineDeduplicationOnFragmentModule) {
     wgpu::RenderPipeline otherPipeline = device.CreateRenderPipeline(&desc);
 
     EXPECT_NE(pipeline.Get(), otherPipeline.Get());
+    EXPECT_EQ(pipeline.Get() == samePipeline.Get(), !UsesWire());
+}
+
+// Test that Renderpipelines are correctly deduplicated wrt. their constants override values
+TEST_P(ObjectCachingTest, RenderPipelineDeduplicationOnOverrides) {
+    wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
+        override a: f32 = 1.0;
+        @vertex fn vertexMain() -> @builtin(position) vec4f {
+            return vec4f(0.0, 0.0, 0.0, 0.0);
+        }
+        @fragment fn fragmentMain() -> @location(0) vec4f {
+            return vec4f(0.0, 0.0, 0.0, a);
+        })");
+
+    utils::ComboRenderPipelineDescriptor desc;
+    desc.vertex.module = module;
+    desc.vertex.entryPoint = "vertexMain";
+    desc.cFragment.module = module;
+    desc.cFragment.entryPoint = "fragmentMain";
+    desc.cTargets[0].writeMask = wgpu::ColorWriteMask::None;
+
+    std::vector<wgpu::ConstantEntry> constants{{nullptr, "a", 0.5}};
+    desc.cFragment.constantCount = constants.size();
+    desc.cFragment.constants = constants.data();
+    wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&desc);
+
+    std::vector<wgpu::ConstantEntry> sameConstants{{nullptr, "a", 0.5}};
+    desc.cFragment.constantCount = sameConstants.size();
+    desc.cFragment.constants = sameConstants.data();
+    wgpu::RenderPipeline samePipeline = device.CreateRenderPipeline(&desc);
+
+    std::vector<wgpu::ConstantEntry> otherConstants{{nullptr, "a", 1.0}};
+    desc.cFragment.constantCount = otherConstants.size();
+    desc.cFragment.constants = otherConstants.data();
+    wgpu::RenderPipeline otherPipeline1 = device.CreateRenderPipeline(&desc);
+
+    desc.cFragment.constantCount = 0;
+    desc.cFragment.constants = nullptr;
+    wgpu::RenderPipeline otherPipeline2 = device.CreateRenderPipeline(&desc);
+
+    EXPECT_NE(pipeline.Get(), otherPipeline1.Get());
+    EXPECT_NE(pipeline.Get(), otherPipeline2.Get());
     EXPECT_EQ(pipeline.Get() == samePipeline.Get(), !UsesWire());
 }
 
@@ -332,7 +419,7 @@ TEST_P(ObjectCachingTest, SamplerDeduplication) {
     wgpu::Sampler otherSamplerMinFilter = device.CreateSampler(&otherSamplerDescMinFilter);
 
     wgpu::SamplerDescriptor otherSamplerDescMipmapFilter;
-    otherSamplerDescMipmapFilter.mipmapFilter = wgpu::FilterMode::Linear;
+    otherSamplerDescMipmapFilter.mipmapFilter = wgpu::MipmapFilterMode::Linear;
     wgpu::Sampler otherSamplerMipmapFilter = device.CreateSampler(&otherSamplerDescMipmapFilter);
 
     wgpu::SamplerDescriptor otherSamplerDescLodMinClamp;
@@ -361,8 +448,12 @@ TEST_P(ObjectCachingTest, SamplerDeduplication) {
 }
 
 DAWN_INSTANTIATE_TEST(ObjectCachingTest,
+                      D3D11Backend(),
                       D3D12Backend(),
                       MetalBackend(),
                       OpenGLBackend(),
                       OpenGLESBackend(),
                       VulkanBackend());
+
+}  // anonymous namespace
+}  // namespace dawn

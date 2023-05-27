@@ -9,7 +9,7 @@ void atomicOr_5e3d61() {
   return;
 }
 
-void compute_main_inner(uint local_invocation_index) {
+void compute_main_inner(uint local_invocation_index_2) {
   atomicExchange(arg_0, 0u);
   barrier();
   atomicOr_5e3d61();
@@ -17,7 +17,8 @@ void compute_main_inner(uint local_invocation_index) {
 }
 
 void compute_main_1() {
-  compute_main_inner(local_invocation_index_1);
+  uint x_30 = local_invocation_index_1;
+  compute_main_inner(x_30);
   return;
 }
 

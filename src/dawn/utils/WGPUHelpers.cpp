@@ -24,10 +24,27 @@
 #include "dawn/common/Log.h"
 #include "dawn/common/Numeric.h"
 
+#if TINT_BUILD_SPV_READER
 #include "spirv-tools/optimizer.hpp"
+#endif
 
-namespace utils {
-wgpu::ShaderModule CreateShaderModuleFromASM(const wgpu::Device& device, const char* source) {
+namespace {
+std::array<float, 12> kYuvToRGBMatrixBT709 = {1.164384f, 0.0f,       1.792741f,  -0.972945f,
+                                              1.164384f, -0.213249f, -0.532909f, 0.301483f,
+                                              1.164384f, 2.112402f,  0.0f,       -1.133402f};
+std::array<float, 9> kGamutConversionMatrixBT709ToSrgb = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+                                                          0.0f, 0.0f, 0.0f, 1.0f};
+std::array<float, 7> kGammaDecodeBT709 = {2.2, 1.0 / 1.099, 0.099 / 1.099, 1 / 4.5, 0.081,
+                                          0.0, 0.0};
+std::array<float, 7> kGammaEncodeSrgb = {1 / 2.4, 1.137119, 0.0, 12.92, 0.0031308, -0.055, 0.0};
+}  // namespace
+
+namespace dawn::utils {
+#if TINT_BUILD_SPV_READER
+wgpu::ShaderModule CreateShaderModuleFromASM(
+    const wgpu::Device& device,
+    const char* source,
+    wgpu::DawnShaderModuleSPIRVOptionsDescriptor* spirv_options) {
     // Use SPIRV-Tools's C API to assemble the SPIR-V assembly text to binary. Because the types
     // aren't RAII, we don't return directly on success and instead always go through the code
     // path that destroys the SPIRV-Tools objects.
@@ -45,6 +62,7 @@ wgpu::ShaderModule CreateShaderModuleFromASM(const wgpu::Device& device, const c
         wgpu::ShaderModuleSPIRVDescriptor spirvDesc;
         spirvDesc.codeSize = static_cast<uint32_t>(spirv->wordCount);
         spirvDesc.code = spirv->code;
+        spirvDesc.nextInChain = spirv_options;
 
         wgpu::ShaderModuleDescriptor descriptor;
         descriptor.nextInChain = &spirvDesc;
@@ -62,10 +80,11 @@ wgpu::ShaderModule CreateShaderModuleFromASM(const wgpu::Device& device, const c
 
     return result;
 }
+#endif
 
 wgpu::ShaderModule CreateShaderModule(const wgpu::Device& device, const char* source) {
     wgpu::ShaderModuleWGSLDescriptor wgslDesc;
-    wgslDesc.source = source;
+    wgslDesc.code = source;
     wgpu::ShaderModuleDescriptor descriptor;
     descriptor.nextInChain = &wgslDesc;
     return device.CreateShaderModule(&descriptor);
@@ -85,7 +104,7 @@ wgpu::Buffer CreateBufferFromData(const wgpu::Device& device,
 }
 
 ComboRenderPassDescriptor::ComboRenderPassDescriptor(
-    std::initializer_list<wgpu::TextureView> colorAttachmentInfo,
+    const std::vector<wgpu::TextureView>& colorAttachmentInfo,
     wgpu::TextureView depthStencil) {
     for (uint32_t i = 0; i < kMaxColorAttachments; ++i) {
         cColorAttachments[i].loadOp = wgpu::LoadOp::Clear;
@@ -163,7 +182,7 @@ BasicRenderPass::BasicRenderPass()
       height(0),
       color(nullptr),
       colorFormat(wgpu::TextureFormat::RGBA8Unorm),
-      renderPassInfo({}) {}
+      renderPassInfo() {}
 
 BasicRenderPass::BasicRenderPass(uint32_t texWidth,
                                  uint32_t texHeight,
@@ -389,4 +408,14 @@ wgpu::BindGroup MakeBindGroup(
     return device.CreateBindGroup(&descriptor);
 }
 
-}  // namespace utils
+ColorSpaceConversionInfo GetYUVBT709ToRGBSRGBColorSpaceConversionInfo() {
+    ColorSpaceConversionInfo info;
+    info.yuvToRgbConversionMatrix = kYuvToRGBMatrixBT709;
+    info.gamutConversionMatrix = kGamutConversionMatrixBT709ToSrgb;
+    info.srcTransferFunctionParameters = kGammaDecodeBT709;
+    info.dstTransferFunctionParameters = kGammaEncodeSrgb;
+
+    return info;
+}
+
+}  // namespace dawn::utils

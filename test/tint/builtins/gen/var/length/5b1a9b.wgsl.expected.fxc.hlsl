@@ -1,8 +1,11 @@
 SKIP: FAILED
 
+RWByteAddressBuffer prevent_dce : register(u0, space2);
+
 void length_5b1a9b() {
   vector<float16_t, 4> arg_0 = (float16_t(0.0h)).xxxx;
   float16_t res = length(arg_0);
+  prevent_dce.Store<float16_t>(0u, res);
 }
 
 struct tint_symbol {
@@ -31,8 +34,3 @@ void compute_main() {
   length_5b1a9b();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001EF153A9D90(2,10-18): error X3000: syntax error: unexpected token 'float16_t'
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001EF153A9D90(3,3-11): error X3000: unrecognized identifier 'float16_t'
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001EF153A9D90(3,13-15): error X3000: unrecognized identifier 'res'
-

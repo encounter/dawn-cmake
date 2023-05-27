@@ -21,6 +21,7 @@
 
 #include "dawn/common/Assert.h"
 
+namespace dawn {
 namespace detail {
 
 template <typename T>
@@ -50,5 +51,37 @@ inline Dst checked_cast(const Src& value) {
     ASSERT(value <= std::numeric_limits<Dst>::max());
     return static_cast<Dst>(value);
 }
+
+template <typename T>
+bool IsDoubleValueRepresentable(double value) {
+    if constexpr (std::is_same_v<T, float> || std::is_integral_v<T>) {
+        // Following WebIDL 3.3.6.[EnforceRange] for integral
+        // Following WebIDL 3.2.5.float for float
+        // TODO(crbug.com/1396194): now follows what blink does but may need revisit.
+        constexpr double kLowest = static_cast<double>(std::numeric_limits<T>::lowest());
+        constexpr double kMax = static_cast<double>(std::numeric_limits<T>::max());
+        return kLowest <= value && value <= kMax;
+    } else {
+        static_assert(std::is_same_v<T, float> || std::is_integral_v<T>, "Unsupported type");
+    }
+}
+
+// Returns if two inclusive integral ranges [x0, x1] and [y0, y1] have overlap.
+template <typename T>
+bool RangesOverlap(T x0, T x1, T y0, T y1) {
+    ASSERT(x0 <= x1 && y0 <= y1);
+    if constexpr (std::is_integral_v<T>) {
+        // Two ranges DON'T have overlap if and only if:
+        // 1. [x0, x1] [y0, y1], or
+        // 2. [y0, y1] [x0, x1]
+        // which is (x1 < y0 || y1 < x0)
+        // The inverse of which ends in the following statement.
+        return x0 <= y1 && y0 <= x1;
+    } else {
+        static_assert(std::is_integral_v<T>, "Unsupported type");
+    }
+}
+
+}  // namespace dawn
 
 #endif  // SRC_DAWN_COMMON_NUMERIC_H_

@@ -19,12 +19,11 @@
 #include <vector>
 
 #include "src/tint/ast/node.h"
-#include "src/tint/sem/type.h"
 
 namespace tint::ast {
 
 /// Base expression class
-class Expression : public Castable<Expression, Node> {
+class Expression : public utils::Castable<Expression, Node> {
   public:
     ~Expression() override;
 
@@ -34,8 +33,6 @@ class Expression : public Castable<Expression, Node> {
     /// @param nid the unique node identifier
     /// @param src the source of this node
     Expression(ProgramID pid, NodeID nid, const Source& src);
-    /// Move constructor
-    Expression(Expression&&);
 };
 
 }  // namespace tint::ast

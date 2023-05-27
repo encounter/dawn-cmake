@@ -15,25 +15,51 @@
 #ifndef SRC_DAWN_COMMON_GPUINFO_H_
 #define SRC_DAWN_COMMON_GPUINFO_H_
 
+#include <string>
+
 #include "dawn/common/GPUInfo_autogen.h"
+#include "dawn/common/StackContainer.h"
 
-#include <array>
+namespace dawn::gpu_info {
 
-namespace gpu_info {
+// Four uint16 fields could cover almost all driver version schemas:
+// D3D12: AA.BB.CCC.DDDD
+// Vulkan: AAA.BBB.CCC.DDD on Nvidia, CCC.DDDD for Intel Windows, and AA.BB.CCC for others,
+// See https://vulkan.gpuinfo.org/
+static constexpr uint32_t kMaxVersionFields = 4;
 
-using D3DDriverVersion = std::array<uint16_t, 4>;
+class DriverVersion {
+  public:
+    DriverVersion();
+    DriverVersion(const std::initializer_list<uint16_t>& version);
+
+    uint16_t& operator[](size_t i);
+    const uint16_t& operator[](size_t i) const;
+
+    uint32_t size() const;
+    std::string ToString() const;
+
+  private:
+    StackVector<uint16_t, kMaxVersionFields> mDriverVersion;
+};
 
 // Do comparison between two driver versions. Currently we only support the comparison between
-// Intel D3D driver versions.
+// Intel Windows driver versions.
 // - Return -1 if build number of version1 is smaller
 // - Return 1 if build number of version1 is bigger
 // - Return 0 if version1 and version2 represent same driver version
-int CompareD3DDriverVersion(PCIVendorID vendorId,
-                            const D3DDriverVersion& version1,
-                            const D3DDriverVersion& version2);
+int CompareWindowsDriverVersion(PCIVendorID vendorId,
+                                const DriverVersion& version1,
+                                const DriverVersion& version2);
+
+// Do comparison between two Intel Mesa driver versions.
+// - Return a negative number if build number of version1 is smaller
+// - Return a positive number if build number of version1 is bigger
+// - Return 0 if version1 and version2 represent same driver version
+int CompareIntelMesaDriverVersion(const DriverVersion& version1, const DriverVersion& version2);
 
 // Intel architectures
 bool IsSkylake(PCIDeviceID deviceId);
 
-}  // namespace gpu_info
+}  // namespace dawn::gpu_info
 #endif  // SRC_DAWN_COMMON_GPUINFO_H_

@@ -23,9 +23,8 @@
 
 // fn modf(vec<3, f32>) -> __modf_result_vec<3, f32>
 fn modf_5ea256() {
-  var res = modf(vec3<f32>(1.f));
+  var res = modf(vec3<f32>(-1.5f));
 }
-
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {
   modf_5ea256();

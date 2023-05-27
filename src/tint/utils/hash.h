@@ -18,10 +18,13 @@
 #include <stdint.h>
 #include <cstdio>
 #include <functional>
+#include <string>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
+#include "src/tint/utils/crc32.h"
 #include "src/tint/utils/vector.h"
 
 namespace tint::utils {
@@ -36,14 +39,26 @@ struct HashCombineOffset {};
 template <>
 struct HashCombineOffset<4> {
     /// @returns the seed bias value for HashCombine()
-    static constexpr inline uint32_t value() { return 0x7f4a7c16; }
+    static constexpr inline uint32_t value() {
+        constexpr uint32_t base = 0x7f4a7c16;
+#ifdef TINT_HASH_SEED
+        return base ^ static_cast<uint32_t>(TINT_HASH_SEED);
+#endif
+        return base;
+    }
 };
 
 /// Specialization of HashCombineOffset for size_t == 8.
 template <>
 struct HashCombineOffset<8> {
     /// @returns the seed bias value for HashCombine()
-    static constexpr inline uint64_t value() { return 0x9e3779b97f4a7c16; }
+    static constexpr inline uint64_t value() {
+        constexpr uint64_t base = 0x9e3779b97f4a7c16;
+#ifdef TINT_HASH_SEED
+        return base ^ static_cast<uint64_t>(TINT_HASH_SEED);
+#endif
+        return base;
+    }
 };
 
 }  // namespace detail
@@ -75,6 +90,9 @@ struct Hasher<T*> {
     /// @returns a hash of the pointer
     size_t operator()(T* ptr) const {
         auto hash = std::hash<T*>()(ptr);
+#ifdef TINT_HASH_SEED
+        hash ^= static_cast<uint32_t>(TINT_HASH_SEED);
+#endif
         return hash ^ (hash >> 4);
     }
 };
@@ -117,6 +135,47 @@ struct Hasher<std::tuple<TYPES...>> {
     }
 };
 
+/// Hasher specialization for std::pair
+template <typename A, typename B>
+struct Hasher<std::pair<A, B>> {
+    /// @param tuple the tuple to hash
+    /// @returns a hash of the tuple
+    size_t operator()(const std::pair<A, B>& tuple) const { return std::apply(Hash<A, B>, tuple); }
+};
+
+/// Hasher specialization for std::variant
+template <typename... TYPES>
+struct Hasher<std::variant<TYPES...>> {
+    /// @param variant the variant to hash
+    /// @returns a hash of the tuple
+    size_t operator()(const std::variant<TYPES...>& variant) const {
+        return std::visit([](auto&& val) { return Hash(val); }, variant);
+    }
+};
+
+/// Hasher specialization for std::string, which also supports hashing of const char* and
+/// std::string_view without first constructing a std::string.
+template <>
+struct Hasher<std::string> {
+    /// @param str the string to hash
+    /// @returns a hash of the string
+    size_t operator()(const std::string& str) const {
+        return std::hash<std::string_view>()(std::string_view(str));
+    }
+
+    /// @param str the string to hash
+    /// @returns a hash of the string
+    size_t operator()(const char* str) const {
+        return std::hash<std::string_view>()(std::string_view(str));
+    }
+
+    /// @param str the string to hash
+    /// @returns a hash of the string
+    size_t operator()(const std::string_view& str) const {
+        return std::hash<std::string_view>()(str);
+    }
+};
+
 /// @returns a hash of the variadic list of arguments.
 ///          The returned hash is dependent on the order of the arguments.
 template <typename... ARGS>
@@ -137,18 +196,59 @@ size_t Hash(const ARGS&... args) {
 template <typename... ARGS>
 size_t HashCombine(size_t hash, const ARGS&... values) {
     constexpr size_t offset = detail::HashCombineOffset<sizeof(size_t)>::value();
-    ((hash ^= Hash(values) + offset + (hash << 6) + (hash >> 2)), ...);
+    ((hash ^= Hash(values) + (offset ^ (hash >> 2))), ...);
     return hash;
 }
+
+/// A STL-compatible equal_to implementation that specializes for types.
+template <typename T>
+struct EqualTo {
+    /// @param lhs the left hand side value
+    /// @param rhs the right hand side value
+    /// @returns true if the two values are equal
+    constexpr bool operator()(const T& lhs, const T& rhs) const {
+        return std::equal_to<T>()(lhs, rhs);
+    }
+};
+
+/// A specialization for EqualTo for std::string, which supports additional comparision with
+/// std::string_view and const char*.
+template <>
+struct EqualTo<std::string> {
+    /// @param lhs the left hand side value
+    /// @param rhs the right hand side value
+    /// @returns true if the two values are equal
+    bool operator()(const std::string& lhs, const std::string& rhs) const { return lhs == rhs; }
+
+    /// @param lhs the left hand side value
+    /// @param rhs the right hand side value
+    /// @returns true if the two values are equal
+    bool operator()(const std::string& lhs, const char* rhs) const { return lhs == rhs; }
+
+    /// @param lhs the left hand side value
+    /// @param rhs the right hand side value
+    /// @returns true if the two values are equal
+    bool operator()(const std::string& lhs, std::string_view rhs) const { return lhs == rhs; }
+
+    /// @param lhs the left hand side value
+    /// @param rhs the right hand side value
+    /// @returns true if the two values are equal
+    bool operator()(const char* lhs, const std::string& rhs) const { return lhs == rhs; }
+
+    /// @param lhs the left hand side value
+    /// @param rhs the right hand side value
+    /// @returns true if the two values are equal
+    bool operator()(std::string_view lhs, const std::string& rhs) const { return lhs == rhs; }
+};
 
 /// Wrapper for a hashable type enabling the wrapped value to be used as a key
 /// for an unordered_map or unordered_set.
 template <typename T>
 struct UnorderedKeyWrapper {
     /// The wrapped value
-    const T value;
+    T value;
     /// The hash of value
-    const size_t hash;
+    size_t hash;
 
     /// Constructor
     /// @param v the value to wrap

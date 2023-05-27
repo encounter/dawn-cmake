@@ -12,30 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "gmock/gmock.h"
 #include "src/tint/writer/glsl/test_helper.h"
+
+#include "gmock/gmock.h"
 
 using ::testing::HasSubstr;
 
 namespace tint::writer::glsl {
 namespace {
 
+using namespace tint::number_suffixes;  // NOLINT
+
 using GlslGeneratorImplTest_UniformBuffer = TestHelper;
 
 TEST_F(GlslGeneratorImplTest_UniformBuffer, Simple) {
     auto* simple = Structure("Simple", utils::Vector{Member("member", ty.f32())});
-    GlobalVar("simple", ty.Of(simple), ast::StorageClass::kUniform, Group(0), Binding(0));
+    GlobalVar("simple", ty.Of(simple), builtin::AddressSpace::kUniform, Group(0_a), Binding(0_a));
 
     GeneratorImpl& gen = Build();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
 
 struct Simple {
   float member;
 };
 
-layout(binding = 0) uniform Simple_1 {
+layout(binding = 0, std140) uniform Simple_ubo {
   float member;
 } simple;
 
@@ -44,18 +47,18 @@ layout(binding = 0) uniform Simple_1 {
 
 TEST_F(GlslGeneratorImplTest_UniformBuffer, Simple_Desktop) {
     auto* simple = Structure("Simple", utils::Vector{Member("member", ty.f32())});
-    GlobalVar("simple", ty.Of(simple), ast::StorageClass::kUniform, Group(0), Binding(0));
+    GlobalVar("simple", ty.Of(simple), builtin::AddressSpace::kUniform, Group(0_a), Binding(0_a));
 
     GeneratorImpl& gen = Build(Version(Version::Standard::kDesktop, 4, 4));
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 440
 
 struct Simple {
   float member;
 };
 
-layout(binding = 0, std140) uniform Simple_1 {
+layout(binding = 0, std140) uniform Simple_ubo {
   float member;
 } simple;
 

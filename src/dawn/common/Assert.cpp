@@ -19,6 +19,12 @@
 #include "dawn/common/Log.h"
 #include "dawn/common/Platform.h"
 
+#if DAWN_COMPILER_IS(MSVC)
+extern void __cdecl __debugbreak(void);
+#endif
+
+namespace dawn {
+
 #if DAWN_COMPILER_IS(CLANG) || DAWN_COMPILER_IS(GCC)
 void BreakPoint() {
 #if DAWN_PLATFORM_IS(X86)
@@ -27,6 +33,8 @@ void BreakPoint() {
     __asm__ __volatile__("bkpt 0");
 #elif DAWN_PLATFORM_IS(ARM64)
     __asm__ __volatile__("brk 0");
+#elif DAWN_PLATFORM_IS(LOONGARCH)
+    __asm__ __volatile__("break 0");
 #elif DAWN_PLATFORM_IS(RISCV)
     __asm__ __volatile__("ebreak");
 #elif DAWN_PLATFORM_IS(MIPS)
@@ -41,7 +49,6 @@ void BreakPoint() {
 }
 
 #elif DAWN_COMPILER_IS(MSVC)
-extern void __cdecl __debugbreak(void);
 void BreakPoint() {
     __debugbreak();
 }
@@ -62,3 +69,5 @@ void HandleAssertionFailure(const char* file,
     BreakPoint();
 #endif
 }
+
+}  // namespace dawn

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "src/tint/writer/spirv/spv_dump.h"
 #include "src/tint/writer/spirv/test_helper.h"
 
 namespace tint::writer::spirv {
@@ -29,32 +28,13 @@ TEST_F(BuilderTest, InvalidProgram) {
     EXPECT_EQ(result.error, "input program is not valid");
 }
 
-TEST_F(BuilderTest, TracksIdBounds) {
-    spirv::Builder& b = Build();
+TEST_F(BuilderTest, UnsupportedExtension) {
+    Enable(Source{{12, 34}}, builtin::Extension::kUndefined);
 
-    for (size_t i = 0; i < 5; i++) {
-        EXPECT_EQ(b.next_id(), i + 1);
-    }
-
-    EXPECT_EQ(6u, b.id_bound());
-}
-
-TEST_F(BuilderTest, Capabilities_Dedup) {
-    spirv::Builder& b = Build();
-
-    b.push_capability(SpvCapabilityShader);
-    b.push_capability(SpvCapabilityShader);
-    b.push_capability(SpvCapabilityShader);
-
-    EXPECT_EQ(DumpInstructions(b.capabilities()), "OpCapability Shader\n");
-}
-
-TEST_F(BuilderTest, DeclareExtension) {
-    spirv::Builder& b = Build();
-
-    b.push_extension("SPV_KHR_integer_dot_product");
-
-    EXPECT_EQ(DumpInstructions(b.extensions()), "OpExtension \"SPV_KHR_integer_dot_product\"\n");
+    auto program = std::make_unique<Program>(std::move(*this));
+    auto result = Generate(program.get(), Options{});
+    EXPECT_EQ(result.error,
+              R"(12:34 error: SPIR-V backend does not support extension 'undefined')");
 }
 
 }  // namespace

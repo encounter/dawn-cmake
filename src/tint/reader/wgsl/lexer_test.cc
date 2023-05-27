@@ -397,7 +397,7 @@ TEST_P(FloatTest, Parse) {
     Lexer l(&file);
 
     auto list = l.Lex();
-    ASSERT_EQ(2u, list.size());
+    ASSERT_EQ(2u, list.size()) << "Got: " << list[0].to_str();
 
     {
         auto& t = list[0];
@@ -426,57 +426,35 @@ INSTANTIATE_TEST_SUITE_P(LexerTest,
                              // No decimal, with 'f' suffix
                              FloatData{"0f", 0.0},
                              FloatData{"1f", 1.0},
-                             FloatData{"-0f", 0.0},
-                             FloatData{"-1f", -1.0},
                              // No decimal, with 'h' suffix
                              FloatData{"0h", 0.0},
                              FloatData{"1h", 1.0},
-                             FloatData{"-0h", 0.0},
-                             FloatData{"-1h", -1.0},
 
                              // Zero, with decimal.
                              FloatData{"0.0", 0.0},
                              FloatData{"0.", 0.0},
                              FloatData{".0", 0.0},
-                             FloatData{"-0.0", 0.0},
-                             FloatData{"-0.", 0.0},
-                             FloatData{"-.0", 0.0},
                              // Zero, with decimal and 'f' suffix
                              FloatData{"0.0f", 0.0},
                              FloatData{"0.f", 0.0},
                              FloatData{".0f", 0.0},
-                             FloatData{"-0.0f", 0.0},
-                             FloatData{"-0.f", 0.0},
-                             FloatData{"-.0f", 0.0},
                              // Zero, with decimal and 'h' suffix
                              FloatData{"0.0h", 0.0},
                              FloatData{"0.h", 0.0},
                              FloatData{".0h", 0.0},
-                             FloatData{"-0.0h", 0.0},
-                             FloatData{"-0.h", 0.0},
-                             FloatData{"-.0h", 0.0},
 
                              // Non-zero with decimal
                              FloatData{"5.7", 5.7},
                              FloatData{"5.", 5.},
                              FloatData{".7", .7},
-                             FloatData{"-5.7", -5.7},
-                             FloatData{"-5.", -5.},
-                             FloatData{"-.7", -.7},
                              // Non-zero with decimal and 'f' suffix
                              FloatData{"5.7f", static_cast<double>(5.7f)},
                              FloatData{"5.f", static_cast<double>(5.f)},
                              FloatData{".7f", static_cast<double>(.7f)},
-                             FloatData{"-5.7f", static_cast<double>(-5.7f)},
-                             FloatData{"-5.f", static_cast<double>(-5.f)},
-                             FloatData{"-.7f", static_cast<double>(-.7f)},
                              // Non-zero with decimal and 'h' suffix
                              FloatData{"5.7h", static_cast<double>(f16::Quantize(5.7f))},
                              FloatData{"5.h", static_cast<double>(f16::Quantize(5.f))},
                              FloatData{".7h", static_cast<double>(f16::Quantize(.7f))},
-                             FloatData{"-5.7h", static_cast<double>(f16::Quantize(-5.7f))},
-                             FloatData{"-5.h", static_cast<double>(f16::Quantize(-5.f))},
-                             FloatData{"-.7h", static_cast<double>(f16::Quantize(-.7f))},
 
                              // No decimal, with exponent
                              FloatData{"1e5", 1e5},
@@ -514,7 +492,56 @@ INSTANTIATE_TEST_SUITE_P(LexerTest,
                              // Quantization
                              FloatData{"3.141592653589793", 3.141592653589793},  // no quantization
                              FloatData{"3.141592653589793f", 3.1415927410125732},  // f32 quantized
-                             FloatData{"3.141592653589793h", 3.140625}             // f16 quantized
+                             FloatData{"3.141592653589793h", 3.140625},            // f16 quantized
+
+                             // https://bugs.chromium.org/p/tint/issues/detail?id=1863
+                             FloatData{"0."
+                                       "00000000000000000000000000000000000000000000000000"  //  50
+                                       "00000000000000000000000000000000000000000000000000"  // 100
+                                       "00000000000000000000000000000000000000000000000000"  // 150
+                                       "00000000000000000000000000000000000000000000000000"  // 200
+                                       "00000000000000000000000000000000000000000000000000"  // 250
+                                       "00000000000000000000000000000000000000000000000000"  // 300
+                                       "00000000000000000000000000000000000000000000000000"  // 350
+                                       "1e+0",
+                                       0.0},
+                             FloatData{"0."
+                                       "00000000000000000000000000000000000000000000000000"  //  50
+                                       "00000000000000000000000000000000000000000000000000"  // 100
+                                       "00000000000000000000000000000000000000000000000000"  // 150
+                                       "00000000000000000000000000000000000000000000000000"  // 200
+                                       "00000000000000000000000000000000000000000000000000"  // 250
+                                       "00000000000000000000000000000000000000000000000000"  // 300
+                                       "00000000000000000000000000000000000000000000000000"  // 350
+                                       "1e+10",
+                                       0.0},
+                             FloatData{"0."
+                                       "00000000000000000000000000000000000000000000000000"  //  50
+                                       "00000000000000000000000000000000000000000000000000"  // 100
+                                       "00000000000000000000000000000000000000000000000000"  // 150
+                                       "00000000000000000000000000000000000000000000000000"  // 200
+                                       "00000000000000000000000000000000000000000000000000"  // 250
+                                       "00000000000000000000000000000000000000000000000000"  // 300
+                                       "00000000000000000000000000000000000000000000000000"  // 350
+                                       "1e+300",
+                                       1e-51},
+                             FloatData{"0."
+                                       "00000000000000000000000000000000000000000000000000"  //  50
+                                       "00000000000000000000000000000000000000000000000000"  // 100
+                                       "00000000000000000000000000000000000000000000000000"  // 150
+                                       "00000000000000000000000000000000000000000000000000"  // 200
+                                       "00000000000000000000000000000000000000000000000000"  // 250
+                                       "00000000000000000000000000000000000000000000000000"  // 300
+                                       "00000000000000000000000000000000000000000000000000"  // 350
+                                       "1",
+                                       0.0},
+
+                             FloatData{"1"
+                                       "00000000000000000000000000000000000000000000000000"  //  50
+                                       "00000000000000000000000000000000000000000000000000"  // 100
+                                       ".0e-350",
+                                       1e-250}
+
                              ));
 
 using FloatTest_Invalid = testing::TestWithParam<const char*>;
@@ -532,7 +559,6 @@ TEST_P(FloatTest_Invalid, Handles) {
 INSTANTIATE_TEST_SUITE_P(LexerTest,
                          FloatTest_Invalid,
                          testing::Values(".",
-                                         "-.",
                                          // Need a mantissa digit
                                          ".e5",
                                          ".E5",
@@ -545,9 +571,7 @@ INSTANTIATE_TEST_SUITE_P(LexerTest,
                                          ".e-",
                                          // Overflow
                                          "2.5e+256f",
-                                         "-2.5e+127f",
                                          "6.5520e+4h",
-                                         "-6.5e+12h",
                                          // Decimal exponent must immediately
                                          // follow the 'e'.
                                          "2.5e 12",
@@ -791,12 +815,9 @@ INSTANTIATE_TEST_SUITE_P(Dec_AInt,
                          testing::Combine(testing::Values('\0'),  // No suffix
                                           testing::ValuesIn(std::vector<ParseIntegerCase>{
                                               {"0", 0},
-                                              {"-2", -2},
                                               {"2", 2},
                                               {"123", 123},
                                               {"2147483647", 2147483647},
-                                              {"-2147483648", -2147483648LL},
-                                              {"-9223372036854775808", -9223372036854775807LL - 1},
                                           })));
 
 INSTANTIATE_TEST_SUITE_P(Dec_u32,
@@ -813,11 +834,8 @@ INSTANTIATE_TEST_SUITE_P(Dec_i32,
                          testing::Combine(testing::Values('i'),  // Suffix
                                           testing::ValuesIn(std::vector<ParseIntegerCase>{
                                               {"0i", 0u},
-                                              {"-0i", 0u},
                                               {"123i", 123},
-                                              {"-123i", -123},
                                               {"2147483647i", 2147483647},
-                                              {"-2147483647i", -2147483647ll},
                                           })));
 
 INSTANTIATE_TEST_SUITE_P(Hex_AInt,
@@ -828,16 +846,10 @@ INSTANTIATE_TEST_SUITE_P(Hex_AInt,
                                               {"0X0", 0},
                                               {"0x42", 66},
                                               {"0X42", 66},
-                                              {"-0x42", -66},
-                                              {"-0X42", -66},
                                               {"0xeF1Abc9", 0xeF1Abc9},
                                               {"0XeF1Abc9", 0xeF1Abc9},
-                                              {"-0xeF1Abc9", -0xeF1Abc9},
-                                              {"-0XeF1Abc9", -0xeF1Abc9},
                                               {"0x80000000", 0x80000000},
                                               {"0X80000000", 0X80000000},
-                                              {"-0x80000000", -0x80000000ll},
-                                              {"-0X80000000", -0X80000000ll},
                                               {"0x7FFFFFFF", 0x7fffffff},
                                               {"0X7FFFFFFF", 0x7fffffff},
                                               {"0x7fffffff", 0x7fffffff},
@@ -845,7 +857,6 @@ INSTANTIATE_TEST_SUITE_P(Hex_AInt,
                                               {"0x7FfFfFfF", 0x7fffffff},
                                               {"0X7FfFfFfF", 0x7fffffff},
                                               {"0x7fffffffffffffff", 0x7fffffffffffffffll},
-                                              {"-0x7fffffffffffffff", -0x7fffffffffffffffll},
                                           })));
 
 INSTANTIATE_TEST_SUITE_P(Hex_u32,
@@ -869,22 +880,13 @@ INSTANTIATE_TEST_SUITE_P(Hex_i32,
                                           testing::ValuesIn(std::vector<ParseIntegerCase>{
                                               {"0x0i", 0},
                                               {"0x42i", 66},
-                                              {"-0x0i", 0},
-                                              {"-0x42i", -66},
                                               {"0xeF1Abc9i", 250719177},
-                                              {"-0xeF1Abc9i", -250719177},
                                               {"0x7FFFFFFFi", 0x7fffffff},
-                                              {"-0x7FFFFFFFi", -0x7fffffff},
                                               {"0X7FFFFFFFi", 0x7fffffff},
-                                              {"-0X7FFFFFFFi", -0x7fffffff},
                                               {"0x7fffffffi", 0x7fffffff},
-                                              {"-0x7fffffffi", -0x7fffffff},
                                               {"0X7fffffffi", 0x7fffffff},
-                                              {"-0X7fffffffi", -0x7fffffff},
                                               {"0x7FfFfFfFi", 0x7fffffff},
-                                              {"-0x7FfFfFfFi", -0x7fffffff},
                                               {"0X7FfFfFfFi", 0x7fffffff},
-                                              {"-0X7FfFfFfFi", -0x7fffffff},
                                           })));
 ////////////////////////////////////////////////////////////////////////////////
 // ParseIntegerTest_CannotBeRepresented
@@ -920,9 +922,8 @@ INSTANTIATE_TEST_SUITE_P(i32,
 
 INSTANTIATE_TEST_SUITE_P(u32,
                          ParseIntegerTest_CannotBeRepresented,
-                         testing::Combine(testing::Values("u32"),         // type
-                                          testing::Values("4294967296u",  //
-                                                          "-1u")));
+                         testing::Combine(testing::Values("u32"),  // type
+                                          testing::Values("4294967296u")));
 
 ////////////////////////////////////////////////////////////////////////////////
 // ParseIntegerTest_LeadingZeros
@@ -942,7 +943,7 @@ TEST_P(ParseIntegerTest_LeadingZeros, Parse) {
 
 INSTANTIATE_TEST_SUITE_P(LeadingZero,
                          ParseIntegerTest_LeadingZeros,
-                         testing::Values("01234", "0000", "-00", "00u"));
+                         testing::Values("01234", "0000", "00u"));
 
 ////////////////////////////////////////////////////////////////////////////////
 // ParseIntegerTest_NoSignificantDigits
@@ -962,18 +963,7 @@ TEST_P(ParseIntegerTest_NoSignificantDigits, Parse) {
 
 INSTANTIATE_TEST_SUITE_P(LeadingZero,
                          ParseIntegerTest_NoSignificantDigits,
-                         testing::Values("0x",
-                                         "0X",
-                                         "-0x",
-                                         "-0X",
-                                         "0xu",
-                                         "0Xu",
-                                         "-0xu",
-                                         "-0Xu",
-                                         "0xi",
-                                         "0Xi",
-                                         "-0xi",
-                                         "-0Xi"));
+                         testing::Values("0x", "0X", "0xu", "0Xu", "0xi", "0Xi"));
 
 struct TokenData {
     const char* input;
@@ -1048,7 +1038,6 @@ INSTANTIATE_TEST_SUITE_P(LexerTest,
                                          TokenData{"&=", Token::Type::kAndEqual},
                                          TokenData{"|=", Token::Type::kOrEqual},
                                          TokenData{"^=", Token::Type::kXorEqual},
-                                         TokenData{">>=", Token::Type::kShiftRightEqual},
                                          TokenData{"<<=", Token::Type::kShiftLeftEqual}));
 
 using SplittablePunctuationTest = testing::TestWithParam<TokenData>;
@@ -1069,18 +1058,23 @@ TEST_P(SplittablePunctuationTest, Parses) {
         EXPECT_EQ(t.source().range.end.column, 1u + strlen(params.input));
     }
 
-    {
-        auto& t = list[1];
+    const size_t num_placeholders = list[0].NumPlaceholders();
+    EXPECT_GT(num_placeholders, 0u);
+    ASSERT_EQ(list.size(), 2u + num_placeholders);
+
+    for (size_t i = 0; i < num_placeholders; i++) {
+        auto& t = list[1 + i];
         EXPECT_TRUE(t.Is(Token::Type::kPlaceholder));
         EXPECT_EQ(t.source().range.begin.line, 1u);
-        EXPECT_EQ(t.source().range.begin.column, 2u);
+        EXPECT_EQ(t.source().range.begin.column, 2u + i);
         EXPECT_EQ(t.source().range.end.line, 1u);
         EXPECT_EQ(t.source().range.end.column, 1u + strlen(params.input));
     }
 
     {
-        auto& t = list[2];
-        EXPECT_EQ(t.source().range.begin.column, 1 + std::string(params.input).size());
+        auto& t = list.back();
+        EXPECT_TRUE(t.Is(Token::Type::kEOF));
+        EXPECT_EQ(t.source().range.begin.column, 2u + num_placeholders);
     }
 }
 INSTANTIATE_TEST_SUITE_P(LexerTest,
@@ -1088,7 +1082,8 @@ INSTANTIATE_TEST_SUITE_P(LexerTest,
                          testing::Values(TokenData{"&&", Token::Type::kAndAnd},
                                          TokenData{">=", Token::Type::kGreaterThanEqual},
                                          TokenData{"--", Token::Type::kMinusMinus},
-                                         TokenData{">>", Token::Type::kShiftRight}));
+                                         TokenData{">>", Token::Type::kShiftRight},
+                                         TokenData{">>=", Token::Type::kShiftRightEqual}));
 
 using KeywordTest = testing::TestWithParam<TokenData>;
 TEST_P(KeywordTest, Parses) {
@@ -1108,71 +1103,36 @@ TEST_P(KeywordTest, Parses) {
 
     EXPECT_EQ(list[1].source().range.begin.column, 1 + std::string(params.input).size());
 }
-INSTANTIATE_TEST_SUITE_P(
-    LexerTest,
-    KeywordTest,
-    testing::Values(TokenData{"array", Token::Type::kArray},
-                    TokenData{"bitcast", Token::Type::kBitcast},
-                    TokenData{"bool", Token::Type::kBool},
-                    TokenData{"break", Token::Type::kBreak},
-                    TokenData{"case", Token::Type::kCase},
-                    TokenData{"const", Token::Type::kConst},
-                    TokenData{"continue", Token::Type::kContinue},
-                    TokenData{"continuing", Token::Type::kContinuing},
-                    TokenData{"default", Token::Type::kDefault},
-                    TokenData{"discard", Token::Type::kDiscard},
-                    TokenData{"else", Token::Type::kElse},
-                    TokenData{"f32", Token::Type::kF32},
-                    TokenData{"fallthrough", Token::Type::kFallthrough},
-                    TokenData{"false", Token::Type::kFalse},
-                    TokenData{"fn", Token::Type::kFn},
-                    TokenData{"for", Token::Type::kFor},
-                    TokenData{"i32", Token::Type::kI32},
-                    TokenData{"if", Token::Type::kIf},
-                    TokenData{"let", Token::Type::kLet},
-                    TokenData{"loop", Token::Type::kLoop},
-                    TokenData{"mat2x2", Token::Type::kMat2x2},
-                    TokenData{"mat2x3", Token::Type::kMat2x3},
-                    TokenData{"mat2x4", Token::Type::kMat2x4},
-                    TokenData{"mat3x2", Token::Type::kMat3x2},
-                    TokenData{"mat3x3", Token::Type::kMat3x3},
-                    TokenData{"mat3x4", Token::Type::kMat3x4},
-                    TokenData{"mat4x2", Token::Type::kMat4x2},
-                    TokenData{"mat4x3", Token::Type::kMat4x3},
-                    TokenData{"mat4x4", Token::Type::kMat4x4},
-                    TokenData{"override", Token::Type::kOverride},
-                    TokenData{"ptr", Token::Type::kPtr},
-                    TokenData{"return", Token::Type::kReturn},
-                    TokenData{"sampler", Token::Type::kSampler},
-                    TokenData{"sampler_comparison", Token::Type::kComparisonSampler},
-                    TokenData{"static_assert", Token::Type::kStaticAssert},
-                    TokenData{"struct", Token::Type::kStruct},
-                    TokenData{"switch", Token::Type::kSwitch},
-                    TokenData{"texture_1d", Token::Type::kTextureSampled1d},
-                    TokenData{"texture_2d", Token::Type::kTextureSampled2d},
-                    TokenData{"texture_2d_array", Token::Type::kTextureSampled2dArray},
-                    TokenData{"texture_3d", Token::Type::kTextureSampled3d},
-                    TokenData{"texture_cube", Token::Type::kTextureSampledCube},
-                    TokenData{"texture_cube_array", Token::Type::kTextureSampledCubeArray},
-                    TokenData{"texture_depth_2d", Token::Type::kTextureDepth2d},
-                    TokenData{"texture_depth_2d_array", Token::Type::kTextureDepth2dArray},
-                    TokenData{"texture_depth_cube", Token::Type::kTextureDepthCube},
-                    TokenData{"texture_depth_cube_array", Token::Type::kTextureDepthCubeArray},
-                    TokenData{"texture_depth_multisampled_2d",
-                              Token::Type::kTextureDepthMultisampled2d},
-                    TokenData{"texture_multisampled_2d", Token::Type::kTextureMultisampled2d},
-                    TokenData{"texture_storage_1d", Token::Type::kTextureStorage1d},
-                    TokenData{"texture_storage_2d", Token::Type::kTextureStorage2d},
-                    TokenData{"texture_storage_2d_array", Token::Type::kTextureStorage2dArray},
-                    TokenData{"texture_storage_3d", Token::Type::kTextureStorage3d},
-                    TokenData{"true", Token::Type::kTrue},
-                    TokenData{"type", Token::Type::kType},
-                    TokenData{"u32", Token::Type::kU32},
-                    TokenData{"var", Token::Type::kVar},
-                    TokenData{"vec2", Token::Type::kVec2},
-                    TokenData{"vec3", Token::Type::kVec3},
-                    TokenData{"vec4", Token::Type::kVec4},
-                    TokenData{"while", Token::Type::kWhile}));
+INSTANTIATE_TEST_SUITE_P(LexerTest,
+                         KeywordTest,
+                         testing::Values(TokenData{"alias", Token::Type::kAlias},
+                                         TokenData{"bitcast", Token::Type::kBitcast},
+                                         TokenData{"break", Token::Type::kBreak},
+                                         TokenData{"case", Token::Type::kCase},
+                                         TokenData{"const", Token::Type::kConst},
+                                         TokenData{"const_assert", Token::Type::kConstAssert},
+                                         TokenData{"continue", Token::Type::kContinue},
+                                         TokenData{"continuing", Token::Type::kContinuing},
+                                         TokenData{"default", Token::Type::kDefault},
+                                         TokenData{"diagnostic", Token::Type::kDiagnostic},
+                                         TokenData{"discard", Token::Type::kDiscard},
+                                         TokenData{"else", Token::Type::kElse},
+                                         TokenData{"enable", Token::Type::kEnable},
+                                         TokenData{"fallthrough", Token::Type::kFallthrough},
+                                         TokenData{"false", Token::Type::kFalse},
+                                         TokenData{"fn", Token::Type::kFn},
+                                         TokenData{"for", Token::Type::kFor},
+                                         TokenData{"if", Token::Type::kIf},
+                                         TokenData{"let", Token::Type::kLet},
+                                         TokenData{"loop", Token::Type::kLoop},
+                                         TokenData{"override", Token::Type::kOverride},
+                                         TokenData{"return", Token::Type::kReturn},
+                                         TokenData{"requires", Token::Type::kRequires},
+                                         TokenData{"struct", Token::Type::kStruct},
+                                         TokenData{"switch", Token::Type::kSwitch},
+                                         TokenData{"true", Token::Type::kTrue},
+                                         TokenData{"var", Token::Type::kVar},
+                                         TokenData{"while", Token::Type::kWhile}));
 
 }  // namespace
 }  // namespace tint::reader::wgsl

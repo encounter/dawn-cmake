@@ -32,28 +32,25 @@ namespace dawn::native {
 MaybeError ValidatePipelineLayoutDescriptor(DeviceBase* device,
                                             const PipelineLayoutDescriptor* descriptor,
                                             PipelineCompatibilityToken pipelineCompatibilityToken) {
-    if (descriptor->nextInChain != nullptr) {
-        return DAWN_VALIDATION_ERROR("nextInChain must be nullptr");
-    }
-
-    if (descriptor->bindGroupLayoutCount > kMaxBindGroups) {
-        return DAWN_VALIDATION_ERROR("too many bind group layouts");
-    }
+    DAWN_INVALID_IF(descriptor->nextInChain != nullptr, "nextInChain is not nullptr.");
+    DAWN_INVALID_IF(descriptor->bindGroupLayoutCount > kMaxBindGroups,
+                    "bindGroupLayoutCount (%i) is larger than the maximum allowed (%i).",
+                    descriptor->bindGroupLayoutCount, kMaxBindGroups);
 
     BindingCounts bindingCounts = {};
     for (uint32_t i = 0; i < descriptor->bindGroupLayoutCount; ++i) {
         DAWN_TRY(device->ValidateObject(descriptor->bindGroupLayouts[i]));
-        if (descriptor->bindGroupLayouts[i]->GetPipelineCompatibilityToken() !=
-            pipelineCompatibilityToken) {
-            return DAWN_VALIDATION_ERROR(
-                "cannot create a pipeline layout using a bind group layout that was created as "
-                "part of a pipeline's default layout");
-        }
+        DAWN_INVALID_IF(descriptor->bindGroupLayouts[i]->GetPipelineCompatibilityToken() !=
+                            pipelineCompatibilityToken,
+                        "bindGroupLayouts[%i] (%s) is used to create a pipeline layout but it was "
+                        "created as part of a pipeline's default layout.",
+                        i, descriptor->bindGroupLayouts[i]);
+
         AccumulateBindingCounts(&bindingCounts,
                                 descriptor->bindGroupLayouts[i]->GetBindingCountInfo());
     }
 
-    DAWN_TRY(ValidateBindingCounts(bindingCounts));
+    DAWN_TRY(ValidateBindingCounts(device->GetLimits(), bindingCounts));
     return {};
 }
 
@@ -74,16 +71,13 @@ PipelineLayoutBase::PipelineLayoutBase(DeviceBase* device,
 PipelineLayoutBase::PipelineLayoutBase(DeviceBase* device,
                                        const PipelineLayoutDescriptor* descriptor)
     : PipelineLayoutBase(device, descriptor, kUntrackedByDevice) {
-    TrackInDevice();
+    GetObjectTrackingList()->Track(this);
 }
 
-PipelineLayoutBase::PipelineLayoutBase(DeviceBase* device)
-    : ApiObjectBase(device, kLabelNotImplemented) {
-    TrackInDevice();
-}
-
-PipelineLayoutBase::PipelineLayoutBase(DeviceBase* device, ObjectBase::ErrorTag tag)
-    : ApiObjectBase(device, tag) {}
+PipelineLayoutBase::PipelineLayoutBase(DeviceBase* device,
+                                       ObjectBase::ErrorTag tag,
+                                       const char* label)
+    : ApiObjectBase(device, tag, label) {}
 
 PipelineLayoutBase::~PipelineLayoutBase() = default;
 
@@ -95,8 +89,8 @@ void PipelineLayoutBase::DestroyImpl() {
 }
 
 // static
-PipelineLayoutBase* PipelineLayoutBase::MakeError(DeviceBase* device) {
-    return new PipelineLayoutBase(device, ObjectBase::kError);
+PipelineLayoutBase* PipelineLayoutBase::MakeError(DeviceBase* device, const char* label) {
+    return new PipelineLayoutBase(device, ObjectBase::kError, label);
 }
 
 // static
@@ -151,6 +145,8 @@ ResultOrError<Ref<PipelineLayoutBase>> PipelineLayoutBase::CreateDefault(
 
         // Check if any properties are incompatible with existing entry
         // If compatible, we will merge some properties
+        // TODO(dawn:563): Improve the error message by doing early-outs when bindings aren't
+        // compatible instead of a single check at the end.
         if (!compatible) {
             return DAWN_VALIDATION_ERROR(
                 "Duplicate binding in default pipeline layout initialization "
@@ -281,7 +277,9 @@ ResultOrError<Ref<PipelineLayoutBase>> PipelineLayoutBase::CreateDefault(
                 const auto& [existingEntry, inserted] =
                     entryData[group].insert({bindingNumber, entry});
                 if (!inserted) {
-                    DAWN_TRY(MergeEntries(&existingEntry->second, entry));
+                    DAWN_TRY_CONTEXT(MergeEntries(&existingEntry->second, entry),
+                                     "merging implicit bindings for @group(%u) @binding(%u).",
+                                     uint32_t(group), uint32_t(bindingNumber));
                 }
             }
         }

@@ -26,28 +26,19 @@ namespace {
 
 TEST(HashTests, Basic) {
     EXPECT_EQ(Hash(123), Hash(123));
-    EXPECT_NE(Hash(123), Hash(321));
     EXPECT_EQ(Hash(123, 456), Hash(123, 456));
-    EXPECT_NE(Hash(123, 456), Hash(456, 123));
-    EXPECT_NE(Hash(123, 456), Hash(123));
     EXPECT_EQ(Hash(123, 456, false), Hash(123, 456, false));
-    EXPECT_NE(Hash(123, 456, false), Hash(123, 456));
     EXPECT_EQ(Hash(std::string("hello")), Hash(std::string("hello")));
-    EXPECT_NE(Hash(std::string("hello")), Hash(std::string("world")));
 }
 
 TEST(HashTests, StdVector) {
     EXPECT_EQ(Hash(std::vector<int>({})), Hash(std::vector<int>({})));
     EXPECT_EQ(Hash(std::vector<int>({1, 2, 3})), Hash(std::vector<int>({1, 2, 3})));
-    EXPECT_NE(Hash(std::vector<int>({1, 2, 3})), Hash(std::vector<int>({1, 2, 4})));
-    EXPECT_NE(Hash(std::vector<int>({1, 2, 3})), Hash(std::vector<int>({1, 2, 3, 4})));
 }
 
 TEST(HashTests, TintVector) {
     EXPECT_EQ(Hash(Vector<int, 0>({})), Hash(Vector<int, 0>({})));
     EXPECT_EQ(Hash(Vector<int, 0>({1, 2, 3})), Hash(Vector<int, 0>({1, 2, 3})));
-    EXPECT_NE(Hash(Vector<int, 0>({1, 2, 3})), Hash(Vector<int, 0>({1, 2, 4})));
-    EXPECT_NE(Hash(Vector<int, 0>({1, 2, 3})), Hash(Vector<int, 0>({1, 2, 3, 4})));
     EXPECT_EQ(Hash(Vector<int, 3>({1, 2, 3})), Hash(Vector<int, 4>({1, 2, 3})));
     EXPECT_EQ(Hash(Vector<int, 3>({1, 2, 3})), Hash(Vector<int, 2>({1, 2, 3})));
 }
@@ -55,8 +46,6 @@ TEST(HashTests, TintVector) {
 TEST(HashTests, Tuple) {
     EXPECT_EQ(Hash(std::make_tuple(1)), Hash(std::make_tuple(1)));
     EXPECT_EQ(Hash(std::make_tuple(1, 2, 3)), Hash(std::make_tuple(1, 2, 3)));
-    EXPECT_NE(Hash(std::make_tuple(1, 2, 3)), Hash(std::make_tuple(1, 2, 4)));
-    EXPECT_NE(Hash(std::make_tuple(1, 2, 3)), Hash(std::make_tuple(1, 2, 3, 4)));
 }
 
 TEST(HashTests, UnorderedKeyWrapper) {
@@ -82,6 +71,42 @@ TEST(HashTests, UnorderedKeyWrapper) {
     // Reversed vector element order
     EXPECT_EQ(m[W({2, 3})], 0);
     EXPECT_EQ(m[W({2, 1})], 0);
+}
+
+TEST(EqualTo, String) {
+    std::string str_a = "hello";
+    std::string str_b = "world";
+    const char* cstr_a = "hello";
+    const char* cstr_b = "world";
+    std::string_view sv_a = "hello";
+    std::string_view sv_b = "world";
+    EXPECT_TRUE(EqualTo<std::string>()(str_a, str_a));
+    EXPECT_TRUE(EqualTo<std::string>()(str_a, cstr_a));
+    EXPECT_TRUE(EqualTo<std::string>()(str_a, sv_a));
+    EXPECT_TRUE(EqualTo<std::string>()(str_a, str_a));
+    EXPECT_TRUE(EqualTo<std::string>()(cstr_a, str_a));
+    EXPECT_TRUE(EqualTo<std::string>()(sv_a, str_a));
+
+    EXPECT_FALSE(EqualTo<std::string>()(str_a, str_b));
+    EXPECT_FALSE(EqualTo<std::string>()(str_a, cstr_b));
+    EXPECT_FALSE(EqualTo<std::string>()(str_a, sv_b));
+    EXPECT_FALSE(EqualTo<std::string>()(str_a, str_b));
+    EXPECT_FALSE(EqualTo<std::string>()(cstr_a, str_b));
+    EXPECT_FALSE(EqualTo<std::string>()(sv_a, str_b));
+
+    EXPECT_FALSE(EqualTo<std::string>()(str_b, str_a));
+    EXPECT_FALSE(EqualTo<std::string>()(str_b, cstr_a));
+    EXPECT_FALSE(EqualTo<std::string>()(str_b, sv_a));
+    EXPECT_FALSE(EqualTo<std::string>()(str_b, str_a));
+    EXPECT_FALSE(EqualTo<std::string>()(cstr_b, str_a));
+    EXPECT_FALSE(EqualTo<std::string>()(sv_b, str_a));
+
+    EXPECT_TRUE(EqualTo<std::string>()(str_b, str_b));
+    EXPECT_TRUE(EqualTo<std::string>()(str_b, cstr_b));
+    EXPECT_TRUE(EqualTo<std::string>()(str_b, sv_b));
+    EXPECT_TRUE(EqualTo<std::string>()(str_b, str_b));
+    EXPECT_TRUE(EqualTo<std::string>()(cstr_b, str_b));
+    EXPECT_TRUE(EqualTo<std::string>()(sv_b, str_b));
 }
 
 }  // namespace

@@ -1,8 +1,11 @@
 SKIP: FAILED
 
+RWByteAddressBuffer prevent_dce : register(u0, space2);
+
 void length_c158da() {
   float16_t arg_0 = float16_t(0.0h);
   float16_t res = length(arg_0);
+  prevent_dce.Store<float16_t>(0u, res);
 }
 
 struct tint_symbol {
@@ -31,7 +34,3 @@ void compute_main() {
   length_c158da();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x00000229284770C0(2,3-11): error X3000: unrecognized identifier 'float16_t'
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x00000229284770C0(2,13-17): error X3000: unrecognized identifier 'arg_0'
-

@@ -50,7 +50,7 @@ TEST_F(ResolverOverrideTest, NonOverridable) {
 }
 
 TEST_F(ResolverOverrideTest, WithId) {
-    auto* a = Override("a", ty.f32(), Expr(1_f), Id(7u));
+    auto* a = Override("a", ty.f32(), Expr(1_f), Id(7_u));
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
 
@@ -66,13 +66,14 @@ TEST_F(ResolverOverrideTest, WithoutId) {
 }
 
 TEST_F(ResolverOverrideTest, WithAndWithoutIds) {
-    std::vector<ast::Variable*> variables;
+    Enable(builtin::Extension::kF16);
+
     auto* a = Override("a", ty.f32(), Expr(1_f));
-    auto* b = Override("b", ty.f32(), Expr(1_f));
-    auto* c = Override("c", ty.f32(), Expr(1_f), Id(2u));
-    auto* d = Override("d", ty.f32(), Expr(1_f), Id(4u));
+    auto* b = Override("b", ty.f16(), Expr(1_h));
+    auto* c = Override("c", ty.i32(), Expr(1_i), Id(2_u));
+    auto* d = Override("d", ty.u32(), Expr(1_u), Id(4_u));
     auto* e = Override("e", ty.f32(), Expr(1_f));
-    auto* f = Override("f", ty.f32(), Expr(1_f), Id(1u));
+    auto* f = Override("f", ty.f32(), Expr(1_f), Id(1_u));
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
 
@@ -86,31 +87,247 @@ TEST_F(ResolverOverrideTest, WithAndWithoutIds) {
 }
 
 TEST_F(ResolverOverrideTest, DuplicateIds) {
-    Override("a", ty.f32(), Expr(1_f), Id(Source{{12, 34}}, 7u));
-    Override("b", ty.f32(), Expr(1_f), Id(Source{{56, 78}}, 7u));
+    Override("a", ty.f32(), Expr(1_f), Id(Source{{12, 34}}, 7_u));
+    Override("b", ty.f32(), Expr(1_f), Id(Source{{56, 78}}, 7_u));
 
     EXPECT_FALSE(r()->Resolve());
 
-    EXPECT_EQ(r()->error(), R"(56:78 error: override IDs must be unique
+    EXPECT_EQ(r()->error(), R"(56:78 error: @id values must be unique
 12:34 note: a override with an ID of 7 was previously declared here:)");
 }
 
 TEST_F(ResolverOverrideTest, IdTooLarge) {
-    Override("a", ty.f32(), Expr(1_f), Id(Source{{12, 34}}, 65536u));
+    Override("a", ty.f32(), Expr(1_f), Id(Source{{12, 34}}, 65536_u));
 
     EXPECT_FALSE(r()->Resolve());
 
-    EXPECT_EQ(r()->error(), "12:34 error: override IDs must be between 0 and 65535");
+    EXPECT_EQ(r()->error(), "12:34 error: @id value must be between 0 and 65535");
 }
 
-TEST_F(ResolverOverrideTest, F16_TemporallyBan) {
-    Enable(ast::Extension::kF16);
+TEST_F(ResolverOverrideTest, TransitiveReferences_DirectUse) {
+    auto* a = Override("a", ty.f32());
+    auto* b = Override("b", ty.f32(), Expr(1_f));
+    Override("unused", ty.f32(), Expr(1_f));
+    auto* func = Func("foo", utils::Empty, ty.void_(),
+                      utils::Vector{
+                          Assign(Phony(), "a"),
+                          Assign(Phony(), "b"),
+                      });
 
-    Override(Source{{12, 34}}, "a", ty.f16(), Expr(1_h), Id(1u));
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
 
-    EXPECT_FALSE(r()->Resolve());
+    auto& refs = Sem().Get(func)->TransitivelyReferencedGlobals();
+    ASSERT_EQ(refs.Length(), 2u);
+    EXPECT_EQ(refs[0], Sem().Get(a));
+    EXPECT_EQ(refs[1], Sem().Get(b));
+}
 
-    EXPECT_EQ(r()->error(), "12:34 error: 'override' of type f16 is not implemented yet");
+TEST_F(ResolverOverrideTest, TransitiveReferences_ViaOverrideInit) {
+    auto* a = Override("a", ty.f32());
+    auto* b = Override("b", ty.f32(), Mul(2_a, "a"));
+    Override("unused", ty.f32(), Expr(1_f));
+    auto* func = Func("foo", utils::Empty, ty.void_(),
+                      utils::Vector{
+                          Assign(Phony(), "b"),
+                      });
+
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
+
+    {
+        auto* r = Sem().TransitivelyReferencedOverrides(Sem().Get(b));
+        ASSERT_NE(r, nullptr);
+        auto& refs = *r;
+        ASSERT_EQ(refs.Length(), 1u);
+        EXPECT_EQ(refs[0], Sem().Get(a));
+    }
+
+    {
+        auto& refs = Sem().Get(func)->TransitivelyReferencedGlobals();
+        ASSERT_EQ(refs.Length(), 2u);
+        EXPECT_EQ(refs[0], Sem().Get(b));
+        EXPECT_EQ(refs[1], Sem().Get(a));
+    }
+}
+
+TEST_F(ResolverOverrideTest, TransitiveReferences_ViaPrivateInit) {
+    auto* a = Override("a", ty.f32());
+    auto* b = GlobalVar("b", builtin::AddressSpace::kPrivate, ty.f32(), Mul(2_a, "a"));
+    Override("unused", ty.f32(), Expr(1_f));
+    auto* func = Func("foo", utils::Empty, ty.void_(),
+                      utils::Vector{
+                          Assign(Phony(), "b"),
+                      });
+
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
+
+    {
+        auto* r = Sem().TransitivelyReferencedOverrides(Sem().Get<sem::GlobalVariable>(b));
+        ASSERT_NE(r, nullptr);
+        auto& refs = *r;
+        ASSERT_EQ(refs.Length(), 1u);
+        EXPECT_EQ(refs[0], Sem().Get(a));
+    }
+
+    {
+        auto& refs = Sem().Get(func)->TransitivelyReferencedGlobals();
+        ASSERT_EQ(refs.Length(), 2u);
+        EXPECT_EQ(refs[0], Sem().Get(b));
+        EXPECT_EQ(refs[1], Sem().Get(a));
+    }
+}
+
+TEST_F(ResolverOverrideTest, TransitiveReferences_ViaAttribute) {
+    auto* a = Override("a", ty.i32());
+    auto* b = Override("b", ty.i32(), Mul(2_a, "a"));
+    Override("unused", ty.i32(), Expr(1_a));
+    auto* func = Func("foo", utils::Empty, ty.void_(),
+                      utils::Vector{
+                          Assign(Phony(), "b"),
+                      },
+                      utils::Vector{
+                          Stage(ast::PipelineStage::kCompute),
+                          WorkgroupSize(Mul(2_a, "b")),
+                      });
+
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
+
+    auto& refs = Sem().Get(func)->TransitivelyReferencedGlobals();
+    ASSERT_EQ(refs.Length(), 2u);
+    EXPECT_EQ(refs[0], Sem().Get(b));
+    EXPECT_EQ(refs[1], Sem().Get(a));
+}
+
+TEST_F(ResolverOverrideTest, TransitiveReferences_ViaArraySize) {
+    auto* a = Override("a", ty.i32());
+    auto* b = Override("b", ty.i32(), Mul(2_a, "a"));
+    auto* arr =
+        GlobalVar("arr", builtin::AddressSpace::kWorkgroup, ty.array(ty.i32(), Mul(2_a, "b")));
+    auto arr_ty = arr->type;
+    Override("unused", ty.i32(), Expr(1_a));
+    auto* func = Func("foo", utils::Empty, ty.void_(),
+                      utils::Vector{
+                          Assign(IndexAccessor("arr", 0_a), 42_a),
+                      });
+
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
+
+    {
+        auto* r = Sem().TransitivelyReferencedOverrides(TypeOf(arr_ty));
+        ASSERT_NE(r, nullptr);
+        auto& refs = *r;
+        ASSERT_EQ(refs.Length(), 2u);
+        EXPECT_EQ(refs[0], Sem().Get(b));
+        EXPECT_EQ(refs[1], Sem().Get(a));
+    }
+
+    {
+        auto* r = Sem().TransitivelyReferencedOverrides(Sem().Get<sem::GlobalVariable>(arr));
+        ASSERT_NE(r, nullptr);
+        auto& refs = *r;
+        ASSERT_EQ(refs.Length(), 2u);
+        EXPECT_EQ(refs[0], Sem().Get(b));
+        EXPECT_EQ(refs[1], Sem().Get(a));
+    }
+
+    {
+        auto& refs = Sem().Get(func)->TransitivelyReferencedGlobals();
+        ASSERT_EQ(refs.Length(), 3u);
+        EXPECT_EQ(refs[0], Sem().Get(arr));
+        EXPECT_EQ(refs[1], Sem().Get(b));
+        EXPECT_EQ(refs[2], Sem().Get(a));
+    }
+}
+
+TEST_F(ResolverOverrideTest, TransitiveReferences_ViaArraySize_Alias) {
+    auto* a = Override("a", ty.i32());
+    auto* b = Override("b", ty.i32(), Mul(2_a, "a"));
+    Alias("arr_ty", ty.array(ty.i32(), Mul(2_a, "b")));
+    auto* arr = GlobalVar("arr", builtin::AddressSpace::kWorkgroup, ty("arr_ty"));
+    auto arr_ty = arr->type;
+    Override("unused", ty.i32(), Expr(1_a));
+    auto* func = Func("foo", utils::Empty, ty.void_(),
+                      utils::Vector{
+                          Assign(IndexAccessor("arr", 0_a), 42_a),
+                      });
+
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
+
+    {
+        auto* r = Sem().TransitivelyReferencedOverrides(TypeOf(arr_ty));
+        ASSERT_NE(r, nullptr);
+        auto& refs = *r;
+        ASSERT_EQ(refs.Length(), 2u);
+        EXPECT_EQ(refs[0], Sem().Get(b));
+        EXPECT_EQ(refs[1], Sem().Get(a));
+    }
+
+    {
+        auto* r = Sem().TransitivelyReferencedOverrides(Sem().Get<sem::GlobalVariable>(arr));
+        ASSERT_NE(r, nullptr);
+        auto& refs = *r;
+        ASSERT_EQ(refs.Length(), 2u);
+        EXPECT_EQ(refs[0], Sem().Get(b));
+        EXPECT_EQ(refs[1], Sem().Get(a));
+    }
+
+    {
+        auto& refs = Sem().Get(func)->TransitivelyReferencedGlobals();
+        ASSERT_EQ(refs.Length(), 3u);
+        EXPECT_EQ(refs[0], Sem().Get(arr));
+        EXPECT_EQ(refs[1], Sem().Get(b));
+        EXPECT_EQ(refs[2], Sem().Get(a));
+    }
+}
+
+TEST_F(ResolverOverrideTest, TransitiveReferences_MultipleEntryPoints) {
+    auto* a = Override("a", ty.i32());
+    auto* b1 = Override("b1", ty.i32(), Mul(2_a, "a"));
+    auto* b2 = Override("b2", ty.i32(), Mul(2_a, "a"));
+    auto* c1 = Override("c1", ty.i32());
+    auto* c2 = Override("c2", ty.i32());
+    auto* d = Override("d", ty.i32());
+    Alias("arr_ty1", ty.array(ty.i32(), Mul("b1", "c1")));
+    Alias("arr_ty2", ty.array(ty.i32(), Mul("b2", "c2")));
+    auto* arr1 = GlobalVar("arr1", builtin::AddressSpace::kWorkgroup, ty("arr_ty1"));
+    auto* arr2 = GlobalVar("arr2", builtin::AddressSpace::kWorkgroup, ty("arr_ty2"));
+    Override("unused", ty.i32(), Expr(1_a));
+    auto* func1 = Func("foo1", utils::Empty, ty.void_(),
+                       utils::Vector{
+                           Assign(IndexAccessor("arr1", 0_a), 42_a),
+                       },
+                       utils::Vector{
+                           Stage(ast::PipelineStage::kCompute),
+                           WorkgroupSize(Mul(2_a, "d")),
+                       });
+    auto* func2 = Func("foo2", utils::Empty, ty.void_(),
+                       utils::Vector{
+                           Assign(IndexAccessor("arr2", 0_a), 42_a),
+                       },
+                       utils::Vector{
+                           Stage(ast::PipelineStage::kCompute),
+                           WorkgroupSize(64_a),
+                       });
+
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
+
+    {
+        auto& refs = Sem().Get(func1)->TransitivelyReferencedGlobals();
+        ASSERT_EQ(refs.Length(), 5u);
+        EXPECT_EQ(refs[0], Sem().Get(d));
+        EXPECT_EQ(refs[1], Sem().Get(arr1));
+        EXPECT_EQ(refs[2], Sem().Get(b1));
+        EXPECT_EQ(refs[3], Sem().Get(a));
+        EXPECT_EQ(refs[4], Sem().Get(c1));
+    }
+
+    {
+        auto& refs = Sem().Get(func2)->TransitivelyReferencedGlobals();
+        ASSERT_EQ(refs.Length(), 4u);
+        EXPECT_EQ(refs[0], Sem().Get(arr2));
+        EXPECT_EQ(refs[1], Sem().Get(b2));
+        EXPECT_EQ(refs[2], Sem().Get(a));
+        EXPECT_EQ(refs[3], Sem().Get(c2));
+    }
 }
 
 }  // namespace

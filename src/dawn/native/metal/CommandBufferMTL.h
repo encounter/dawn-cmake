@@ -15,20 +15,27 @@
 #ifndef SRC_DAWN_NATIVE_METAL_COMMANDBUFFERMTL_H_
 #define SRC_DAWN_NATIVE_METAL_COMMANDBUFFERMTL_H_
 
+#include <set>
+#include <utility>
+
 #include "dawn/native/CommandBuffer.h"
+#include "dawn/native/Commands.h"
 #include "dawn/native/Error.h"
 
 #import <Metal/Metal.h>
 
 namespace dawn::native {
 class CommandEncoder;
-}
+struct BeginComputePassCmd;
+struct BeginRenderPassCmd;
+}  // namespace dawn::native
 
 namespace dawn::native::metal {
 
 class CommandRecordingContext;
 class Device;
 class Texture;
+class QuerySet;
 
 void RecordCopyBufferToTexture(CommandRecordingContext* commandContext,
                                id<MTLBuffer> mtlBuffer,
@@ -55,8 +62,17 @@ class CommandBuffer final : public CommandBufferBase {
   private:
     using CommandBufferBase::CommandBufferBase;
 
-    MaybeError EncodeComputePass(CommandRecordingContext* commandContext);
-    MaybeError EncodeRenderPass(id<MTLRenderCommandEncoder> encoder);
+    MaybeError EncodeComputePass(CommandRecordingContext* commandContext,
+                                 BeginComputePassCmd* computePassCmd);
+
+    // Empty occlusion queries aren't filled to zero on Apple GPUs. This set is used to
+    // track which results should be explicitly zero'ed as a workaround. Use of empty queries
+    // *should* mostly be a degenerate scenario, so this std::set shouldn't be performance-critical.
+    // The set is passed as nullptr to `EncodeRenderPass` if the workaround is not in use.
+    using EmptyOcclusionQueries = std::set<std::pair<QuerySet*, uint32_t>>;
+    MaybeError EncodeRenderPass(id<MTLRenderCommandEncoder> encoder,
+                                BeginRenderPassCmd* renderPassCmd,
+                                EmptyOcclusionQueries* emptyOcclusionQueries);
 };
 
 }  // namespace dawn::native::metal

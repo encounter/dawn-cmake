@@ -1,11 +1,8 @@
-float4 tint_unpack4x8unorm(uint param_0) {
-  uint j = param_0;
-  uint4 i = uint4(j & 0xff, (j >> 8) & 0xff, (j >> 16) & 0xff, j >> 24);
-  return float4(i) / 255.0;
-}
+RWByteAddressBuffer prevent_dce : register(u0, space2);
 
 void unpack4x8unorm_750c74() {
-  float4 res = tint_unpack4x8unorm(1u);
+  float4 res = float4(0.0039215688593685627f, 0.0f, 0.0f, 0.0f);
+  prevent_dce.Store4(0u, asuint(res));
 }
 
 struct tint_symbol {

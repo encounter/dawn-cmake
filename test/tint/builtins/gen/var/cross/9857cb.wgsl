@@ -25,10 +25,12 @@ enable f16;
 
 // fn cross(vec3<f16>, vec3<f16>) -> vec3<f16>
 fn cross_9857cb() {
-  var arg_0 = vec3<f16>();
-  var arg_1 = vec3<f16>();
+  var arg_0 = vec3<f16>(1.h);
+  var arg_1 = vec3<f16>(1.h);
   var res: vec3<f16> = cross(arg_0, arg_1);
+  prevent_dce = res;
 }
+@group(2) @binding(0) var<storage, read_write> prevent_dce : vec3<f16>;
 
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {

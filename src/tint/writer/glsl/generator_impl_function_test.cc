@@ -36,8 +36,8 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Function) {
     GeneratorImpl& gen = Build();
 
     gen.increment_indent();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  #version 310 es
 
   void my_func() {
@@ -56,8 +56,8 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Function_Name_Collision) {
     GeneratorImpl& gen = SanitizeAndBuild();
 
     gen.increment_indent();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_THAT(gen.result(), HasSubstr(R"(  void tint_symbol() {
     return;
   })"));
@@ -77,8 +77,8 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Function_WithParams) {
     GeneratorImpl& gen = Build();
 
     gen.increment_indent();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  #version 310 es
 
   void my_func(float a, int b) {
@@ -95,10 +95,10 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_NoReturn_Void) 
          });
 
     GeneratorImpl& gen = Build();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 void func() {
   return;
@@ -110,12 +110,12 @@ TEST_F(GlslGeneratorImplTest_Function, PtrParameter) {
     // fn f(foo : ptr<function, f32>) -> f32 {
     //   return *foo;
     // }
-    Func("f", utils::Vector{Param("foo", ty.pointer<f32>(ast::StorageClass::kFunction))}, ty.f32(),
-         utils::Vector{Return(Deref("foo"))});
+    Func("f", utils::Vector{Param("foo", ty.pointer<f32>(builtin::AddressSpace::kFunction))},
+         ty.f32(), utils::Vector{Return(Deref("foo"))});
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_THAT(gen.result(), HasSubstr(R"(float f(inout float foo) {
   return foo;
 }
@@ -128,7 +128,7 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_WithInOutVars) 
     // }
     Func("frag_main",
          utils::Vector{
-             Param("foo", ty.f32(), utils::Vector{Location(0)}),
+             Param("foo", ty.f32(), utils::Vector{Location(0_a)}),
          },
          ty.f32(),
          utils::Vector{
@@ -138,14 +138,14 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_WithInOutVars) 
              Stage(ast::PipelineStage::kFragment),
          },
          utils::Vector{
-             Location(1),
+             Location(1_a),
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 layout(location = 0) in float foo_1;
 layout(location = 1) out float value;
@@ -166,7 +166,7 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_WithInOut_Built
     //   return coord.x;
     // }
     auto* coord_in =
-        Param("coord", ty.vec4<f32>(), utils::Vector{Builtin(ast::BuiltinValue::kPosition)});
+        Param("coord", ty.vec4<f32>(), utils::Vector{Builtin(builtin::BuiltinValue::kPosition)});
     Func("frag_main",
          utils::Vector{
              coord_in,
@@ -179,14 +179,14 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_WithInOut_Built
              Stage(ast::PipelineStage::kFragment),
          },
          utils::Vector{
-             Builtin(ast::BuiltinValue::kFragDepth),
+             Builtin(builtin::BuiltinValue::kFragDepth),
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 float frag_main(vec4 coord) {
   return coord.x;
@@ -217,14 +217,14 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_SharedStruct_Di
     auto* interface_struct = Structure(
         "Interface",
         utils::Vector{
-            Member("pos", ty.vec4<f32>(), utils::Vector{Builtin(ast::BuiltinValue::kPosition)}),
-            Member("col1", ty.f32(), utils::Vector{Location(1)}),
-            Member("col2", ty.f32(), utils::Vector{Location(2)}),
+            Member("pos", ty.vec4<f32>(), utils::Vector{Builtin(builtin::BuiltinValue::kPosition)}),
+            Member("col1", ty.f32(), utils::Vector{Location(1_a)}),
+            Member("col2", ty.f32(), utils::Vector{Location(2_a)}),
         });
 
     Func("vert_main", utils::Empty, ty.Of(interface_struct),
-         utils::Vector{Return(Construct(ty.Of(interface_struct), Construct(ty.vec4<f32>()),
-                                        Expr(0.5_f), Expr(0.25_f)))},
+         utils::Vector{Return(
+             Call(ty.Of(interface_struct), Call(ty.vec4<f32>()), Expr(0.5_f), Expr(0.25_f)))},
          utils::Vector{Stage(ast::PipelineStage::kVertex)});
 
     Func("frag_main", utils::Vector{Param("inputs", ty.Of(interface_struct))}, ty.void_(),
@@ -236,10 +236,10 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_SharedStruct_Di
          utils::Vector{Stage(ast::PipelineStage::kFragment)});
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 layout(location = 1) out float col1_1;
 layout(location = 2) out float col2_1;
@@ -297,26 +297,26 @@ TEST_F(GlslGeneratorImplTest_Function,
   // }
   auto* vertex_output_struct = Structure(
       "VertexOutput",
-      {Member("pos", ty.vec4<f32>(), {Builtin(ast::BuiltinValue::kPosition)})});
+      {Member("pos", ty.vec4<f32>(), {Builtin(builtin::BuiltinValue::kPosition)})});
 
   Func("foo", utils::Vector{Param("x", ty.f32())}, ty.Of(vertex_output_struct),
-       {Return(Construct(ty.Of(vertex_output_struct),
-                         Construct(ty.vec4<f32>(), "x", "x", "x", Expr(1_f))))},
+       {Return(Call(ty.Of(vertex_output_struct),
+                         Call(ty.vec4<f32>(), "x", "x", "x", Expr(1_f))))},
        {});
 
   Func("vert_main1", utils::Empty, ty.Of(vertex_output_struct),
-       {Return(Construct(ty.Of(vertex_output_struct),
+       {Return(Call(ty.Of(vertex_output_struct),
                          Expr(Call("foo", Expr(0.5_f)))))},
        {Stage(ast::PipelineStage::kVertex)});
 
   Func("vert_main2", utils::Empty, ty.Of(vertex_output_struct),
-       {Return(Construct(ty.Of(vertex_output_struct),
+       {Return(Call(ty.Of(vertex_output_struct),
                          Expr(Call("foo", Expr(0.25_f)))))},
        {Stage(ast::PipelineStage::kVertex)});
 
   GeneratorImpl& gen = SanitizeAndBuild();
 
-  ASSERT_TRUE(gen.Generate()) << gen.error();
+  ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
   EXPECT_EQ(gen.result(), R"(struct VertexOutput {
   float4 pos;
 };
@@ -351,7 +351,8 @@ tint_symbol_2 vert_main2() {
 
 TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_Uniform) {
     auto* ubo_ty = Structure("UBO", utils::Vector{Member("coord", ty.vec4<f32>())});
-    auto* ubo = GlobalVar("ubo", ty.Of(ubo_ty), ast::StorageClass::kUniform, Binding(0), Group(1));
+    auto* ubo =
+        GlobalVar("ubo", ty.Of(ubo_ty), builtin::AddressSpace::kUniform, Binding(0_a), Group(1_a));
 
     Func("sub_func",
          utils::Vector{
@@ -374,16 +375,16 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_Uniform) {
          });
 
     GeneratorImpl& gen = Build();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct UBO {
   vec4 coord;
 };
 
-layout(binding = 0) uniform UBO_1 {
+layout(binding = 0, std140) uniform UBO_ubo {
   vec4 coord;
 } ubo;
 
@@ -401,7 +402,7 @@ void frag_main() {
 TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_UniformStruct) {
     auto* s = Structure("Uniforms", utils::Vector{Member("coord", ty.vec4<f32>())});
 
-    GlobalVar("uniforms", ty.Of(s), ast::StorageClass::kUniform, Binding(0), Group(1));
+    GlobalVar("uniforms", ty.Of(s), builtin::AddressSpace::kUniform, Binding(0_a), Group(1_a));
 
     auto* var = Var("v", ty.f32(), MemberAccessor(MemberAccessor("uniforms", "coord"), "x"));
 
@@ -415,16 +416,16 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_UniformStr
          });
 
     GeneratorImpl& gen = Build();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Uniforms {
   vec4 coord;
 };
 
-layout(binding = 0) uniform Uniforms_1 {
+layout(binding = 0, std140) uniform Uniforms_ubo {
   vec4 coord;
 } uniforms;
 
@@ -441,8 +442,8 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_RW_Storage
                                     Member("b", ty.f32()),
                                 });
 
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(0),
-              Group(1));
+    GlobalVar("coord", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kReadWrite,
+              Binding(0_a), Group(1_a));
 
     auto* var = Var("v", ty.f32(), MemberAccessor("coord", "b"));
 
@@ -456,22 +457,22 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_RW_Storage
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Data {
   int a;
   float b;
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  int a;
-  float b;
+layout(binding = 0, std430) buffer coord_block_ssbo {
+  Data inner;
 } coord;
+
 void frag_main() {
-  float v = coord.b;
+  float v = coord.inner.b;
   return;
 }
 
@@ -488,8 +489,8 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_RO_Storage
                                     Member("b", ty.f32()),
                                 });
 
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead, Binding(0),
-              Group(1));
+    GlobalVar("coord", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kRead,
+              Binding(0_a), Group(1_a));
 
     auto* var = Var("v", ty.f32(), MemberAccessor("coord", "b"));
 
@@ -503,23 +504,23 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_RO_Storage
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(),
               R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Data {
   int a;
   float b;
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  int a;
-  float b;
+layout(binding = 0, std430) buffer coord_block_ssbo {
+  Data inner;
 } coord;
+
 void frag_main() {
-  float v = coord.b;
+  float v = coord.inner.b;
   return;
 }
 
@@ -536,8 +537,8 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_WO_Storage
                                     Member("b", ty.f32()),
                                 });
 
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(0),
-              Group(1));
+    GlobalVar("coord", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kReadWrite,
+              Binding(0_a), Group(1_a));
 
     Func("frag_main", utils::Empty, ty.void_(),
          utils::Vector{
@@ -549,22 +550,22 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_WO_Storage
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Data {
   int a;
   float b;
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  int a;
-  float b;
+layout(binding = 0, std430) buffer coord_block_ssbo {
+  Data inner;
 } coord;
+
 void frag_main() {
-  coord.b = 2.0f;
+  coord.inner.b = 2.0f;
   return;
 }
 
@@ -581,8 +582,8 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_StorageBuf
                                     Member("b", ty.f32()),
                                 });
 
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(0),
-              Group(1));
+    GlobalVar("coord", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kReadWrite,
+              Binding(0_a), Group(1_a));
 
     Func("frag_main", utils::Empty, ty.void_(),
          utils::Vector{
@@ -594,22 +595,22 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_StorageBuf
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct Data {
   int a;
   float b;
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  int a;
-  float b;
+layout(binding = 0, std430) buffer coord_block_ssbo {
+  Data inner;
 } coord;
+
 void frag_main() {
-  coord.b = 2.0f;
+  coord.inner.b = 2.0f;
   return;
 }
 
@@ -622,7 +623,7 @@ void main() {
 
 TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_Called_By_EntryPoint_With_Uniform) {
     auto* s = Structure("S", utils::Vector{Member("x", ty.f32())});
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kUniform, Binding(0), Group(1));
+    GlobalVar("coord", ty.Of(s), builtin::AddressSpace::kUniform, Binding(0_a), Group(1_a));
 
     Func("sub_func", utils::Vector{Param("param", ty.f32())}, ty.f32(),
          utils::Vector{
@@ -641,16 +642,16 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_Called_By_EntryPoint_With_
          });
 
     GeneratorImpl& gen = Build();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct S {
   float x;
 };
 
-layout(binding = 0) uniform S_1 {
+layout(binding = 0, std140) uniform S_ubo {
   float x;
 } coord;
 
@@ -667,8 +668,8 @@ void frag_main() {
 
 TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_Called_By_EntryPoint_With_StorageBuffer) {
     auto* s = Structure("S", utils::Vector{Member("x", ty.f32())});
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(0),
-              Group(1));
+    GlobalVar("coord", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kReadWrite,
+              Binding(0_a), Group(1_a));
 
     Func("sub_func", utils::Vector{Param("param", ty.f32())}, ty.f32(),
          utils::Vector{
@@ -687,21 +688,22 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_Called_By_EntryPoint_With_
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(),
               R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct S {
   float x;
 };
 
-layout(binding = 0, std430) buffer S_1 {
-  float x;
+layout(binding = 0, std430) buffer coord_block_ssbo {
+  S inner;
 } coord;
+
 float sub_func(float param) {
-  return coord.x;
+  return coord.inner.x;
 }
 
 void frag_main() {
@@ -723,10 +725,10 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_WithNameCollisi
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 void tint_symbol() {
 }
@@ -749,8 +751,8 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_Compute) {
          });
 
     GeneratorImpl& gen = Build();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
@@ -768,8 +770,8 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_Compute_WithWor
          });
 
     GeneratorImpl& gen = Build();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
 
 layout(local_size_x = 2, local_size_y = 4, local_size_z = 6) in;
@@ -780,9 +782,9 @@ void main() {
 }
 
 TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_Compute_WithWorkgroup_Const) {
-    GlobalConst("width", ty.i32(), Construct(ty.i32(), 2_i));
-    GlobalConst("height", ty.i32(), Construct(ty.i32(), 3_i));
-    GlobalConst("depth", ty.i32(), Construct(ty.i32(), 4_i));
+    GlobalConst("width", ty.i32(), Call<i32>(2_i));
+    GlobalConst("height", ty.i32(), Call<i32>(3_i));
+    GlobalConst("depth", ty.i32(), Call<i32>(4_i));
     Func("main", utils::Empty, ty.void_(), {},
          utils::Vector{
              Stage(ast::PipelineStage::kCompute),
@@ -790,8 +792,8 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_Compute_WithWor
          });
 
     GeneratorImpl& gen = Build();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
 
 layout(local_size_x = 2, local_size_y = 3, local_size_z = 4) in;
@@ -803,9 +805,9 @@ void main() {
 
 TEST_F(GlslGeneratorImplTest_Function,
        Emit_Attribute_EntryPoint_Compute_WithWorkgroup_OverridableConst) {
-    Override("width", ty.i32(), Construct(ty.i32(), 2_i), Id(7u));
-    Override("height", ty.i32(), Construct(ty.i32(), 3_i), Id(8u));
-    Override("depth", ty.i32(), Construct(ty.i32(), 4_i), Id(9u));
+    Override("width", ty.i32(), Call<i32>(2_i), Id(7_u));
+    Override("height", ty.i32(), Call<i32>(3_i), Id(8_u));
+    Override("depth", ty.i32(), Call<i32>(4_i), Id(9_u));
     Func("main", utils::Empty, ty.void_(), {},
          utils::Vector{
              Stage(ast::PipelineStage::kCompute),
@@ -813,27 +815,13 @@ TEST_F(GlslGeneratorImplTest_Function,
          });
 
     GeneratorImpl& gen = Build();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
-    EXPECT_EQ(gen.result(), R"(#version 310 es
-
-#ifndef WGSL_SPEC_CONSTANT_7
-#define WGSL_SPEC_CONSTANT_7 2
-#endif
-const int width = WGSL_SPEC_CONSTANT_7;
-#ifndef WGSL_SPEC_CONSTANT_8
-#define WGSL_SPEC_CONSTANT_8 3
-#endif
-const int height = WGSL_SPEC_CONSTANT_8;
-#ifndef WGSL_SPEC_CONSTANT_9
-#define WGSL_SPEC_CONSTANT_9 4
-#endif
-const int depth = WGSL_SPEC_CONSTANT_9;
-layout(local_size_x = WGSL_SPEC_CONSTANT_7, local_size_y = WGSL_SPEC_CONSTANT_8, local_size_z = WGSL_SPEC_CONSTANT_9) in;
-void main() {
-  return;
-}
-)");
+    gen.Generate();
+    EXPECT_EQ(
+        gen.Diagnostics().str(),
+        R"(error: override-expressions should have been removed with the SubstituteOverride transform
+error: override-expressions should have been removed with the SubstituteOverride transform
+error: override-expressions should have been removed with the SubstituteOverride transform
+error: override-expressions should have been removed with the SubstituteOverride transform)");
 }
 
 TEST_F(GlslGeneratorImplTest_Function, Emit_Function_WithArrayParams) {
@@ -843,8 +831,8 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Function_WithArrayParams) {
          });
 
     GeneratorImpl& gen = Build();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
 
 void my_func(float a[5]) {
@@ -857,12 +845,12 @@ void my_func(float a[5]) {
 TEST_F(GlslGeneratorImplTest_Function, Emit_Function_WithArrayReturn) {
     Func("my_func", utils::Empty, ty.array<f32, 5>(),
          utils::Vector{
-             Return(Construct(ty.array<f32, 5>())),
+             Return(Call(ty.array<f32, 5>())),
          });
 
     GeneratorImpl& gen = Build();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
 
 float[5] my_func() {
@@ -893,8 +881,8 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Multiple_EntryPoint_With_Same_Module
 
     auto* s = Structure("Data", utils::Vector{Member("d", ty.f32())});
 
-    GlobalVar("data", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(0),
-              Group(0));
+    GlobalVar("data", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kReadWrite,
+              Binding(0_a), Group(0_a));
 
     {
         auto* var = Var("v", ty.f32(), MemberAccessor("data", "d"));
@@ -925,19 +913,20 @@ TEST_F(GlslGeneratorImplTest_Function, Emit_Multiple_EntryPoint_With_Same_Module
     }
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
 
 struct Data {
   float d;
 };
 
-layout(binding = 0, std430) buffer Data_1 {
-  float d;
+layout(binding = 0, std430) buffer data_block_ssbo {
+  Data inner;
 } data;
+
 void a() {
-  float v = data.d;
+  float v = data.inner.d;
   return;
 }
 
@@ -947,7 +936,7 @@ void main() {
   return;
 }
 void b() {
-  float v = data.d;
+  float v = data.inner.d;
   return;
 }
 

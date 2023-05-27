@@ -23,8 +23,10 @@
 
 // fn atanh(vec<3, f32>) -> vec<3, f32>
 fn atanh_440cca() {
-  var res: vec3<f32> = atanh(vec3<f32>(1.f));
+  var res: vec3<f32> = atanh(vec3<f32>(0.5f));
+  prevent_dce = res;
 }
+@group(2) @binding(0) var<storage, read_write> prevent_dce : vec3<f32>;
 
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {

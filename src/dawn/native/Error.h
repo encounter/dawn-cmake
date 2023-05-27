@@ -19,14 +19,20 @@
 #include <string>
 #include <utility>
 
-#include "absl/strings/str_format.h"
 #include "dawn/common/Result.h"
 #include "dawn/native/ErrorData.h"
+#include "dawn/native/Toggles.h"
 #include "dawn/native/webgpu_absl_format.h"
 
 namespace dawn::native {
 
-enum class InternalErrorType : uint32_t { Validation, DeviceLost, Internal, OutOfMemory };
+enum class InternalErrorType : uint32_t {
+    None = 0,
+    Validation = 1,
+    DeviceLost = 2,
+    Internal = 4,
+    OutOfMemory = 8
+};
 
 // MaybeError and ResultOrError are meant to be used as return value for function that are not
 // expected to, but might fail. The handling of error is potentially much slower than successes.
@@ -43,7 +49,7 @@ using ResultOrError = Result<T, ErrorData>;
 //   return DAWN_MAKE_ERROR(errorType, "My error message");
 //
 // but shorthand version for specific error types are preferred:
-//   return DAWN_VALIDATION_ERROR("My error message");
+//   return DAWN_VALIDATION_ERROR("My error message with details %s", details);
 //
 // There are different types of errors that should be used for different purpose:
 //
@@ -71,11 +77,7 @@ using ResultOrError = Result<T, ErrorData>;
 #define DAWN_MAKE_ERROR(TYPE, MESSAGE) \
     ::dawn::native::ErrorData::Create(TYPE, MESSAGE, __FILE__, __func__, __LINE__)
 
-#define DAWN_VALIDATION_ERROR(MESSAGE) DAWN_MAKE_ERROR(InternalErrorType::Validation, MESSAGE)
-
-// TODO(dawn:563): Rename to DAWN_VALIDATION_ERROR once all message format strings have been
-// converted to constexpr.
-#define DAWN_FORMAT_VALIDATION_ERROR(...) \
+#define DAWN_VALIDATION_ERROR(...) \
     DAWN_MAKE_ERROR(InternalErrorType::Validation, absl::StrFormat(__VA_ARGS__))
 
 #define DAWN_INVALID_IF(EXPR, ...)                                                           \
@@ -191,6 +193,22 @@ void IgnoreErrors(MaybeError maybeError);
 wgpu::ErrorType ToWGPUErrorType(InternalErrorType type);
 InternalErrorType FromWGPUErrorType(wgpu::ErrorType type);
 
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString |
+                          absl::FormatConversionCharSet::kIntegral>
+AbslFormatConvert(InternalErrorType value,
+                  const absl::FormatConversionSpec& spec,
+                  absl::FormatSink* s);
+
 }  // namespace dawn::native
+
+// Enable dawn enum bitmask for error types.
+namespace dawn {
+
+template <>
+struct IsDawnBitmask<native::InternalErrorType> {
+    static constexpr bool enable = true;
+};
+
+}  // namespace dawn
 
 #endif  // SRC_DAWN_NATIVE_ERROR_H_

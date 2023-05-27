@@ -7,7 +7,7 @@ fn atomicStore_8bea94() {
   return;
 }
 
-fn compute_main_inner(local_invocation_index : u32) {
+fn compute_main_inner(local_invocation_index_2 : u32) {
   atomicStore(&(arg_0), 0i);
   workgroupBarrier();
   atomicStore_8bea94();
@@ -15,7 +15,7 @@ fn compute_main_inner(local_invocation_index : u32) {
 }
 
 fn compute_main_1() {
-  let x_29 : u32 = local_invocation_index_1;
+  let x_29 = local_invocation_index_1;
   compute_main_inner(x_29);
   return;
 }

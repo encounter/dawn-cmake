@@ -1,9 +1,8 @@
-float tint_radians(float param_0) {
-  return param_0 * 0.017453292519943295474;
-}
+RWByteAddressBuffer prevent_dce : register(u0, space2);
 
 void radians_6b0ff2() {
-  float res = tint_radians(1.0f);
+  float res = 0.01745329238474369049f;
+  prevent_dce.Store(0u, asuint(res));
 }
 
 struct tint_symbol {

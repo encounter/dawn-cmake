@@ -42,20 +42,17 @@ class GeneratorImpl {
     /// Constructor
     /// @param program the program to generate
     /// @param zero_initialize_workgroup_memory `true` to initialize all the
-    /// variables in the Workgroup storage class with OpConstantNull
+    /// variables in the Workgroup address space with OpConstantNull
     GeneratorImpl(const Program* program, bool zero_initialize_workgroup_memory);
 
     /// @returns true on successful generation; false otherwise
     bool Generate();
 
     /// @returns the result data
-    const std::vector<uint32_t>& result() const;
+    const std::vector<uint32_t>& Result() const { return writer_.result(); }
 
-    /// @returns the result data
-    std::vector<uint32_t>& result();
-
-    /// @returns the error
-    std::string error() const;
+    /// @returns the list of diagnostics raised by the generator
+    diag::List Diagnostics() const { return builder_.Diagnostics(); }
 
   private:
     Builder builder_;

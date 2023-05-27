@@ -17,7 +17,6 @@ package resolver
 import (
 	"fmt"
 	"sort"
-	"strconv"
 
 	"dawn.googlesource.com/dawn/tools/src/container"
 	"dawn.googlesource.com/dawn/tools/src/tint/intrinsic/ast"
@@ -89,7 +88,7 @@ func Resolve(a *ast.AST) (*sem.Sem, error) {
 		}
 	}
 
-	// Declare and resolve type constructors and converters
+	// Declare and resolve value constructors and converters
 	for _, c := range a.Constructors {
 		if err := r.intrinsic(c, r.constructorsAndConverters, &r.s.ConstructorsAndConverters); err != nil {
 			return nil, err
@@ -148,6 +147,9 @@ func (r *resolver) enum(e ast.EnumDecl) error {
 		names.Add(ast.Name)
 	}
 
+	// Sort the enum entries into lexicographic order
+	sort.Slice(s.Entries, func(i, j int) bool { return s.Entries[i].Name < s.Entries[j].Name })
+
 	return nil
 }
 
@@ -181,15 +183,15 @@ func (r *resolver) ty(a ast.TypeDecl) error {
 		if len(d.Values) != 1 {
 			return fmt.Errorf("%v expected a single value for 'display' attribute", d.Source)
 		}
-		t.DisplayName = d.Values[0]
+		t.DisplayName = fmt.Sprint(d.Values[0])
 	}
 	if d := a.Attributes.Take("precedence"); d != nil {
 		if len(d.Values) != 1 {
 			return fmt.Errorf("%v expected a single integer value for 'precedence' attribute", d.Source)
 		}
-		n, err := strconv.Atoi(d.Values[0])
-		if err != nil {
-			return fmt.Errorf("%v %v", d.Source, err)
+		n, ok := d.Values[0].(int)
+		if !ok {
+			return fmt.Errorf("%v @precedence value must be an integer", d.Source)
 		}
 		t.Precedence = n
 	}
@@ -343,6 +345,15 @@ func (r *resolver) intrinsic(
 			Compute:  true,
 		}
 	}
+	if mustUse := a.Attributes.Take("must_use"); mustUse != nil {
+		if len(mustUse.Values) > 0 {
+			return fmt.Errorf("%v @must_use does not accept any arguments", mustUse.Source)
+		}
+		if a.ReturnType == nil {
+			return fmt.Errorf("%v @must_use can only be used on a function with a return type", mustUse.Source)
+		}
+		overload.MustUse = true
+	}
 	if constEvalFn := a.Attributes.Take("const"); constEvalFn != nil {
 		switch len(constEvalFn.Values) {
 		case 0:
@@ -355,7 +366,11 @@ func (r *resolver) intrinsic(
 				overload.ConstEvalFunction = "Conv"
 			}
 		case 1:
-			overload.ConstEvalFunction = constEvalFn.Values[0]
+			fn, ok := constEvalFn.Values[0].(string)
+			if !ok {
+				return fmt.Errorf("%v optional @const value must be a string", constEvalFn.Source)
+			}
+			overload.ConstEvalFunction = fn
 		default:
 			return fmt.Errorf("%v too many values for @const attribute", constEvalFn.Source)
 		}
@@ -402,13 +417,25 @@ func (r *resolver) intrinsic(
 		if attribute := p.Attributes.Take("const"); attribute != nil {
 			isConst = true
 		}
+		testValue := 1.0
+		if attribute := p.Attributes.Take("test_value"); attribute != nil {
+			switch v := attribute.Values[0].(type) {
+			case int:
+				testValue = float64(v)
+			case float64:
+				testValue = v
+			default:
+				return fmt.Errorf("%v @test_value must be an integer or float", p.Attributes[0].Source)
+			}
+		}
 		if len(p.Attributes) != 0 {
 			return fmt.Errorf("%v unknown attribute", p.Attributes[0].Source)
 		}
 		overload.Parameters[i] = sem.Parameter{
-			Name:    p.Name,
-			Type:    usage,
-			IsConst: isConst,
+			Name:      p.Name,
+			Type:      usage,
+			IsConst:   isConst,
+			TestValue: testValue,
 		}
 	}
 
@@ -430,12 +457,15 @@ func (r *resolver) intrinsic(
 }
 
 // fullyQualifiedName() resolves the ast.TemplatedName to a sem.FullyQualifiedName.
+// The resolved name cannot be a TypeMatcher
 func (r *resolver) fullyQualifiedName(s *scope, arg ast.TemplatedName) (sem.FullyQualifiedName, error) {
 	target, err := r.lookupNamed(s, arg)
 	if err != nil {
 		return sem.FullyQualifiedName{}, err
 	}
-
+	if _, ok := target.(*sem.TypeMatcher); ok {
+		return sem.FullyQualifiedName{}, fmt.Errorf("%v type matcher cannot be used directly here. Use a matcher constrained template argument", arg.Source)
+	}
 	fqn := sem.FullyQualifiedName{
 		Target:            target,
 		TemplateArguments: make([]interface{}, len(arg.TemplateArgs)),

@@ -10,7 +10,7 @@ void atomicAnd_45a819() {
   return;
 }
 
-void compute_main_inner(uint local_invocation_index) {
+void compute_main_inner(uint local_invocation_index_2) {
   int atomic_result_1 = 0;
   InterlockedExchange(arg_0, 0, atomic_result_1);
   GroupMemoryBarrierWithGroupSync();
@@ -19,7 +19,8 @@ void compute_main_inner(uint local_invocation_index) {
 }
 
 void compute_main_1() {
-  compute_main_inner(local_invocation_index_1);
+  const uint x_31 = local_invocation_index_1;
+  compute_main_inner(x_31);
   return;
 }
 

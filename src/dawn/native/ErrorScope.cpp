@@ -28,6 +28,8 @@ wgpu::ErrorType ErrorFilterToErrorType(wgpu::ErrorFilter filter) {
             return wgpu::ErrorType::Validation;
         case wgpu::ErrorFilter::OutOfMemory:
             return wgpu::ErrorType::OutOfMemory;
+        case wgpu::ErrorFilter::Internal:
+            return wgpu::ErrorType::Internal;
     }
     UNREACHABLE();
 }
@@ -41,8 +43,8 @@ wgpu::ErrorType ErrorScope::GetErrorType() const {
     return mCapturedError;
 }
 
-const char* ErrorScope::GetErrorMessage() const {
-    return mErrorMessage.c_str();
+const std::string& ErrorScope::GetErrorMessage() const {
+    return mErrorMessage;
 }
 
 ErrorScopeStack::ErrorScopeStack() = default;

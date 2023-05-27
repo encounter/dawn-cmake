@@ -1,9 +1,8 @@
-vector<float16_t, 4> tint_acosh(vector<float16_t, 4> x) {
-  return log((x + sqrt(((x * x) - float16_t(1.0h)))));
-}
+RWByteAddressBuffer prevent_dce : register(u0, space2);
 
 void acosh_de60d8() {
-  vector<float16_t, 4> res = tint_acosh((float16_t(0.0h)).xxxx);
+  vector<float16_t, 4> res = (float16_t(0.99951171875h)).xxxx;
+  prevent_dce.Store<vector<float16_t, 4> >(0u, res);
 }
 
 struct tint_symbol {

@@ -13,15 +13,15 @@
 // limitations under the License.
 
 #include <cmath>
-
-#include "dawn/tests/unittests/validation/ValidationTest.h"
+#include <vector>
 
 #include "dawn/common/Constants.h"
-
+#include "dawn/tests/unittests/validation/ValidationTest.h"
 #include "dawn/utils/ComboRenderBundleEncoderDescriptor.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
+namespace dawn {
 namespace {
 
 class RenderPassDescriptorValidationTest : public ValidationTest {
@@ -104,8 +104,7 @@ TEST_F(RenderPassDescriptorValidationTest, OneAttachment) {
 TEST_F(RenderPassDescriptorValidationTest, ColorAttachmentOutOfBounds) {
     std::array<wgpu::RenderPassColorAttachment, kMaxColorAttachments + 1> colorAttachments;
     for (uint32_t i = 0; i < colorAttachments.size(); i++) {
-        colorAttachments[i].view =
-            Create2DAttachment(device, 1, 1, wgpu::TextureFormat::RGBA8Unorm);
+        colorAttachments[i].view = Create2DAttachment(device, 1, 1, wgpu::TextureFormat::R8Unorm);
         colorAttachments[i].resolveTarget = nullptr;
         colorAttachments[i].clearValue = {0.0f, 0.0f, 0.0f, 0.0f};
         colorAttachments[i].loadOp = wgpu::LoadOp::Clear;
@@ -552,13 +551,13 @@ TEST_F(RenderPassDescriptorValidationTest, MaxDrawCount) {
     constexpr uint64_t kMaxDrawCount = 16;
 
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
-        @vertex fn main() -> @builtin(position) vec4<f32> {
-            return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        @vertex fn main() -> @builtin(position) vec4f {
+            return vec4f(0.0, 0.0, 0.0, 1.0);
         })");
 
     wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
-        @fragment fn main() -> @location(0) vec4<f32> {
-            return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+        @fragment fn main() -> @location(0) vec4f {
+            return vec4f(0.0, 1.0, 0.0, 1.0);
         })");
 
     utils::ComboRenderPipelineDescriptor pipelineDescriptor;
@@ -1051,6 +1050,7 @@ TEST_F(RenderPassDescriptorValidationTest, UseNaNOrINFINITYAsColorOrDepthClearVa
         wgpu::TextureView depth =
             Create2DAttachment(device, 1, 1, wgpu::TextureFormat::Depth24Plus);
         utils::ComboRenderPassDescriptor renderPass({color}, depth);
+        renderPass.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Clear;
         renderPass.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Undefined;
         renderPass.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Undefined;
         renderPass.cDepthStencilAttachmentInfo.depthClearValue = NAN;
@@ -1062,6 +1062,7 @@ TEST_F(RenderPassDescriptorValidationTest, UseNaNOrINFINITYAsColorOrDepthClearVa
         wgpu::TextureView depth =
             Create2DAttachment(device, 1, 1, wgpu::TextureFormat::Depth24Plus);
         utils::ComboRenderPassDescriptor renderPass({color}, depth);
+        renderPass.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Clear;
         renderPass.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Undefined;
         renderPass.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Undefined;
         renderPass.cDepthStencilAttachmentInfo.depthClearValue = INFINITY;
@@ -1125,6 +1126,45 @@ TEST_F(RenderPassDescriptorValidationTest, ValidateDepthClearValueRange) {
     AssertBeginRenderPassSuccess(&renderPass);
 }
 
+// Tests that default depthClearValue is required if attachment has a depth aspect and depthLoadOp
+// is clear.
+TEST_F(RenderPassDescriptorValidationTest, DefaultDepthClearValue) {
+    wgpu::TextureView depthView =
+        Create2DAttachment(device, 1, 1, wgpu::TextureFormat::Depth24Plus);
+    wgpu::TextureView stencilView = Create2DAttachment(device, 1, 1, wgpu::TextureFormat::Stencil8);
+
+    wgpu::RenderPassDepthStencilAttachment depthStencilAttachment;
+
+    wgpu::RenderPassDescriptor renderPassDescriptor;
+    renderPassDescriptor.colorAttachmentCount = 0;
+    renderPassDescriptor.colorAttachments = nullptr;
+    renderPassDescriptor.depthStencilAttachment = &depthStencilAttachment;
+
+    // Default depthClearValue should be accepted if attachment doesn't have
+    // a depth aspect.
+    depthStencilAttachment.view = stencilView;
+    depthStencilAttachment.stencilLoadOp = wgpu::LoadOp::Load;
+    depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Store;
+    AssertBeginRenderPassSuccess(&renderPassDescriptor);
+
+    // Default depthClearValue should be accepted if depthLoadOp is not clear.
+    depthStencilAttachment.view = depthView;
+    depthStencilAttachment.stencilLoadOp = wgpu::LoadOp::Undefined;
+    depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Undefined;
+    depthStencilAttachment.depthLoadOp = wgpu::LoadOp::Load;
+    depthStencilAttachment.depthStoreOp = wgpu::StoreOp::Store;
+    AssertBeginRenderPassSuccess(&renderPassDescriptor);
+
+    // Default depthClearValue should fail the validation
+    // if attachment has a depth aspect and depthLoadOp is clear.
+    depthStencilAttachment.depthLoadOp = wgpu::LoadOp::Clear;
+    AssertBeginRenderPassError(&renderPassDescriptor);
+
+    // The validation should pass if valid depthClearValue is provided.
+    depthStencilAttachment.depthClearValue = 0.0f;
+    AssertBeginRenderPassSuccess(&renderPassDescriptor);
+}
+
 TEST_F(RenderPassDescriptorValidationTest, ValidateDepthStencilReadOnly) {
     wgpu::TextureView colorView = Create2DAttachment(device, 1, 1, wgpu::TextureFormat::RGBA8Unorm);
     wgpu::TextureView depthStencilView =
@@ -1154,7 +1194,7 @@ TEST_F(RenderPassDescriptorValidationTest, ValidateDepthStencilReadOnly) {
         renderPass.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Load;
         renderPass.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Store;
         renderPass.cDepthStencilAttachmentInfo.stencilReadOnly = false;
-        EXPECT_DEPRECATION_WARNING(AssertBeginRenderPassSuccess(&renderPass));
+        AssertBeginRenderPassError(&renderPass);
     }
 
     // Tests that a pass with mismatched depthReadOnly and stencilReadOnly values fails when
@@ -1243,6 +1283,19 @@ TEST_F(RenderPassDescriptorValidationTest, ValidateDepthStencilReadOnly) {
         renderPass.cDepthStencilAttachmentInfo.depthReadOnly = true;
         renderPass.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Load;
         renderPass.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Discard;
+        renderPass.cDepthStencilAttachmentInfo.stencilReadOnly = true;
+        AssertBeginRenderPassError(&renderPass);
+    }
+
+    // Tests that a pass with loadOp set to load, storeOp set to store, and readOnly set to true
+    // fails.
+    {
+        utils::ComboRenderPassDescriptor renderPass({colorView}, depthStencilView);
+        renderPass.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Load;
+        renderPass.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Store;
+        renderPass.cDepthStencilAttachmentInfo.depthReadOnly = true;
+        renderPass.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Load;
+        renderPass.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Store;
         renderPass.cDepthStencilAttachmentInfo.stencilReadOnly = true;
         AssertBeginRenderPassError(&renderPass);
     }
@@ -1406,6 +1459,75 @@ TEST_F(RenderPassDescriptorValidationTest, ValidateDepthStencilAllAspects) {
     }
 }
 
+// Tests validation for per-pixel accounting for render targets. The tests currently assume that the
+// default maxColorAttachmentBytesPerSample limit of 32 is used.
+TEST_F(RenderPassDescriptorValidationTest, RenderPassColorAttachmentBytesPerSample) {
+    struct TestCase {
+        std::vector<wgpu::TextureFormat> formats;
+        bool success;
+    };
+    static std::vector<TestCase> kTestCases = {
+        // Simple 1 format cases.
+
+        // R8Unorm take 1 byte and are aligned to 1 byte so we can have 8 (max).
+        {{wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::R8Unorm,
+          wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::R8Unorm,
+          wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::R8Unorm},
+         true},
+        // RGBA8Uint takes 4 bytes and are aligned to 1 byte so we can have 8 (max).
+        {{wgpu::TextureFormat::RGBA8Uint, wgpu::TextureFormat::RGBA8Uint,
+          wgpu::TextureFormat::RGBA8Uint, wgpu::TextureFormat::RGBA8Uint,
+          wgpu::TextureFormat::RGBA8Uint, wgpu::TextureFormat::RGBA8Uint,
+          wgpu::TextureFormat::RGBA8Uint, wgpu::TextureFormat::RGBA8Uint},
+         true},
+        // RGBA8Unorm takes 8 bytes (special case) and are aligned to 1 byte so only 4 allowed.
+        {{wgpu::TextureFormat::RGBA8Unorm, wgpu::TextureFormat::RGBA8Unorm,
+          wgpu::TextureFormat::RGBA8Unorm, wgpu::TextureFormat::RGBA8Unorm},
+         true},
+        {{wgpu::TextureFormat::RGBA8Unorm, wgpu::TextureFormat::RGBA8Unorm,
+          wgpu::TextureFormat::RGBA8Unorm, wgpu::TextureFormat::RGBA8Unorm,
+          wgpu::TextureFormat::RGBA8Unorm},
+         false},
+        // RGBA32Float takes 16 bytes and are aligned to 4 bytes so only 2 are allowed.
+        {{wgpu::TextureFormat::RGBA32Float, wgpu::TextureFormat::RGBA32Float}, true},
+        {{wgpu::TextureFormat::RGBA32Float, wgpu::TextureFormat::RGBA32Float,
+          wgpu::TextureFormat::RGBA32Float},
+         false},
+
+        // Different format alignment cases.
+
+        // Alignment causes the first 1 byte R8Unorm to become 4 bytes. So even though 1+4+8+16+1 <
+        // 32, the 4 byte alignment requirement of R32Float makes the first R8Unorm become 4 and
+        // 4+4+8+16+1 > 32. Re-ordering this so the R8Unorm's are at the end, however is allowed:
+        // 4+8+16+1+1 < 32.
+        {{wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::R32Float,
+          wgpu::TextureFormat::RGBA8Unorm, wgpu::TextureFormat::RGBA32Float,
+          wgpu::TextureFormat::R8Unorm},
+         false},
+        {{wgpu::TextureFormat::R32Float, wgpu::TextureFormat::RGBA8Unorm,
+          wgpu::TextureFormat::RGBA32Float, wgpu::TextureFormat::R8Unorm,
+          wgpu::TextureFormat::R8Unorm},
+         true},
+    };
+
+    for (const TestCase& testCase : kTestCases) {
+        std::vector<wgpu::TextureView> colorAttachmentInfo;
+        for (size_t i = 0; i < testCase.formats.size(); i++) {
+            colorAttachmentInfo.push_back(Create2DAttachment(device, 1, 1, testCase.formats.at(i)));
+        }
+        utils::ComboRenderPassDescriptor descriptor(colorAttachmentInfo);
+        wgpu::CommandEncoder commandEncoder = device.CreateCommandEncoder();
+        wgpu::RenderPassEncoder renderPassEncoder = commandEncoder.BeginRenderPass(&descriptor);
+        renderPassEncoder.End();
+        if (testCase.success) {
+            commandEncoder.Finish();
+        } else {
+            ASSERT_DEVICE_ERROR(commandEncoder.Finish());
+        }
+    }
+}
+
 // TODO(cwallez@chromium.org): Constraints on attachment aliasing?
 
 }  // anonymous namespace
+}  // namespace dawn

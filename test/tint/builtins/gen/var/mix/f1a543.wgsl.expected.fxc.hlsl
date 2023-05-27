@@ -1,10 +1,13 @@
 SKIP: FAILED
 
+RWByteAddressBuffer prevent_dce : register(u0, space2);
+
 void mix_f1a543() {
-  vector<float16_t, 4> arg_0 = (float16_t(0.0h)).xxxx;
-  vector<float16_t, 4> arg_1 = (float16_t(0.0h)).xxxx;
-  float16_t arg_2 = float16_t(0.0h);
+  vector<float16_t, 4> arg_0 = (float16_t(1.0h)).xxxx;
+  vector<float16_t, 4> arg_1 = (float16_t(1.0h)).xxxx;
+  float16_t arg_2 = float16_t(1.0h);
   vector<float16_t, 4> res = lerp(arg_0, arg_1, arg_2);
+  prevent_dce.Store<vector<float16_t, 4> >(0u, res);
 }
 
 struct tint_symbol {
@@ -33,9 +36,3 @@ void compute_main() {
   mix_f1a543();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x0000027B644EDA60(2,10-18): error X3000: syntax error: unexpected token 'float16_t'
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x0000027B644EDA60(3,10-18): error X3000: syntax error: unexpected token 'float16_t'
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x0000027B644EDA60(4,3-11): error X3000: unrecognized identifier 'float16_t'
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x0000027B644EDA60(4,13-17): error X3000: unrecognized identifier 'arg_2'
-

@@ -20,6 +20,8 @@
 #include "src/tint/diagnostic/diagnostic.h"
 #include "src/tint/diagnostic/formatter.h"
 #include "src/tint/diagnostic/printer.h"
+#include "src/tint/utils/compiler_macros.h"
+#include "src/tint/utils/string_stream.h"
 
 namespace tint {
 
@@ -70,7 +72,7 @@ class InternalCompilerError {
     const size_t line_;
     diag::System system_;
     diag::List& diagnostics_;
-    std::stringstream msg_;
+    utils::StringStream msg_;
 };
 
 }  // namespace tint
@@ -111,7 +113,7 @@ class InternalCompilerError {
 /// error handling.
 #define TINT_ASSERT(system, condition)                                                   \
     do {                                                                                 \
-        if (!(condition)) {                                                              \
+        if (TINT_UNLIKELY(!(condition))) {                                               \
             tint::diag::List diagnostics;                                                \
             TINT_ICE(system, diagnostics) << "TINT_ASSERT(" #system ", " #condition ")"; \
         }                                                                                \

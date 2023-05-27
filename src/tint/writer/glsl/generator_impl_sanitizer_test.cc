@@ -17,6 +17,8 @@
 #include "src/tint/ast/variable_decl_statement.h"
 #include "src/tint/writer/glsl/test_helper.h"
 
+#include "gmock/gmock.h"
+
 using namespace tint::number_suffixes;  // NOLINT
 
 namespace tint::writer::glsl {
@@ -25,8 +27,9 @@ namespace {
 using GlslSanitizerTest = TestHelper;
 
 TEST_F(GlslSanitizerTest, Call_ArrayLength) {
-    auto* s = Structure("my_struct", utils::Vector{Member(0, "a", ty.array<f32>(4))});
-    GlobalVar("b", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead, Binding(1), Group(2));
+    auto* s = Structure("my_struct", utils::Vector{Member(0, "a", ty.array<f32>())});
+    GlobalVar("b", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kRead, Binding(1_a),
+              Group(2_a));
 
     Func("a_func", utils::Empty, ty.void_(),
          utils::Vector{
@@ -37,16 +40,17 @@ TEST_F(GlslSanitizerTest, Call_ArrayLength) {
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
 
     auto got = gen.result();
     auto* expect = R"(#version 310 es
-precision mediump float;
+precision highp float;
 
-layout(binding = 1, std430) buffer my_struct_1 {
+layout(binding = 1, std430) buffer my_struct_ssbo {
   float a[];
 } b;
+
 void a_func() {
   uint len = uint(b.a.length());
 }
@@ -62,9 +66,10 @@ void main() {
 TEST_F(GlslSanitizerTest, Call_ArrayLength_OtherMembersInStruct) {
     auto* s = Structure("my_struct", utils::Vector{
                                          Member(0, "z", ty.f32()),
-                                         Member(4, "a", ty.array<f32>(4)),
+                                         Member(4, "a", ty.array<f32>()),
                                      });
-    GlobalVar("b", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead, Binding(1), Group(2));
+    GlobalVar("b", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kRead, Binding(1_a),
+              Group(2_a));
 
     Func("a_func", utils::Empty, ty.void_(),
          utils::Vector{
@@ -75,17 +80,18 @@ TEST_F(GlslSanitizerTest, Call_ArrayLength_OtherMembersInStruct) {
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
 
     auto got = gen.result();
     auto* expect = R"(#version 310 es
-precision mediump float;
+precision highp float;
 
-layout(binding = 1, std430) buffer my_struct_1 {
+layout(binding = 1, std430) buffer my_struct_ssbo {
   float z;
   float a[];
 } b;
+
 void a_func() {
   uint len = uint(b.a.length());
 }
@@ -100,8 +106,9 @@ void main() {
 }
 
 TEST_F(GlslSanitizerTest, Call_ArrayLength_ViaLets) {
-    auto* s = Structure("my_struct", utils::Vector{Member(0, "a", ty.array<f32>(4))});
-    GlobalVar("b", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead, Binding(1), Group(2));
+    auto* s = Structure("my_struct", utils::Vector{Member(0, "a", ty.array<f32>())});
+    GlobalVar("b", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kRead, Binding(1_a),
+              Group(2_a));
 
     auto* p = Let("p", AddressOf("b"));
     auto* p2 = Let("p2", AddressOf(MemberAccessor(Deref(p), "a")));
@@ -117,16 +124,17 @@ TEST_F(GlslSanitizerTest, Call_ArrayLength_ViaLets) {
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
 
     auto got = gen.result();
     auto* expect = R"(#version 310 es
-precision mediump float;
+precision highp float;
 
-layout(binding = 1, std430) buffer my_struct_1 {
+layout(binding = 1, std430) buffer my_struct_ssbo {
   float a[];
 } b;
+
 void a_func() {
   uint len = uint(b.a.length());
 }
@@ -153,12 +161,12 @@ TEST_F(GlslSanitizerTest, PromoteArrayInitializerToConstVar) {
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
 
     auto got = gen.result();
     auto* expect = R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 void tint_symbol() {
   int idx = 3;
@@ -180,12 +188,14 @@ TEST_F(GlslSanitizerTest, PromoteStructInitializerToConstVar) {
                                    Member("b", ty.vec3<f32>()),
                                    Member("c", ty.i32()),
                                });
-    auto* struct_init = Construct(ty.Of(str), 1_i, vec3<f32>(2_f, 3_f, 4_f), 4_i);
+    auto* runtime_value = Var("runtime_value", Expr(3_f));
+    auto* struct_init = Call(ty.Of(str), 1_i, vec3<f32>(2_f, runtime_value, 4_f), 4_i);
     auto* struct_access = MemberAccessor(struct_init, "b");
     auto* pos = Var("pos", ty.vec3<f32>(), struct_access);
 
     Func("main", utils::Empty, ty.void_(),
          utils::Vector{
+             Decl(runtime_value),
              Decl(pos),
          },
          utils::Vector{
@@ -193,12 +203,12 @@ TEST_F(GlslSanitizerTest, PromoteStructInitializerToConstVar) {
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
 
     auto got = gen.result();
     auto* expect = R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 struct S {
   int a;
@@ -207,7 +217,8 @@ struct S {
 };
 
 void tint_symbol() {
-  S tint_symbol_1 = S(1, vec3(2.0f, 3.0f, 4.0f), 4);
+  float runtime_value = 3.0f;
+  S tint_symbol_1 = S(1, vec3(2.0f, runtime_value, 4.0f), 4);
   vec3 pos = tint_symbol_1.b;
 }
 
@@ -219,12 +230,12 @@ void main() {
     EXPECT_EQ(expect, got);
 }
 
-TEST_F(GlslSanitizerTest, InlinePtrLetsBasic) {
+TEST_F(GlslSanitizerTest, SimplifyPointersBasic) {
     // var v : i32;
     // let p : ptr<function, i32> = &v;
     // let x : i32 = *p;
     auto* v = Var("v", ty.i32());
-    auto* p = Let("p", ty.pointer<i32>(ast::StorageClass::kFunction), AddressOf(v));
+    auto* p = Let("p", ty.pointer<i32>(builtin::AddressSpace::kFunction), AddressOf(v));
     auto* x = Var("x", ty.i32(), Deref(p));
 
     Func("main", utils::Empty, ty.void_(),
@@ -238,12 +249,12 @@ TEST_F(GlslSanitizerTest, InlinePtrLetsBasic) {
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
 
     auto got = gen.result();
     auto* expect = R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 void tint_symbol() {
   int v = 0;
@@ -258,18 +269,19 @@ void main() {
     EXPECT_EQ(expect, got);
 }
 
-TEST_F(GlslSanitizerTest, InlinePtrLetsComplexChain) {
+TEST_F(GlslSanitizerTest, SimplifyPointersComplexChain) {
     // var a : array<mat4x4<f32>, 4u>;
     // let ap : ptr<function, array<mat4x4<f32>, 4u>> = &a;
     // let mp : ptr<function, mat4x4<f32>> = &(*ap)[3i];
     // let vp : ptr<function, vec4<f32>> = &(*mp)[2i];
     // let v : vec4<f32> = *vp;
     auto* a = Var("a", ty.array(ty.mat4x4<f32>(), 4_u));
-    auto* ap = Let("ap", ty.pointer(ty.array(ty.mat4x4<f32>(), 4_u), ast::StorageClass::kFunction),
-                   AddressOf(a));
-    auto* mp = Let("mp", ty.pointer(ty.mat4x4<f32>(), ast::StorageClass::kFunction),
+    auto* ap =
+        Let("ap", ty.pointer(ty.array(ty.mat4x4<f32>(), 4_u), builtin::AddressSpace::kFunction),
+            AddressOf(a));
+    auto* mp = Let("mp", ty.pointer(ty.mat4x4<f32>(), builtin::AddressSpace::kFunction),
                    AddressOf(IndexAccessor(Deref(ap), 3_i)));
-    auto* vp = Let("vp", ty.pointer(ty.vec4<f32>(), ast::StorageClass::kFunction),
+    auto* vp = Let("vp", ty.pointer(ty.vec4<f32>(), builtin::AddressSpace::kFunction),
                    AddressOf(IndexAccessor(Deref(mp), 2_i)));
     auto* v = Var("v", ty.vec4<f32>(), Deref(vp));
 
@@ -286,12 +298,12 @@ TEST_F(GlslSanitizerTest, InlinePtrLetsComplexChain) {
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
 
     auto got = gen.result();
     auto* expect = R"(#version 310 es
-precision mediump float;
+precision highp float;
 
 void tint_symbol() {
   mat4 a[4] = mat4[4](mat4(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f), mat4(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f), mat4(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f), mat4(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));

@@ -18,8 +18,9 @@
 #include <memory>
 #include <vector>
 
-#include "dawn/native/Adapter.h"
 #include "dawn/native/DawnNative.h"
+#include "dawn/native/PhysicalDevice.h"
+#include "dawn/native/Toggles.h"
 
 namespace dawn::native {
 
@@ -33,13 +34,13 @@ class BackendConnection {
     wgpu::BackendType GetType() const;
     InstanceBase* GetInstance() const;
 
-    // Returns all the adapters for the system that can be created by the backend, without extra
-    // options (such as debug adapters, custom driver libraries, etc.)
-    virtual std::vector<Ref<AdapterBase>> DiscoverDefaultAdapters() = 0;
+    // Returns all the physical devices for the system that can be created by the backend, without
+    // extra options (such as debug adapters, custom driver libraries, etc.)
+    virtual std::vector<Ref<PhysicalDeviceBase>> DiscoverDefaultPhysicalDevices() = 0;
 
-    // Returns new adapters created with the backend-specific options.
-    virtual ResultOrError<std::vector<Ref<AdapterBase>>> DiscoverAdapters(
-        const AdapterDiscoveryOptionsBase* options);
+    // Returns new physical devices created with the backend-specific options.
+    virtual ResultOrError<std::vector<Ref<PhysicalDeviceBase>>> DiscoverPhysicalDevices(
+        const PhysicalDeviceDiscoveryOptionsBase* options);
 
   private:
     InstanceBase* mInstance = nullptr;

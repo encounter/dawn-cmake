@@ -14,6 +14,8 @@
 
 #include "src/tint/writer/wgsl/test_helper.h"
 
+#include "gmock/gmock.h"
+
 using namespace tint::number_suffixes;  // NOLINT
 
 namespace tint::writer::wgsl {
@@ -22,19 +24,21 @@ namespace {
 using WgslGeneratorImplTest = TestHelper;
 
 TEST_F(WgslGeneratorImplTest, Emit_Loop) {
-    auto* body = Block(create<ast::DiscardStatement>());
+    auto* body = Block(Break());
     auto* continuing = Block();
     auto* l = Loop(body, continuing);
 
-    WrapInFunction(l);
+    Func("F", utils::Empty, ty.void_(), utils::Vector{l},
+         utils::Vector{Stage(ast::PipelineStage::kFragment)});
 
     GeneratorImpl& gen = Build();
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(l)) << gen.error();
+    gen.EmitStatement(l);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  loop {
-    discard;
+    break;
   }
 )");
 }
@@ -42,22 +46,51 @@ TEST_F(WgslGeneratorImplTest, Emit_Loop) {
 TEST_F(WgslGeneratorImplTest, Emit_LoopWithContinuing) {
     Func("a_statement", {}, ty.void_(), {});
 
-    auto* body = Block(create<ast::DiscardStatement>());
+    auto* body = Block(Break());
     auto* continuing = Block(CallStmt(Call("a_statement")));
     auto* l = Loop(body, continuing);
 
-    WrapInFunction(l);
+    Func("F", utils::Empty, ty.void_(), utils::Vector{l},
+         utils::Vector{Stage(ast::PipelineStage::kFragment)});
 
     GeneratorImpl& gen = Build();
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(l)) << gen.error();
+    gen.EmitStatement(l);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
+    EXPECT_EQ(gen.result(), R"(  loop {
+    break;
+
+    continuing {
+      a_statement();
+    }
+  }
+)");
+}
+
+TEST_F(WgslGeneratorImplTest, Emit_LoopWithContinuing_BreakIf) {
+    Func("a_statement", {}, ty.void_(), {});
+
+    auto* body = Block(Discard());
+    auto* continuing = Block(CallStmt(Call("a_statement")), BreakIf(true));
+    auto* l = Loop(body, continuing);
+
+    Func("F", utils::Empty, ty.void_(), utils::Vector{l},
+         utils::Vector{Stage(ast::PipelineStage::kFragment)});
+
+    GeneratorImpl& gen = Build();
+
+    gen.increment_indent();
+
+    gen.EmitStatement(l);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  loop {
     discard;
 
     continuing {
       a_statement();
+      break if true;
     }
   }
 )");
@@ -68,7 +101,7 @@ TEST_F(WgslGeneratorImplTest, Emit_ForLoopWithMultiStmtInit) {
     // for({ignore(1i); ignore(2i);}; ; ) {
     //   return;
     // }
-    GlobalVar("a", ty.atomic<i32>(), ast::StorageClass::kWorkgroup);
+    GlobalVar("a", ty.atomic<i32>(), builtin::AddressSpace::kWorkgroup);
     auto* multi_stmt = Block(Ignore(1_i), Ignore(2_i));
     auto* f = For(multi_stmt, nullptr, nullptr, Block(Return()));
     WrapInFunction(f);
@@ -77,7 +110,8 @@ TEST_F(WgslGeneratorImplTest, Emit_ForLoopWithMultiStmtInit) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(f)) << gen.error();
+    gen.EmitStatement(f);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  for({
     _ = 1i;
     _ = 2i;
@@ -99,7 +133,8 @@ TEST_F(WgslGeneratorImplTest, Emit_ForLoopWithSimpleCond) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(f)) << gen.error();
+    gen.EmitStatement(f);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  for(; true; ) {
     return;
   }
@@ -119,7 +154,8 @@ TEST_F(WgslGeneratorImplTest, Emit_ForLoopWithSimpleCont) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(f)) << gen.error();
+    gen.EmitStatement(f);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  for(; ; i = (i + 1i)) {
     return;
   }
@@ -132,7 +168,7 @@ TEST_F(WgslGeneratorImplTest, Emit_ForLoopWithMultiStmtCont) {
     //   return;
     // }
 
-    GlobalVar("a", ty.atomic<i32>(), ast::StorageClass::kWorkgroup);
+    GlobalVar("a", ty.atomic<i32>(), builtin::AddressSpace::kWorkgroup);
     auto* multi_stmt = Block(Ignore(1_i), Ignore(2_i));
     auto* f = For(nullptr, nullptr, multi_stmt, Block(Return()));
     WrapInFunction(f);
@@ -141,7 +177,8 @@ TEST_F(WgslGeneratorImplTest, Emit_ForLoopWithMultiStmtCont) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(f)) << gen.error();
+    gen.EmitStatement(f);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  for(; ; {
     _ = 1i;
     _ = 2i;
@@ -163,7 +200,8 @@ TEST_F(WgslGeneratorImplTest, Emit_ForLoopWithSimpleInitCondCont) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(f)) << gen.error();
+    gen.EmitStatement(f);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  for(var i : i32; true; i = (i + 1i)) {
     return;
   }
@@ -175,7 +213,7 @@ TEST_F(WgslGeneratorImplTest, Emit_ForLoopWithMultiStmtInitCondCont) {
     // for({ ignore(1i); ignore(2i); }; true; { ignore(3i); ignore(4i); }) {
     //   return;
     // }
-    GlobalVar("a", ty.atomic<i32>(), ast::StorageClass::kWorkgroup);
+    GlobalVar("a", ty.atomic<i32>(), builtin::AddressSpace::kWorkgroup);
     auto* multi_stmt_a = Block(Ignore(1_i), Ignore(2_i));
     auto* multi_stmt_b = Block(Ignore(3_i), Ignore(4_i));
     auto* f = For(multi_stmt_a, Expr(true), multi_stmt_b, Block(Return()));
@@ -185,7 +223,8 @@ TEST_F(WgslGeneratorImplTest, Emit_ForLoopWithMultiStmtInitCondCont) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(f)) << gen.error();
+    gen.EmitStatement(f);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  for({
     _ = 1i;
     _ = 2i;
@@ -210,7 +249,8 @@ TEST_F(WgslGeneratorImplTest, Emit_While) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(f)) << gen.error();
+    gen.EmitStatement(f);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  while(true) {
     return;
   }
@@ -229,7 +269,8 @@ TEST_F(WgslGeneratorImplTest, Emit_While_WithContinue) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(f)) << gen.error();
+    gen.EmitStatement(f);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  while(true) {
     continue;
   }
@@ -250,7 +291,8 @@ TEST_F(WgslGeneratorImplTest, Emit_WhileMultiCond) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(f)) << gen.error();
+    gen.EmitStatement(f);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  while((true && false)) {
     return;
   }

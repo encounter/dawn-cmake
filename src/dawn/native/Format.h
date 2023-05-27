@@ -57,9 +57,7 @@ enum class SampleTypeBit : uint8_t {
     Uint = 0x10,
 };
 
-// Converts an wgpu::TextureComponentType to its bitmask representation.
-SampleTypeBit ToSampleTypeBit(wgpu::TextureComponentType type);
-// Converts an wgpu::TextureSampleType to its bitmask representation.
+// Converts a wgpu::TextureSampleType to its bitmask representation.
 SampleTypeBit SampleTypeToSampleTypeBit(wgpu::TextureSampleType sampleType);
 
 struct TexelBlockInfo {
@@ -68,11 +66,15 @@ struct TexelBlockInfo {
     uint32_t height;
 };
 
+enum class TextureComponentType {
+    Float,
+    Sint,
+    Uint,
+};
+
 struct AspectInfo {
     TexelBlockInfo block;
-    // TODO(crbug.com/dawn/367): Replace TextureComponentType with TextureSampleType, or make it
-    // an internal Dawn enum.
-    wgpu::TextureComponentType baseType{};
+    TextureComponentType baseType{};
     SampleTypeBit supportedSampleTypes{};
     wgpu::TextureFormat format = wgpu::TextureFormat::Undefined;
 };
@@ -99,13 +101,16 @@ struct Format {
     bool supportsMultisample = false;
     bool supportsResolveTarget = false;
     Aspect aspects{};
-    // Only used for renderable color formats, number of color channels.
-    uint8_t componentCount = 0;
+    // Only used for renderable color formats:
+    uint8_t componentCount = 0;                  // number of color channels
+    uint8_t renderTargetPixelByteCost = 0;       // byte cost of pixel in render targets
+    uint8_t renderTargetComponentAlignment = 0;  // byte alignment for components in render targets
 
     bool IsColor() const;
     bool HasDepth() const;
     bool HasStencil() const;
     bool HasDepthOrStencil() const;
+    bool HasAlphaChannel() const;
 
     // IsMultiPlanar() returns true if the format allows selecting a plane index. This is only
     // allowed by multi-planar formats (ex. NV12).

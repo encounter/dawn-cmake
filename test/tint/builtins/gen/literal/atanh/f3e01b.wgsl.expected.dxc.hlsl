@@ -1,9 +1,8 @@
-float4 tint_atanh(float4 x) {
-  return (log(((1.0f + x) / (1.0f - x))) * 0.5f);
-}
+RWByteAddressBuffer prevent_dce : register(u0, space2);
 
 void atanh_f3e01b() {
-  float4 res = tint_atanh((1.0f).xxxx);
+  float4 res = (0.54930615425109863281f).xxxx;
+  prevent_dce.Store4(0u, asuint(res));
 }
 
 struct tint_symbol {

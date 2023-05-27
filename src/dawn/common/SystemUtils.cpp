@@ -33,6 +33,8 @@
 
 #include <array>
 
+namespace dawn {
+
 #if DAWN_PLATFORM_IS(WINDOWS)
 const char* GetPathSeparator() {
     return "\\";
@@ -158,7 +160,7 @@ std::optional<std::string> GetModulePath() {
     }
 
     std::array<char, PATH_MAX> absolutePath;
-    if (realpath(dlInfo.dli_fname, absolutePath.data()) == NULL) {
+    if (realpath(dlInfo.dli_fname, absolutePath.data()) == nullptr) {
         return {};
     }
     return absolutePath.data();
@@ -228,3 +230,5 @@ bool ScopedEnvironmentVar::Set(const char* variableName, const char* value) {
     mIsSet = SetEnvironmentVar(variableName, value);
     return mIsSet;
 }
+
+}  // namespace dawn

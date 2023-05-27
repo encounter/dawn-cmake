@@ -3,7 +3,7 @@ struct strided_arr {
   el : i32,
 }
 
-type Arr = array<strided_arr, 3u>;
+alias Arr = array<strided_arr, 3u>;
 
 struct buf1 {
   x_GLF_uniform_int_values : Arr,
@@ -14,7 +14,7 @@ struct strided_arr_1 {
   el : f32,
 }
 
-type Arr_1 = array<strided_arr_1, 1u>;
+alias Arr_1 = array<strided_arr_1, 1u>;
 
 struct buf0 {
   x_GLF_uniform_float_values : Arr_1,
@@ -64,10 +64,7 @@ fn main_1() {
         continuing {
           let x_72 : i32 = a;
           let x_74 : i32 = x_7.x_GLF_uniform_int_values[1].el;
-          if ((x_72 < x_74)) {
-          } else {
-            break;
-          }
+          break if !(x_72 < x_74);
         }
       }
       let x_77 : f32 = gl_FragCoord.y;

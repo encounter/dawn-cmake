@@ -28,8 +28,6 @@ namespace {
 using ::testing::HasSubstr;
 using ::testing::Values;
 using ValidateStorage = spvtest::ValidateBase<std::string>;
-using ValidateStorageClass =
-    spvtest::ValidateBase<std::tuple<std::string, bool, bool, std::string>>;
 using ValidateStorageExecutionModel = spvtest::ValidateBase<std::string>;
 
 TEST_F(ValidateStorage, FunctionStorageInsideFunction) {
@@ -544,6 +542,8 @@ TEST_P(ValidateStorageExecutionModel, ShaderRecordBufferLoad) {
     ASSERT_EQ(SPV_SUCCESS, ValidateInstructions(SPV_ENV_VULKAN_1_2));
   } else {
     ASSERT_EQ(SPV_ERROR_INVALID_ID, ValidateInstructions(SPV_ENV_VULKAN_1_2));
+    EXPECT_THAT(getDiagnosticString(),
+                AnyVUID("VUID-StandaloneSpirv-ShaderRecordBufferKHR-07119"));
     EXPECT_THAT(
         getDiagnosticString(),
         HasSubstr("ShaderRecordBufferKHR Storage Class is limited to "

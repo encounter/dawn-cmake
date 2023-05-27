@@ -16,6 +16,7 @@
 #define SRC_DAWN_NATIVE_LIMITS_H_
 
 #include "dawn/native/Error.h"
+#include "dawn/native/VisitableMembers.h"
 #include "dawn/native/dawn_platform.h"
 
 namespace dawn::native {
@@ -37,6 +38,27 @@ MaybeError ValidateLimits(const Limits& supportedLimits, const Limits& requiredL
 
 // Returns a copy of |limits| where limit tiers are applied.
 Limits ApplyLimitTiers(Limits limits);
+
+// If there are new limit member needed at shader compilation time
+// Simply append a new X(type, name) here.
+#define LIMITS_FOR_COMPILATION_REQUEST_MEMBERS(X)  \
+    X(uint32_t, maxComputeWorkgroupSizeX)          \
+    X(uint32_t, maxComputeWorkgroupSizeY)          \
+    X(uint32_t, maxComputeWorkgroupSizeZ)          \
+    X(uint32_t, maxComputeInvocationsPerWorkgroup) \
+    X(uint32_t, maxComputeWorkgroupStorageSize)
+
+struct LimitsForCompilationRequest {
+    static LimitsForCompilationRequest Create(const Limits& limits);
+    DAWN_VISITABLE_MEMBERS(LIMITS_FOR_COMPILATION_REQUEST_MEMBERS)
+};
+
+// Enforce restriction for limit values, including:
+//   1. Enforce internal Dawn constants for some limits to ensure they don't go over fixed-size
+//      arrays in Dawn's internal code;
+//   2. Additional enforcement for dependent limits, e.g. maxStorageBufferBindingSize and
+//      maxUniformBufferBindingSize must not be larger than maxBufferSize.
+void NormalizeLimits(Limits* limits);
 
 }  // namespace dawn::native
 

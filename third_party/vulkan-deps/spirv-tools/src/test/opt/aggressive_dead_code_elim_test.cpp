@@ -7777,6 +7777,113 @@ PS_OUTPUT MainPs ( )
   SinglePassRunAndMatch<AggressiveDCEPass>(text, true);
 }
 
+TEST_F(AggressiveDCETest, RemoveOutputTrue) {
+  // Remove dead n_out output variable from module
+  const std::string text = R"(
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Vertex %main "main" %c_out %c_in %n_out
+;CHECK: OpEntryPoint Vertex %main "main" %c_out %c_in
+               OpSource GLSL 450
+               OpName %main "main"
+               OpName %c_out "c_out"
+               OpName %c_in "c_in"
+               OpName %n_out "n_out"
+               OpDecorate %c_out Location 0
+               OpDecorate %c_in Location 0
+               OpDecorate %n_out Location 1
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+      %c_out = OpVariable %_ptr_Output_v4float Output
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+       %c_in = OpVariable %_ptr_Input_v4float Input
+    %v3float = OpTypeVector %float 3
+%_ptr_Output_v3float = OpTypePointer Output %v3float
+      %n_out = OpVariable %_ptr_Output_v3float Output
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+         %12 = OpLoad %v4float %c_in
+               OpStore %c_out %12
+               OpReturn
+               OpFunctionEnd
+)";
+
+  SetTargetEnv(SPV_ENV_VULKAN_1_3);
+  SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunAndMatch<AggressiveDCEPass>(text, true, false, true);
+}
+
+TEST_F(AggressiveDCETest, RemoveOutputFalse) {
+  // Remove dead n_out output variable from module
+  const std::string text = R"(
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Vertex %main "main" %c_out %c_in %n_out
+;CHECK: OpEntryPoint Vertex %main "main" %c_out %c_in %n_out
+               OpSource GLSL 450
+               OpName %main "main"
+               OpName %c_out "c_out"
+               OpName %c_in "c_in"
+               OpName %n_out "n_out"
+               OpDecorate %c_out Location 0
+               OpDecorate %c_in Location 0
+               OpDecorate %n_out Location 1
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+      %c_out = OpVariable %_ptr_Output_v4float Output
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+       %c_in = OpVariable %_ptr_Input_v4float Input
+    %v3float = OpTypeVector %float 3
+%_ptr_Output_v3float = OpTypePointer Output %v3float
+      %n_out = OpVariable %_ptr_Output_v3float Output
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+         %12 = OpLoad %v4float %c_in
+               OpStore %c_out %12
+               OpReturn
+               OpFunctionEnd
+)";
+
+  SetTargetEnv(SPV_ENV_VULKAN_1_3);
+  SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunAndMatch<AggressiveDCEPass>(text, true, false, false);
+}
+
+TEST_F(AggressiveDCETest, RemoveWhenUsingPrintfExtension) {
+  // Remove dead n_out output variable from module
+  const std::string text = R"(
+; CHECK: OpExtInstImport "NonSemantic.DebugPrintf"
+; CHECK-NOT: OpVariable
+               OpCapability Shader
+          %1 = OpExtInstImport "NonSemantic.DebugPrintf"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %main "main"
+               OpExecutionMode %main LocalSize 8 8 1
+               OpSource HLSL 660
+               OpName %main "main"
+       %uint = OpTypeInt 32 0
+       %void = OpTypeVoid
+          %5 = OpTypeFunction %void
+%_ptr_Function_uint = OpTypePointer Function %uint
+       %main = OpFunction %void None %5
+          %7 = OpLabel
+          %8 = OpVariable %_ptr_Function_uint Function
+               OpReturn
+               OpFunctionEnd
+)";
+
+  SetTargetEnv(SPV_ENV_VULKAN_1_3);
+  SinglePassRunAndMatch<AggressiveDCEPass>(text, true);
+}
+
 }  // namespace
 }  // namespace opt
 }  // namespace spvtools

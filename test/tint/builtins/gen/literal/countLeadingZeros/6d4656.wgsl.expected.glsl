@@ -1,22 +1,12 @@
 #version 310 es
 
-int tint_count_leading_zeros(int v) {
-  uint x = uint(v);
-  uint b16 = ((x <= 65535u) ? 16u : 0u);
-  x = (x << b16);
-  uint b8 = ((x <= 16777215u) ? 8u : 0u);
-  x = (x << b8);
-  uint b4 = ((x <= 268435455u) ? 4u : 0u);
-  x = (x << b4);
-  uint b2 = ((x <= 1073741823u) ? 2u : 0u);
-  x = (x << b2);
-  uint b1 = ((x <= 2147483647u) ? 1u : 0u);
-  uint is_zero = ((x == 0u) ? 1u : 0u);
-  return int((((((b16 | b8) | b4) | b2) | b1) + is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  int inner;
+} prevent_dce;
 
 void countLeadingZeros_6d4656() {
-  int res = tint_count_leading_zeros(1);
+  int res = 31;
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -33,25 +23,15 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-int tint_count_leading_zeros(int v) {
-  uint x = uint(v);
-  uint b16 = ((x <= 65535u) ? 16u : 0u);
-  x = (x << b16);
-  uint b8 = ((x <= 16777215u) ? 8u : 0u);
-  x = (x << b8);
-  uint b4 = ((x <= 268435455u) ? 4u : 0u);
-  x = (x << b4);
-  uint b2 = ((x <= 1073741823u) ? 2u : 0u);
-  x = (x << b2);
-  uint b1 = ((x <= 2147483647u) ? 1u : 0u);
-  uint is_zero = ((x == 0u) ? 1u : 0u);
-  return int((((((b16 | b8) | b4) | b2) | b1) + is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  int inner;
+} prevent_dce;
 
 void countLeadingZeros_6d4656() {
-  int res = tint_count_leading_zeros(1);
+  int res = 31;
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -64,23 +44,13 @@ void main() {
 }
 #version 310 es
 
-int tint_count_leading_zeros(int v) {
-  uint x = uint(v);
-  uint b16 = ((x <= 65535u) ? 16u : 0u);
-  x = (x << b16);
-  uint b8 = ((x <= 16777215u) ? 8u : 0u);
-  x = (x << b8);
-  uint b4 = ((x <= 268435455u) ? 4u : 0u);
-  x = (x << b4);
-  uint b2 = ((x <= 1073741823u) ? 2u : 0u);
-  x = (x << b2);
-  uint b1 = ((x <= 2147483647u) ? 1u : 0u);
-  uint is_zero = ((x == 0u) ? 1u : 0u);
-  return int((((((b16 | b8) | b4) | b2) | b1) + is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  int inner;
+} prevent_dce;
 
 void countLeadingZeros_6d4656() {
-  int res = tint_count_leading_zeros(1);
+  int res = 31;
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

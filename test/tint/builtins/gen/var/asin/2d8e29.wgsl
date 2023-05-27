@@ -25,9 +25,11 @@ enable f16;
 
 // fn asin(vec<3, f16>) -> vec<3, f16>
 fn asin_2d8e29() {
-  var arg_0 = vec3<f16>(f16());
+  var arg_0 = vec3<f16>(0.479425538604h);
   var res: vec3<f16> = asin(arg_0);
+  prevent_dce = res;
 }
+@group(2) @binding(0) var<storage, read_write> prevent_dce : vec3<f16>;
 
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {

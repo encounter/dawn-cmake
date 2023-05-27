@@ -16,9 +16,10 @@
 
 #include <utility>
 
-#include "src/tint/demangler.h"
 #include "src/tint/resolver/resolver.h"
-#include "src/tint/sem/expression.h"
+#include "src/tint/sem/type_expression.h"
+#include "src/tint/sem/value_expression.h"
+#include "src/tint/switch.h"
 
 namespace tint {
 namespace {
@@ -36,10 +37,9 @@ Program::Program() = default;
 Program::Program(Program&& program)
     : id_(std::move(program.id_)),
       highest_node_id_(std::move(program.highest_node_id_)),
-      types_(std::move(program.types_)),
+      constants_(std::move(program.constants_)),
       ast_nodes_(std::move(program.ast_nodes_)),
       sem_nodes_(std::move(program.sem_nodes_)),
-      constant_nodes_(std::move(program.constant_nodes_)),
       ast_(std::move(program.ast_)),
       sem_(std::move(program.sem_)),
       symbols_(std::move(program.symbols_)),
@@ -62,10 +62,9 @@ Program::Program(ProgramBuilder&& builder) {
     }
 
     // The above must be called *before* the calls to std::move() below
-    types_ = std::move(builder.Types());
+    constants_ = std::move(builder.constants);
     ast_nodes_ = std::move(builder.ASTNodes());
     sem_nodes_ = std::move(builder.SemNodes());
-    constant_nodes_ = std::move(builder.ConstantNodes());
     ast_ = &builder.AST();  // ast::Module is actually a heap allocation.
     sem_ = std::move(builder.Sem());
     symbols_ = std::move(builder.Symbols());
@@ -88,10 +87,9 @@ Program& Program::operator=(Program&& program) {
     moved_ = false;
     id_ = std::move(program.id_);
     highest_node_id_ = std::move(program.highest_node_id_);
-    types_ = std::move(program.types_);
+    constants_ = std::move(program.constants_);
     ast_nodes_ = std::move(program.ast_nodes_);
     sem_nodes_ = std::move(program.sem_nodes_);
-    constant_nodes_ = std::move(program.constant_nodes_);
     ast_ = std::move(program.ast_);
     sem_ = std::move(program.sem_);
     symbols_ = std::move(program.symbols_);
@@ -117,16 +115,19 @@ bool Program::IsValid() const {
     return is_valid_;
 }
 
-const sem::Type* Program::TypeOf(const ast::Expression* expr) const {
-    auto* sem = Sem().Get(expr);
+const type::Type* Program::TypeOf(const ast::Expression* expr) const {
+    return tint::Switch(
+        Sem().Get(expr),  //
+        [](const sem::ValueExpression* ty_expr) { return ty_expr->Type(); },
+        [](const sem::TypeExpression* ty_expr) { return ty_expr->Type(); });
+}
+
+const type::Type* Program::TypeOf(const ast::Variable* var) const {
+    auto* sem = Sem().Get(var);
     return sem ? sem->Type() : nullptr;
 }
 
-const sem::Type* Program::TypeOf(const ast::Type* type) const {
-    return Sem().Get(type);
-}
-
-const sem::Type* Program::TypeOf(const ast::TypeDecl* type_decl) const {
+const type::Type* Program::TypeOf(const ast::TypeDecl* type_decl) const {
     return Sem().Get(type_decl);
 }
 

@@ -49,30 +49,6 @@ MaybeError ValidateBufferBinding(const DeviceBase* device,
 
     ASSERT(bindingInfo.bindingType == BindingInfoType::Buffer);
 
-    wgpu::BufferUsage requiredUsage;
-    uint64_t maxBindingSize;
-    uint64_t requiredBindingAlignment;
-    switch (bindingInfo.buffer.type) {
-        case wgpu::BufferBindingType::Uniform:
-            requiredUsage = wgpu::BufferUsage::Uniform;
-            maxBindingSize = device->GetLimits().v1.maxUniformBufferBindingSize;
-            requiredBindingAlignment = device->GetLimits().v1.minUniformBufferOffsetAlignment;
-            break;
-        case wgpu::BufferBindingType::Storage:
-        case wgpu::BufferBindingType::ReadOnlyStorage:
-            requiredUsage = wgpu::BufferUsage::Storage;
-            maxBindingSize = device->GetLimits().v1.maxStorageBufferBindingSize;
-            requiredBindingAlignment = device->GetLimits().v1.minStorageBufferOffsetAlignment;
-            break;
-        case kInternalStorageBufferBinding:
-            requiredUsage = kInternalStorageBuffer;
-            maxBindingSize = device->GetLimits().v1.maxStorageBufferBindingSize;
-            requiredBindingAlignment = device->GetLimits().v1.minStorageBufferOffsetAlignment;
-            break;
-        case wgpu::BufferBindingType::Undefined:
-            UNREACHABLE();
-    }
-
     uint64_t bufferSize = entry.buffer->GetSize();
 
     // Handle wgpu::WholeSize, avoiding overflows.
@@ -94,6 +70,33 @@ MaybeError ValidateBufferBinding(const DeviceBase* device,
     DAWN_INVALID_IF(entry.offset > bufferSize - bindingSize,
                     "Binding range (offset: %u, size: %u) doesn't fit in the size (%u) of %s.",
                     entry.offset, bufferSize, bindingSize, entry.buffer);
+
+    wgpu::BufferUsage requiredUsage;
+    uint64_t maxBindingSize;
+    uint64_t requiredBindingAlignment;
+    switch (bindingInfo.buffer.type) {
+        case wgpu::BufferBindingType::Uniform:
+            requiredUsage = wgpu::BufferUsage::Uniform;
+            maxBindingSize = device->GetLimits().v1.maxUniformBufferBindingSize;
+            requiredBindingAlignment = device->GetLimits().v1.minUniformBufferOffsetAlignment;
+            break;
+        case wgpu::BufferBindingType::Storage:
+        case wgpu::BufferBindingType::ReadOnlyStorage:
+            requiredUsage = wgpu::BufferUsage::Storage;
+            maxBindingSize = device->GetLimits().v1.maxStorageBufferBindingSize;
+            requiredBindingAlignment = device->GetLimits().v1.minStorageBufferOffsetAlignment;
+            DAWN_INVALID_IF(bindingSize % 4 != 0,
+                            "Binding size (%u) isn't a multiple of 4 when binding type is (%s).",
+                            bindingSize, bindingInfo.buffer.type);
+            break;
+        case kInternalStorageBufferBinding:
+            requiredUsage = kInternalStorageBuffer;
+            maxBindingSize = device->GetLimits().v1.maxStorageBufferBindingSize;
+            requiredBindingAlignment = device->GetLimits().v1.minStorageBufferOffsetAlignment;
+            break;
+        case wgpu::BufferBindingType::Undefined:
+            UNREACHABLE();
+    }
 
     DAWN_INVALID_IF(!IsAligned(entry.offset, requiredBindingAlignment),
                     "Offset (%u) does not satisfy the minimum %s alignment (%u).", entry.offset,
@@ -146,7 +149,7 @@ MaybeError ValidateTextureBinding(DeviceBase* device,
                             texture->GetSampleCount(), texture, bindingInfo.texture.multisampled);
 
             DAWN_INVALID_IF(
-                (supportedTypes & requiredType).value == 0,
+                !(supportedTypes & requiredType),
                 "None of the supported sample types (%s) of %s match the expected sample "
                 "types (%s).",
                 supportedTypes, texture, requiredType);
@@ -214,7 +217,7 @@ MaybeError ValidateSamplerBinding(const DeviceBase* device,
             break;
         case wgpu::SamplerBindingType::Comparison:
             DAWN_INVALID_IF(!entry.sampler->IsComparison(),
-                            "Non-comparison sampler %s is imcompatible with comparison sampler "
+                            "Non-comparison sampler %s is incompatible with comparison sampler "
                             "binding.",
                             entry.sampler);
             break;
@@ -248,6 +251,16 @@ MaybeError ValidateExternalTextureBinding(
     DAWN_TRY(device->ValidateObject(externalTextureBindingEntry->externalTexture));
 
     return {};
+}
+
+template <typename F>
+void ForEachUnverifiedBufferBindingIndexImpl(const BindGroupLayoutBase* bgl, F&& f) {
+    uint32_t packedIndex = 0;
+    for (BindingIndex bindingIndex{0}; bindingIndex < bgl->GetBufferCount(); ++bindingIndex) {
+        if (bgl->GetBindingInfo(bindingIndex).buffer.minBindingSize == 0) {
+            f(bindingIndex, packedIndex++);
+        }
+    }
 }
 
 }  // anonymous namespace
@@ -348,7 +361,7 @@ MaybeError ValidateBindGroupDescriptor(DeviceBase* device,
     ASSERT(bindingsSet.count() == descriptor->layout->GetUnexpandedBindingCount());
 
     return {};
-}  // anonymous namespace
+}
 
 // BindGroup
 
@@ -440,21 +453,13 @@ BindGroupBase::BindGroupBase(DeviceBase* device,
         }
     }
 
-    uint32_t packedIdx = 0;
-    for (BindingIndex bindingIndex{0}; bindingIndex < descriptor->layout->GetBufferCount();
-         ++bindingIndex) {
-        if (descriptor->layout->GetBindingInfo(bindingIndex).buffer.minBindingSize == 0) {
-            mBindingData.unverifiedBufferSizes[packedIdx] =
-                mBindingData.bufferData[bindingIndex].size;
-            ++packedIdx;
-        }
-    }
+    ForEachUnverifiedBufferBindingIndexImpl(mLayout.Get(),
+                                            [&](BindingIndex bindingIndex, uint32_t packedIndex) {
+                                                mBindingData.unverifiedBufferSizes[packedIndex] =
+                                                    mBindingData.bufferData[bindingIndex].size;
+                                            });
 
-    TrackInDevice();
-}
-
-BindGroupBase::BindGroupBase(DeviceBase* device) : ApiObjectBase(device, kLabelNotImplemented) {
-    TrackInDevice();
+    GetObjectTrackingList()->Track(this);
 }
 
 BindGroupBase::~BindGroupBase() = default;
@@ -476,12 +481,12 @@ void BindGroupBase::DeleteThis() {
     ApiObjectBase::DeleteThis();
 }
 
-BindGroupBase::BindGroupBase(DeviceBase* device, ObjectBase::ErrorTag tag)
-    : ApiObjectBase(device, tag), mBindingData() {}
+BindGroupBase::BindGroupBase(DeviceBase* device, ObjectBase::ErrorTag tag, const char* label)
+    : ApiObjectBase(device, tag, label), mBindingData() {}
 
 // static
-BindGroupBase* BindGroupBase::MakeError(DeviceBase* device) {
-    return new BindGroupBase(device, ObjectBase::kError);
+BindGroupBase* BindGroupBase::MakeError(DeviceBase* device, const char* label) {
+    return new BindGroupBase(device, ObjectBase::kError, label);
 }
 
 ObjectType BindGroupBase::GetType() const {
@@ -529,6 +534,11 @@ TextureViewBase* BindGroupBase::GetBindingAsTextureView(BindingIndex bindingInde
 
 const std::vector<Ref<ExternalTextureBase>>& BindGroupBase::GetBoundExternalTextures() const {
     return mBoundExternalTextures;
+}
+
+void BindGroupBase::ForEachUnverifiedBufferBindingIndex(
+    std::function<void(BindingIndex, uint32_t)> fn) const {
+    ForEachUnverifiedBufferBindingIndexImpl(mLayout.Get(), fn);
 }
 
 }  // namespace dawn::native

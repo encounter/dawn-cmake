@@ -17,6 +17,9 @@ vars = {
   'dawn_cmake_version': 'version:2@3.23.3',
   'dawn_cmake_win32_sha1': 'b106d66bcdc8a71ea2cdf5446091327bfdb1bcd7',
   'dawn_gn_version': 'git_revision:bd99dbf98cbdefe18a4128189665c5761263bcfb',
+  # ninja CIPD package version.
+  # https://chrome-infra-packages.appspot.com/p/infra/3pp/tools/ninja
+  'dawn_ninja_version': 'version:2@1.11.1.chromium.6',
   'dawn_go_version': 'version:2@1.18.4',
 
   'node_darwin_arm64_sha': '31859fc1fa0994a95f44f09c367d6ff63607cfde',
@@ -34,14 +37,14 @@ vars = {
 deps = {
   # Dependencies required to use GN/Clang in standalone
   'build': {
-    'url': '{chromium_git}/chromium/src/build@f14f6d206b9a0c81a0fefba487bcba0d90ddb5fe',
+    'url': '{chromium_git}/chromium/src/build@1103ef535ca1e100db5d4e59781a4e59369a9818',
     'condition': 'dawn_standalone',
   },
   'buildtools': {
-    'url': '{chromium_git}/chromium/src/buildtools@fe57e98eeb2172d7517f6dec1072ca641a019893',
+    'url': '{chromium_git}/chromium/src/buildtools@2ff42d2008f09f65de12e70c6ff0ad58ddb090ad',
     'condition': 'dawn_standalone',
   },
-  'buildtools/clang_format/script': {
+  'third_party/clang-format/script': {
     'url': '{chromium_git}/external/github.com/llvm/llvm-project/clang/tools/clang-format.git@8b525d2747f2584fc35d8c7e612e66f377858df7',
     'condition': 'dawn_standalone',
   },
@@ -71,17 +74,17 @@ deps = {
   },
 
   'buildtools/third_party/libc++/trunk': {
-    'url': '{chromium_git}/external/github.com/llvm/llvm-project/libcxx.git@eb79671bfbedd77b747d01dee8c0479ff1693f88',
+    'url': '{chromium_git}/external/github.com/llvm/llvm-project/libcxx.git@c1341b9a1a7de7c193a23bf003d5479c48957f7d',
     'condition': 'dawn_standalone',
   },
 
   'buildtools/third_party/libc++abi/trunk': {
-    'url': '{chromium_git}/external/github.com/llvm/llvm-project/libcxxabi.git@b954e3e65634a9e2f7b595598a30c455f5f2eb26',
+    'url': '{chromium_git}/external/github.com/llvm/llvm-project/libcxxabi.git@f7460fc60ab56553f0b3b0853f1ea60aa51b9478',
     'condition': 'dawn_standalone',
   },
 
   'tools/clang': {
-    'url': '{chromium_git}/chromium/src/tools/clang@3d8d88e8bb600789ba3e798f38ff314521aac524',
+    'url': '{chromium_git}/chromium/src/tools/clang@effd9257d456f2d42e9e22fa4f37a24d8cf0b5b5',
     'condition': 'dawn_standalone',
   },
   'tools/clang/dsymutil': {
@@ -95,16 +98,20 @@ deps = {
 
   # Testing, GTest and GMock
   'testing': {
-    'url': '{chromium_git}/chromium/src/testing@1f497ac0b0afc242222780a4789d13fbf00073eb',
+    'url': '{chromium_git}/chromium/src/testing@166db27fd0d53afc0c716b1ae9c15725e380871f',
     'condition': 'dawn_standalone',
   },
   'third_party/googletest': {
-    'url': '{chromium_git}/external/github.com/google/googletest@bda85449f48f2d80a494c8c07766b6aba3170f3b',
+    'url': '{chromium_git}/external/github.com/google/googletest@7a7231c442484be389fdf01594310349ca0e42a8',
     'condition': 'dawn_standalone',
   },
   # This is a dependency of //testing
   'third_party/catapult': {
-    'url': '{chromium_git}/catapult.git@fa35beefb3429605035f98211ddb8750dee6a13d',
+    'url': '{chromium_git}/catapult.git@c1e70d412ce01fb194f73f7abfdac710aae87dae',
+    'condition': 'dawn_standalone',
+  },
+  'third_party/google_benchmark/src': {
+    'url': '{chromium_git}/external/github.com/google/benchmark.git' + '@' + 'efc89f0b524780b1994d5dddd83a92718e5be492',
     'condition': 'dawn_standalone',
   },
 
@@ -129,17 +136,17 @@ deps = {
   },
 
   'third_party/angle': {
-    'url': '{chromium_git}/angle/angle@5ef3960bc1f10d180331a8134b0d11139fa1f913',
+    'url': '{chromium_git}/angle/angle@ff110417bb04e9bc13079eeed99940009d9c3ce1',
     'condition': 'dawn_standalone',
   },
 
   'third_party/swiftshader': {
-    'url': '{swiftshader_git}/SwiftShader@476165cc7c0c7247869c13f7f80dd25ec1fd2b03',
+    'url': '{swiftshader_git}/SwiftShader@f549d5e6c6635ec8b75fb544a6bdc9f48bfb1dd3',
     'condition': 'dawn_standalone',
   },
 
   'third_party/vulkan-deps': {
-    'url': '{chromium_git}/vulkan-deps@c5f01bfc31ec5b7165eebf9f241890744edc7789',
+    'url': '{chromium_git}/vulkan-deps@25c584aa4cec2d79706854dafbd52392389d8004',
     'condition': 'dawn_standalone',
   },
 
@@ -155,7 +162,7 @@ deps = {
 
   # WebGPU CTS - not used directly by Dawn, only transitively by Chromium.
   'third_party/webgpu-cts': {
-    'url': '{chromium_git}/external/github.com/gpuweb/cts@27dc745ca167d1e9eb956947f2109441dca0b4f7',
+    'url': '{chromium_git}/external/github.com/gpuweb/cts@b033a4f1ae4a0e19ae4d5563fae023001bbf570f',
     'condition': 'build_with_chromium',
   },
 
@@ -169,12 +176,11 @@ deps = {
     'condition': 'dawn_node',
   },
   'third_party/gpuweb': {
-    'url': '{github_git}/gpuweb/gpuweb.git@3c4734b09c68eb800b15da5e9ecefeca735fa7df',
+    'url': '{github_git}/gpuweb/gpuweb.git@2e75d5e68e80e4c28575c7836ee00ca22cf4ca63',
     'condition': 'dawn_node',
   },
 
   'tools/golang': {
-    'condition': 'dawn_node',
     'packages': [{
       'package': 'infra/3pp/tools/go/${{platform}}',
       'version': Var('dawn_go_version'),
@@ -191,11 +197,17 @@ deps = {
     'dep_type': 'cipd',
   },
 
-  # Misc dependencies inherited from Tint
-  'third_party/benchmark': {
-    'url': '{chromium_git}/external/github.com/google/benchmark.git@e991355c02b93fe17713efe04cbc2e278e00fdbd',
-    'condition': 'dawn_standalone',
+  'third_party/ninja': {
+    'packages': [
+      {
+        'package': 'infra/3pp/tools/ninja/${{platform}}',
+        'version': Var('dawn_ninja_version'),
+      }
+    ],
+    'dep_type': 'cipd',
   },
+
+  # Misc dependencies inherited from Tint
   'third_party/protobuf': {
     'url': '{chromium_git}/external/github.com/protocolbuffers/protobuf.git@fde7cf7358ec7cd69e8db9be4f1fa6a5c431386a',
     'condition': 'dawn_standalone',
@@ -225,6 +237,18 @@ hooks = [
     'pattern': '.',
     'condition': 'dawn_standalone and checkout_mac',
     'action': ['python3', 'build/mac_toolchain.py'],
+  },
+  {
+    # Case-insensitivity for the Win SDK. Must run before win_toolchain below.
+    'name': 'ciopfs_linux',
+    'pattern': '.',
+    'condition': 'dawn_standalone and checkout_win and host_os == "linux"',
+    'action': [ 'download_from_google_storage',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-browser-clang/ciopfs',
+                '-s', 'build/ciopfs.sha1',
+    ]
   },
   {
     # Update the Windows toolchain if necessary. Must run before 'clang' below.
@@ -260,6 +284,17 @@ hooks = [
                 '--bucket', 'chromium-browser-clang/rc',
                 '-s', 'build/toolchain/win/rc/win/rc.exe.sha1',
     ],
+  },
+  {
+    'name': 'rc_linux',
+    'pattern': '.',
+    'condition': 'dawn_standalone and checkout_win and host_os == "linux"',
+    'action': [ 'download_from_google_storage',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-browser-clang/rc',
+                '-s', 'build/toolchain/win/rc/linux64/rc.sha1',
+    ]
   },
   # Pull clang-format binaries using checked-in hashes.
   {

@@ -15,8 +15,10 @@
 #include "src/tint/ast/discard_statement.h"
 #include "src/tint/ast/return_statement.h"
 #include "src/tint/ast/stage_attribute.h"
+#include "src/tint/builtin/builtin_value.h"
 #include "src/tint/resolver/resolver.h"
 #include "src/tint/resolver/resolver_test_helper.h"
+#include "src/tint/utils/string_stream.h"
 
 #include "gmock/gmock.h"
 
@@ -39,7 +41,7 @@ TEST_F(ResolverFunctionValidationTest, DuplicateParameterName) {
 TEST_F(ResolverFunctionValidationTest, ParameterMayShadowGlobal) {
     // var<private> common_name : f32;
     // fn func(common_name : f32) { }
-    GlobalVar("common_name", ty.f32(), ast::StorageClass::kPrivate);
+    GlobalVar("common_name", ty.f32(), builtin::AddressSpace::kPrivate);
     Func("func", utils::Vector{Param("common_name", ty.f32())}, ty.void_(), utils::Empty);
 
     ASSERT_TRUE(r()->Resolve()) << r()->error();
@@ -143,7 +145,7 @@ TEST_F(ResolverFunctionValidationTest, UnreachableCode_return) {
 TEST_F(ResolverFunctionValidationTest, UnreachableCode_return_InBlocks) {
     // fn func() -> {
     //  var a : i32;
-    // utils::Vector  {{{return;}}}
+    //  {{{return;}}}
     //  a = 2i;
     //}
 
@@ -161,7 +163,7 @@ TEST_F(ResolverFunctionValidationTest, UnreachableCode_return_InBlocks) {
     EXPECT_FALSE(Sem().Get(assign_a)->IsReachable());
 }
 
-TEST_F(ResolverFunctionValidationTest, UnreachableCode_discard) {
+TEST_F(ResolverFunctionValidationTest, UnreachableCode_discard_nowarning) {
     // fn func() -> {
     //  var a : i32;
     //  discard;
@@ -175,31 +177,63 @@ TEST_F(ResolverFunctionValidationTest, UnreachableCode_discard) {
     Func("func", utils::Empty, ty.void_(), utils::Vector{decl_a, discard, assign_a});
 
     ASSERT_TRUE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 warning: code is unreachable");
     EXPECT_TRUE(Sem().Get(decl_a)->IsReachable());
     EXPECT_TRUE(Sem().Get(discard)->IsReachable());
-    EXPECT_FALSE(Sem().Get(assign_a)->IsReachable());
+    EXPECT_TRUE(Sem().Get(assign_a)->IsReachable());
 }
 
-TEST_F(ResolverFunctionValidationTest, UnreachableCode_discard_InBlocks) {
-    // fn func() -> {
-    //  var a : i32;
-    // utils::Vector  {{{discard;}}}
-    //  a = 2i;
-    //}
+TEST_F(ResolverFunctionValidationTest, DiscardCalledDirectlyFromVertexEntryPoint) {
+    // @vertex() fn func() -> @position(0) vec4<f32> { discard; return; }
+    Func(Source{{1, 2}}, "func", utils::Empty, ty.vec4<f32>(),
+         utils::Vector{
+             Discard(Source{{12, 34}}),
+             Return(Call(ty.vec4<f32>())),
+         },
+         utils::Vector{Stage(ast::PipelineStage::kVertex)},
+         utils::Vector{Builtin(builtin::BuiltinValue::kPosition)});
 
-    auto* decl_a = Decl(Var("a", ty.i32()));
-    auto* discard = Discard();
-    auto* assign_a = Assign(Source{{12, 34}}, "a", 2_i);
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(),
+              "12:34 error: discard statement cannot be used in vertex pipeline stage");
+}
 
-    Func("func", utils::Empty, ty.void_(),
-         utils::Vector{decl_a, Block(Block(Block(discard))), assign_a});
+TEST_F(ResolverFunctionValidationTest, DiscardCalledIndirectlyFromComputeEntryPoint) {
+    // fn f0 { discard; }
+    // fn f1 { f0(); }
+    // fn f2 { f1(); }
+    // @compute @workgroup_size(1) fn main { return f2(); }
 
-    ASSERT_TRUE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 warning: code is unreachable");
-    EXPECT_TRUE(Sem().Get(decl_a)->IsReachable());
-    EXPECT_TRUE(Sem().Get(discard)->IsReachable());
-    EXPECT_FALSE(Sem().Get(assign_a)->IsReachable());
+    Func(Source{{1, 2}}, "f0", utils::Empty, ty.void_(),
+         utils::Vector{
+             Discard(Source{{12, 34}}),
+         });
+
+    Func(Source{{3, 4}}, "f1", utils::Empty, ty.void_(),
+         utils::Vector{
+             CallStmt(Call("f0")),
+         });
+
+    Func(Source{{5, 6}}, "f2", utils::Empty, ty.void_(),
+         utils::Vector{
+             CallStmt(Call("f1")),
+         });
+
+    Func(Source{{7, 8}}, "main", utils::Empty, ty.void_(),
+         utils::Vector{
+             CallStmt(Call("f2")),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kCompute),
+             WorkgroupSize(1_i),
+         });
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(),
+              R"(12:34 error: discard statement cannot be used in compute pipeline stage
+1:2 note: called by function 'f0'
+3:4 note: called by function 'f1'
+5:6 note: called by function 'f2'
+7:8 note: called by entry point 'main')");
 }
 
 TEST_F(ResolverFunctionValidationTest, FunctionEndWithoutReturnStatement_Fail) {
@@ -388,7 +422,7 @@ TEST_F(ResolverFunctionValidationTest, CannotCallFunctionAtModuleScope) {
          utils::Vector{
              Return(1_i),
          });
-    GlobalVar("x", Call(Source{{12, 34}}, "F"), ast::StorageClass::kPrivate);
+    GlobalVar("x", Call(Source{{12, 34}}, "F"), builtin::AddressSpace::kPrivate);
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(), R"(12:34 error: functions cannot be called at module-scope)");
@@ -454,21 +488,9 @@ TEST_F(ResolverFunctionValidationTest, FunctionConstInitWithParam) {
     ASSERT_TRUE(r()->Resolve()) << r()->error();
 }
 
-TEST_F(ResolverFunctionValidationTest, FunctionParamsConst) {
-    Func("foo", utils::Vector{Param(Sym("arg"), ty.i32())}, ty.void_(),
-         utils::Vector{
-             Assign(Expr(Source{{12, 34}}, "arg"), Expr(1_i)),
-             Return(),
-         });
-
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(),
-              "12:34 error: cannot assign to function parameter\nnote: 'arg' is declared here:");
-}
-
 TEST_F(ResolverFunctionValidationTest, WorkgroupSize_GoodType_ConstU32) {
     // const x = 4u;
-    // const x = 8u;
+    // const y = 8u;
     // @compute @workgroup_size(x, y, 16u)
     // fn main() {}
     auto* x = GlobalConst("x", ty.u32(), Expr(4_u));
@@ -489,8 +511,27 @@ TEST_F(ResolverFunctionValidationTest, WorkgroupSize_GoodType_ConstU32) {
     ASSERT_NE(sem_x, nullptr);
     ASSERT_NE(sem_y, nullptr);
 
+    EXPECT_EQ(sem_func->WorkgroupSize(), (sem::WorkgroupSize{4u, 8u, 16u}));
+
     EXPECT_TRUE(sem_func->DirectlyReferencedGlobals().Contains(sem_x));
     EXPECT_TRUE(sem_func->DirectlyReferencedGlobals().Contains(sem_y));
+}
+
+TEST_F(ResolverFunctionValidationTest, WorkgroupSize_Cast) {
+    // @compute @workgroup_size(i32(5))
+    // fn main() {}
+    auto* func = Func("main", utils::Empty, ty.void_(), utils::Empty,
+                      utils::Vector{
+                          Stage(ast::PipelineStage::kCompute),
+                          WorkgroupSize(Call(Source{{12, 34}}, ty.i32(), 5_a)),
+                      });
+
+    ASSERT_TRUE(r()->Resolve()) << r()->error();
+
+    auto* sem_func = Sem().Get(func);
+
+    ASSERT_NE(sem_func, nullptr);
+    EXPECT_EQ(sem_func->WorkgroupSize(), (sem::WorkgroupSize{5u, 1u, 1u}));
 }
 
 TEST_F(ResolverFunctionValidationTest, WorkgroupSize_GoodType_I32) {
@@ -651,9 +692,10 @@ TEST_F(ResolverFunctionValidationTest, WorkgroupSize_Literal_BadType) {
          });
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(),
-              "12:34 error: workgroup_size argument must be either a literal, constant, or "
-              "overridable of type abstract-integer, i32 or u32");
+    EXPECT_EQ(
+        r()->error(),
+        "12:34 error: workgroup_size argument must be a constant or override-expression of type "
+        "abstract-integer, i32 or u32");
 }
 
 TEST_F(ResolverFunctionValidationTest, WorkgroupSize_Literal_Negative) {
@@ -696,9 +738,10 @@ TEST_F(ResolverFunctionValidationTest, WorkgroupSize_Const_BadType) {
          });
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(),
-              "12:34 error: workgroup_size argument must be either a literal, constant, or "
-              "overridable of type abstract-integer, i32 or u32");
+    EXPECT_EQ(
+        r()->error(),
+        "12:34 error: workgroup_size argument must be a constant or override-expression of type "
+        "abstract-integer, i32 or u32");
 }
 
 TEST_F(ResolverFunctionValidationTest, WorkgroupSize_Const_Negative) {
@@ -731,11 +774,11 @@ TEST_F(ResolverFunctionValidationTest, WorkgroupSize_Const_Zero) {
     EXPECT_EQ(r()->error(), "12:34 error: workgroup_size argument must be at least 1");
 }
 
-TEST_F(ResolverFunctionValidationTest, WorkgroupSize_Const_NestedZeroValueConstructor) {
+TEST_F(ResolverFunctionValidationTest, WorkgroupSize_Const_NestedZeroValueInitializer) {
     // const x = i32(i32(i32()));
     // @compute @workgroup_size(x)
     // fn main() {}
-    GlobalConst("x", ty.i32(), Construct(ty.i32(), Construct(ty.i32(), Construct(ty.i32()))));
+    GlobalConst("x", ty.i32(), Call<i32>(Call<i32>(Call<i32>())));
     Func("main", utils::Empty, ty.void_(), utils::Empty,
          utils::Vector{
              Stage(ast::PipelineStage::kCompute),
@@ -746,11 +789,82 @@ TEST_F(ResolverFunctionValidationTest, WorkgroupSize_Const_NestedZeroValueConstr
     EXPECT_EQ(r()->error(), "12:34 error: workgroup_size argument must be at least 1");
 }
 
+TEST_F(ResolverFunctionValidationTest, WorkgroupSize_OverflowsU32_0x10000_0x100_0x100) {
+    // @compute @workgroup_size(0x10000, 0x100, 0x100)
+    // fn main() {}
+    Func("main", utils::Empty, ty.void_(), utils::Empty,
+         utils::Vector{
+             Stage(ast::PipelineStage::kCompute),
+             WorkgroupSize(0x10000_a, 0x100_a, Expr(Source{{12, 34}}, 0x100_a)),
+         });
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(), "12:34 error: total workgroup grid size cannot exceed 0xffffffff");
+}
+
+TEST_F(ResolverFunctionValidationTest, WorkgroupSize_OverflowsU32_0x10000_0x10000) {
+    // @compute @workgroup_size(0x10000, 0x10000)
+    // fn main() {}
+    Func("main", utils::Empty, ty.void_(), utils::Empty,
+         utils::Vector{
+             Stage(ast::PipelineStage::kCompute),
+             WorkgroupSize(0x10000_a, Expr(Source{{12, 34}}, 0x10000_a)),
+         });
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(), "12:34 error: total workgroup grid size cannot exceed 0xffffffff");
+}
+
+TEST_F(ResolverFunctionValidationTest, WorkgroupSize_OverflowsU32_0x10000_C_0x10000) {
+    // const C = 1;
+    // @compute @workgroup_size(0x10000, C, 0x10000)
+    // fn main() {}
+    GlobalConst("C", ty.u32(), Expr(1_a));
+    Func("main", utils::Empty, ty.void_(), utils::Empty,
+         utils::Vector{
+             Stage(ast::PipelineStage::kCompute),
+             WorkgroupSize(0x10000_a, "C", Expr(Source{{12, 34}}, 0x10000_a)),
+         });
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(), "12:34 error: total workgroup grid size cannot exceed 0xffffffff");
+}
+
+TEST_F(ResolverFunctionValidationTest, WorkgroupSize_OverflowsU32_0x10000_C) {
+    // const C = 0x10000;
+    // @compute @workgroup_size(0x10000, C)
+    // fn main() {}
+    GlobalConst("C", ty.u32(), Expr(0x10000_a));
+    Func("main", utils::Empty, ty.void_(), utils::Empty,
+         utils::Vector{
+             Stage(ast::PipelineStage::kCompute),
+             WorkgroupSize(0x10000_a, Expr(Source{{12, 34}}, "C")),
+         });
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(), "12:34 error: total workgroup grid size cannot exceed 0xffffffff");
+}
+
+TEST_F(ResolverFunctionValidationTest, WorkgroupSize_OverflowsU32_0x10000_O_0x10000) {
+    // override O = 0;
+    // @compute @workgroup_size(0x10000, O, 0x10000)
+    // fn main() {}
+    Override("O", ty.u32(), Expr(0_a));
+    Func("main", utils::Empty, ty.void_(), utils::Empty,
+         utils::Vector{
+             Stage(ast::PipelineStage::kCompute),
+             WorkgroupSize(0x10000_a, "O", Expr(Source{{12, 34}}, 0x10000_a)),
+         });
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(), "12:34 error: total workgroup grid size cannot exceed 0xffffffff");
+}
+
 TEST_F(ResolverFunctionValidationTest, WorkgroupSize_NonConst) {
     // var<private> x = 64i;
     // @compute @workgroup_size(x)
     // fn main() {}
-    GlobalVar("x", ty.i32(), ast::StorageClass::kPrivate, Expr(64_i));
+    GlobalVar("x", ty.i32(), builtin::AddressSpace::kPrivate, Expr(64_i));
     Func("main", utils::Empty, ty.void_(), utils::Empty,
          utils::Vector{
              Stage(ast::PipelineStage::kCompute),
@@ -759,57 +873,60 @@ TEST_F(ResolverFunctionValidationTest, WorkgroupSize_NonConst) {
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
-              "12:34 error: workgroup_size argument must be either a literal, constant, or "
-              "overridable of type abstract-integer, i32 or u32");
+              "12:34 error: workgroup_size argument must be a constant or override-expression of "
+              "type abstract-integer, i32 or u32");
 }
 
 TEST_F(ResolverFunctionValidationTest, WorkgroupSize_InvalidExpr_x) {
     // @compute @workgroup_size(1 << 2 + 4)
     // fn main() {}
+    GlobalVar("x", ty.i32(), builtin::AddressSpace::kPrivate, Expr(0_i));
     Func("main", utils::Empty, ty.void_(), utils::Empty,
          utils::Vector{
              Stage(ast::PipelineStage::kCompute),
-             WorkgroupSize(Construct(Source{{12, 34}}, ty.i32(), Shr(1_i, Add(2_u, 4_u)))),
+             WorkgroupSize(Call(Source{{12, 34}}, ty.i32(), "x")),
          });
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
-              "12:34 error: workgroup_size argument must be either a literal, constant, or "
-              "overridable of type abstract-integer, i32 or u32");
+              "12:34 error: workgroup_size argument must be a constant or override-expression of "
+              "type abstract-integer, i32 or u32");
 }
 
 TEST_F(ResolverFunctionValidationTest, WorkgroupSize_InvalidExpr_y) {
     // @compute @workgroup_size(1, 1 << 2 + 4)
     // fn main() {}
+    GlobalVar("x", ty.i32(), builtin::AddressSpace::kPrivate, Expr(0_i));
     Func("main", utils::Empty, ty.void_(), utils::Empty,
          utils::Vector{
              Stage(ast::PipelineStage::kCompute),
-             WorkgroupSize(Construct(Source{{12, 34}}, ty.i32(), Shr(1_i, Add(2_u, 4_u)))),
+             WorkgroupSize(Call(Source{{12, 34}}, ty.i32(), "x")),
          });
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
-              "12:34 error: workgroup_size argument must be either a literal, constant, or "
-              "overridable of type abstract-integer, i32 or u32");
+              "12:34 error: workgroup_size argument must be a constant or override-expression of "
+              "type abstract-integer, i32 or u32");
 }
 
 TEST_F(ResolverFunctionValidationTest, WorkgroupSize_InvalidExpr_z) {
     // @compute @workgroup_size(1, 1, 1 << 2 + 4)
     // fn main() {}
+    GlobalVar("x", ty.i32(), builtin::AddressSpace::kPrivate, Expr(0_i));
     Func("main", utils::Empty, ty.void_(), utils::Empty,
          utils::Vector{
              Stage(ast::PipelineStage::kCompute),
-             WorkgroupSize(Construct(Source{{12, 34}}, ty.i32(), Shr(1_i, Add(2_u, 4_u)))),
+             WorkgroupSize(Call(Source{{12, 34}}, ty.i32(), "x")),
          });
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
-              "12:34 error: workgroup_size argument must be either a literal, constant, or "
-              "overridable of type abstract-integer, i32 or u32");
+              "12:34 error: workgroup_size argument must be a constant or override-expression of "
+              "type abstract-integer, i32 or u32");
 }
 
 TEST_F(ResolverFunctionValidationTest, ReturnIsConstructible_NonPlain) {
-    auto* ret_type = ty.pointer(Source{{12, 34}}, ty.i32(), ast::StorageClass::kFunction);
+    auto ret_type = ty.pointer(Source{{12, 34}}, ty.i32(), builtin::AddressSpace::kFunction);
     Func("f", utils::Empty, ret_type, utils::Empty);
 
     EXPECT_FALSE(r()->Resolve());
@@ -817,7 +934,7 @@ TEST_F(ResolverFunctionValidationTest, ReturnIsConstructible_NonPlain) {
 }
 
 TEST_F(ResolverFunctionValidationTest, ReturnIsConstructible_AtomicInt) {
-    auto* ret_type = ty.atomic(Source{{12, 34}}, ty.i32());
+    auto ret_type = ty.atomic(Source{{12, 34}}, ty.i32());
     Func("f", utils::Empty, ret_type, utils::Empty);
 
     EXPECT_FALSE(r()->Resolve());
@@ -825,7 +942,7 @@ TEST_F(ResolverFunctionValidationTest, ReturnIsConstructible_AtomicInt) {
 }
 
 TEST_F(ResolverFunctionValidationTest, ReturnIsConstructible_ArrayOfAtomic) {
-    auto* ret_type = ty.array(Source{{12, 34}}, ty.atomic(ty.i32()), 10_u);
+    auto ret_type = ty.array(Source{{12, 34}}, ty.atomic(ty.i32()), 10_u);
     Func("f", utils::Empty, ret_type, utils::Empty);
 
     EXPECT_FALSE(r()->Resolve());
@@ -836,7 +953,7 @@ TEST_F(ResolverFunctionValidationTest, ReturnIsConstructible_StructOfAtomic) {
     Structure("S", utils::Vector{
                        Member("m", ty.atomic(ty.i32())),
                    });
-    auto* ret_type = ty.type_name(Source{{12, 34}}, "S");
+    auto ret_type = ty(Source{{12, 34}}, "S");
     Func("f", utils::Empty, ret_type, utils::Empty);
 
     EXPECT_FALSE(r()->Resolve());
@@ -844,7 +961,7 @@ TEST_F(ResolverFunctionValidationTest, ReturnIsConstructible_StructOfAtomic) {
 }
 
 TEST_F(ResolverFunctionValidationTest, ReturnIsConstructible_RuntimeArray) {
-    auto* ret_type = ty.array(Source{{12, 34}}, ty.i32());
+    auto ret_type = ty.array(Source{{12, 34}}, ty.i32());
     Func("f", utils::Empty, ret_type, utils::Empty);
 
     EXPECT_FALSE(r()->Resolve());
@@ -855,19 +972,19 @@ TEST_F(ResolverFunctionValidationTest, ParameterStoreType_NonAtomicFree) {
     Structure("S", utils::Vector{
                        Member("m", ty.atomic(ty.i32())),
                    });
-    auto* ret_type = ty.type_name(Source{{12, 34}}, "S");
-    auto* bar = Param(Source{{12, 34}}, "bar", ret_type);
+    auto ret_type = ty(Source{{12, 34}}, "S");
+    auto* bar = Param("bar", ret_type);
     Func("f", utils::Vector{bar}, ty.void_(), utils::Empty);
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(), "12:34 error: type of function parameter must be constructible");
 }
 
-TEST_F(ResolverFunctionValidationTest, ParameterSotreType_AtomicFree) {
+TEST_F(ResolverFunctionValidationTest, ParameterStoreType_AtomicFree) {
     Structure("S", utils::Vector{
                        Member("m", ty.i32()),
                    });
-    auto* ret_type = ty.type_name(Source{{12, 34}}, "S");
+    auto ret_type = ty(Source{{12, 34}}, "S");
     auto* bar = Param(Source{{12, 34}}, "bar", ret_type);
     Func("f", utils::Vector{bar}, ty.void_(), utils::Empty);
 
@@ -892,66 +1009,106 @@ TEST_F(ResolverFunctionValidationTest, ParametersOverLimit) {
     Func(Source{{12, 34}}, "f", params, ty.void_(), utils::Empty);
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 error: functions may declare at most 255 parameters");
+    EXPECT_EQ(r()->error(), "12:34 error: function declares 256 parameters, maximum is 255");
 }
 
 TEST_F(ResolverFunctionValidationTest, ParameterVectorNoType) {
     // fn f(p : vec3) {}
 
-    Func(Source{{12, 34}}, "f",
-         utils::Vector{Param("p", create<ast::Vector>(Source{{12, 34}}, nullptr, 3u))}, ty.void_(),
-         utils::Empty);
-
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 error: missing vector element type");
-}
-
-TEST_F(ResolverFunctionValidationTest, ParameterMatrixNoType) {
-    // fn f(p : vec3) {}
-
-    Func(Source{{12, 34}}, "f",
-         utils::Vector{Param("p", create<ast::Matrix>(Source{{12, 34}}, nullptr, 3u, 3u))},
+    Func(Source{{12, 34}}, "f", utils::Vector{Param("p", ty.vec3<Infer>(Source{{12, 34}}))},
          ty.void_(), utils::Empty);
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 error: missing matrix element type");
+    EXPECT_EQ(r()->error(), "12:34 error: expected '<' for 'vec3'");
 }
 
+TEST_F(ResolverFunctionValidationTest, ParameterMatrixNoType) {
+    // fn f(p : mat3x3) {}
+
+    Func(Source{{12, 34}}, "f", utils::Vector{Param("p", ty.mat3x3<Infer>(Source{{12, 34}}))},
+         ty.void_(), utils::Empty);
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(), "12:34 error: expected '<' for 'mat3x3'");
+}
+
+enum class Expectation {
+    kAlwaysPass,
+    kPassWithFullPtrParameterExtension,
+    kAlwaysFail,
+    kInvalid,
+};
 struct TestParams {
-    ast::StorageClass storage_class;
-    bool should_pass;
+    builtin::AddressSpace address_space;
+    Expectation expectation;
 };
 
 struct TestWithParams : ResolverTestWithParam<TestParams> {};
 
 using ResolverFunctionParameterValidationTest = TestWithParams;
-TEST_P(ResolverFunctionParameterValidationTest, StorageClass) {
+TEST_P(ResolverFunctionParameterValidationTest, AddressSpaceNoExtension) {
     auto& param = GetParam();
-    auto* ptr_type = ty.pointer(Source{{12, 34}}, ty.i32(), param.storage_class);
+    auto ptr_type = ty("ptr", Ident(Source{{12, 34}}, param.address_space), ty.i32());
     auto* arg = Param(Source{{12, 34}}, "p", ptr_type);
     Func("f", utils::Vector{arg}, ty.void_(), utils::Empty);
 
-    if (param.should_pass) {
+    if (param.expectation == Expectation::kAlwaysPass) {
         ASSERT_TRUE(r()->Resolve()) << r()->error();
     } else {
-        std::stringstream ss;
-        ss << param.storage_class;
+        utils::StringStream ss;
+        ss << param.address_space;
         EXPECT_FALSE(r()->Resolve());
-        EXPECT_EQ(r()->error(), "12:34 error: function parameter of pointer type cannot be in '" +
-                                    ss.str() + "' storage class");
+        if (param.expectation == Expectation::kInvalid) {
+            std::string err = R"(12:34 error: unresolved address space '${addr_space}'
+12:34 note: Possible values: 'function', 'private', 'push_constant', 'storage', 'uniform', 'workgroup')";
+            err = utils::ReplaceAll(err, "${addr_space}", utils::ToString(param.address_space));
+            EXPECT_EQ(r()->error(), err);
+        } else {
+            EXPECT_EQ(r()->error(),
+                      "12:34 error: function parameter of pointer type cannot be in '" +
+                          utils::ToString(param.address_space) + "' address space");
+        }
     }
 }
-INSTANTIATE_TEST_SUITE_P(ResolverTest,
-                         ResolverFunctionParameterValidationTest,
-                         testing::Values(TestParams{ast::StorageClass::kNone, false},
-                                         TestParams{ast::StorageClass::kIn, false},
-                                         TestParams{ast::StorageClass::kOut, false},
-                                         TestParams{ast::StorageClass::kUniform, false},
-                                         TestParams{ast::StorageClass::kWorkgroup, true},
-                                         TestParams{ast::StorageClass::kHandle, false},
-                                         TestParams{ast::StorageClass::kStorage, false},
-                                         TestParams{ast::StorageClass::kPrivate, true},
-                                         TestParams{ast::StorageClass::kFunction, true}));
+TEST_P(ResolverFunctionParameterValidationTest, AddressSpaceWithExtension) {
+    auto& param = GetParam();
+    auto ptr_type = ty("ptr", Ident(Source{{12, 34}}, param.address_space), ty.i32());
+    auto* arg = Param(Source{{12, 34}}, "p", ptr_type);
+    Enable(builtin::Extension::kChromiumExperimentalFullPtrParameters);
+    Func("f", utils::Vector{arg}, ty.void_(), utils::Empty);
+
+    if (param.expectation == Expectation::kAlwaysPass ||
+        param.expectation == Expectation::kPassWithFullPtrParameterExtension) {
+        ASSERT_TRUE(r()->Resolve()) << r()->error();
+    } else {
+        EXPECT_FALSE(r()->Resolve());
+        if (param.expectation == Expectation::kInvalid) {
+            std::string err = R"(12:34 error: unresolved address space '${addr_space}'
+12:34 note: Possible values: 'function', 'private', 'push_constant', 'storage', 'uniform', 'workgroup')";
+            err = utils::ReplaceAll(err, "${addr_space}", utils::ToString(param.address_space));
+            EXPECT_EQ(r()->error(), err);
+        } else {
+            EXPECT_EQ(r()->error(),
+                      "12:34 error: function parameter of pointer type cannot be in '" +
+                          utils::ToString(param.address_space) + "' address space");
+        }
+    }
+}
+INSTANTIATE_TEST_SUITE_P(
+    ResolverTest,
+    ResolverFunctionParameterValidationTest,
+    testing::Values(TestParams{builtin::AddressSpace::kUndefined, Expectation::kInvalid},
+                    TestParams{builtin::AddressSpace::kIn, Expectation::kAlwaysFail},
+                    TestParams{builtin::AddressSpace::kOut, Expectation::kAlwaysFail},
+                    TestParams{builtin::AddressSpace::kUniform,
+                               Expectation::kPassWithFullPtrParameterExtension},
+                    TestParams{builtin::AddressSpace::kWorkgroup,
+                               Expectation::kPassWithFullPtrParameterExtension},
+                    TestParams{builtin::AddressSpace::kHandle, Expectation::kInvalid},
+                    TestParams{builtin::AddressSpace::kStorage,
+                               Expectation::kPassWithFullPtrParameterExtension},
+                    TestParams{builtin::AddressSpace::kPrivate, Expectation::kAlwaysPass},
+                    TestParams{builtin::AddressSpace::kFunction, Expectation::kAlwaysPass}));
 
 }  // namespace
 }  // namespace tint::resolver

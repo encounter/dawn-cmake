@@ -1,22 +1,12 @@
 #version 310 es
 
-uint tint_first_leading_bit(uint v) {
-  uint x = v;
-  uint b16 = (bool((x & 4294901760u)) ? 16u : 0u);
-  x = (x >> b16);
-  uint b8 = (bool((x & 65280u)) ? 8u : 0u);
-  x = (x >> b8);
-  uint b4 = (bool((x & 240u)) ? 4u : 0u);
-  x = (x >> b4);
-  uint b2 = (bool((x & 12u)) ? 2u : 0u);
-  x = (x >> b2);
-  uint b1 = (bool((x & 2u)) ? 1u : 0u);
-  uint is_zero = ((x == 0u) ? 4294967295u : 0u);
-  return uint((((((b16 | b8) | b4) | b2) | b1) | is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uint inner;
+} prevent_dce;
 
 void firstLeadingBit_f0779d() {
-  uint res = tint_first_leading_bit(1u);
+  uint res = 0u;
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -33,25 +23,15 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-uint tint_first_leading_bit(uint v) {
-  uint x = v;
-  uint b16 = (bool((x & 4294901760u)) ? 16u : 0u);
-  x = (x >> b16);
-  uint b8 = (bool((x & 65280u)) ? 8u : 0u);
-  x = (x >> b8);
-  uint b4 = (bool((x & 240u)) ? 4u : 0u);
-  x = (x >> b4);
-  uint b2 = (bool((x & 12u)) ? 2u : 0u);
-  x = (x >> b2);
-  uint b1 = (bool((x & 2u)) ? 1u : 0u);
-  uint is_zero = ((x == 0u) ? 4294967295u : 0u);
-  return uint((((((b16 | b8) | b4) | b2) | b1) | is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uint inner;
+} prevent_dce;
 
 void firstLeadingBit_f0779d() {
-  uint res = tint_first_leading_bit(1u);
+  uint res = 0u;
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -64,23 +44,13 @@ void main() {
 }
 #version 310 es
 
-uint tint_first_leading_bit(uint v) {
-  uint x = v;
-  uint b16 = (bool((x & 4294901760u)) ? 16u : 0u);
-  x = (x >> b16);
-  uint b8 = (bool((x & 65280u)) ? 8u : 0u);
-  x = (x >> b8);
-  uint b4 = (bool((x & 240u)) ? 4u : 0u);
-  x = (x >> b4);
-  uint b2 = (bool((x & 12u)) ? 2u : 0u);
-  x = (x >> b2);
-  uint b1 = (bool((x & 2u)) ? 1u : 0u);
-  uint is_zero = ((x == 0u) ? 4294967295u : 0u);
-  return uint((((((b16 | b8) | b4) | b2) | b1) | is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uint inner;
+} prevent_dce;
 
 void firstLeadingBit_f0779d() {
-  uint res = tint_first_leading_bit(1u);
+  uint res = 0u;
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

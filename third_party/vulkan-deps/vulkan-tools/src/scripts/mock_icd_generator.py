@@ -55,7 +55,6 @@ SOURCE_CPP_PREFIX = '''
 using std::unordered_map;
 
 static constexpr uint32_t icd_physical_device_count = 1;
-static constexpr uint32_t kSupportedVulkanAPIVersion = VK_API_VERSION_1_1;
 static unordered_map<VkInstance, std::array<VkPhysicalDevice, icd_physical_device_count>> physical_device_map;
 
 // Map device memory handle to any mapped allocations that we'll need to free on unmap
@@ -65,7 +64,12 @@ static unordered_map<VkDeviceMemory, std::vector<void*>> mapped_memory_map;
 static unordered_map<VkDeviceMemory, VkDeviceSize> allocated_memory_size_map;
 
 static unordered_map<VkDevice, unordered_map<uint32_t, unordered_map<uint32_t, VkQueue>>> queue_map;
-static unordered_map<VkDevice, unordered_map<VkBuffer, VkBufferCreateInfo>> buffer_map;
+static VkDeviceAddress current_available_address = 0x10000000;
+struct BufferState {
+    VkDeviceSize size;
+    VkDeviceAddress address;
+};
+static unordered_map<VkDevice, unordered_map<VkBuffer, BufferState>> buffer_map;
 static unordered_map<VkDevice, unordered_map<VkImage, VkDeviceSize>> image_memory_size_map;
 static unordered_map<VkCommandPool, std::vector<VkCommandBuffer>> command_pool_buffer_map;
 
@@ -197,6 +201,48 @@ void SetBoolArrayTrue(VkBool32* bool_array, uint32_t num_bools)
     for (uint32_t i = 0; i < num_bools; ++i) {
         bool_array[i] = VK_TRUE;
     }
+}
+
+VkDeviceSize GetImageSizeFromCreateInfo(const VkImageCreateInfo* pCreateInfo)
+{
+    VkDeviceSize size = pCreateInfo->extent.width;
+    size *= pCreateInfo->extent.height;
+    size *= pCreateInfo->extent.depth;
+    // TODO: A pixel size is 32 bytes. This accounts for the largest possible pixel size of any format. It could be changed to more accurate size if need be.
+    size *= 32;
+    size *= pCreateInfo->arrayLayers;
+    size *= (pCreateInfo->mipLevels > 1 ? 2 : 1);
+
+    switch (pCreateInfo->format) {
+        case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
+        case VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM:
+        case VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM:
+        case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16:
+        case VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM:
+        case VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM:
+        case VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM:
+            size *= 3;
+            break;
+        case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+        case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
+        case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM:
+            size *= 2;
+            break;
+        default:
+            break;
+    }
+
+    return size;
 }
 '''
 
@@ -535,7 +581,7 @@ CUSTOM_C_INTERCEPTS = {
     return VK_SUCCESS;
 ''',
 'vkEnumerateInstanceVersion': '''
-    *pApiVersion = kSupportedVulkanAPIVersion;
+    *pApiVersion = VK_HEADER_VERSION_COMPLETE;
     return VK_SUCCESS;
 ''',
 'vkEnumerateDeviceLayerProperties': '''
@@ -696,13 +742,27 @@ CUSTOM_C_INTERCEPTS = {
     return GetInstanceProcAddr(nullptr, pName);
 ''',
 'vkGetPhysicalDeviceMemoryProperties': '''
-    pMemoryProperties->memoryTypeCount = 2;
+    pMemoryProperties->memoryTypeCount = 6;
+    // Host visible Coherent
     pMemoryProperties->memoryTypes[0].propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     pMemoryProperties->memoryTypes[0].heapIndex = 0;
-    pMemoryProperties->memoryTypes[1].propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    pMemoryProperties->memoryTypes[1].heapIndex = 1;
+    // Host visible Cached
+    pMemoryProperties->memoryTypes[1].propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+    pMemoryProperties->memoryTypes[1].heapIndex = 0;
+    // Device local and Host visible
+    pMemoryProperties->memoryTypes[2].propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    pMemoryProperties->memoryTypes[2].heapIndex = 1;
+    // Device local lazily
+    pMemoryProperties->memoryTypes[3].propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT;
+    pMemoryProperties->memoryTypes[3].heapIndex = 1;
+    // Device local protected
+    pMemoryProperties->memoryTypes[4].propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_PROTECTED_BIT;
+    pMemoryProperties->memoryTypes[4].heapIndex = 1;
+    // Device local only
+    pMemoryProperties->memoryTypes[5].propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    pMemoryProperties->memoryTypes[5].heapIndex = 1;
     pMemoryProperties->memoryHeapCount = 2;
-    pMemoryProperties->memoryHeaps[0].flags = 0;
+    pMemoryProperties->memoryHeaps[0].flags = VK_MEMORY_HEAP_MULTI_INSTANCE_BIT;
     pMemoryProperties->memoryHeaps[0].size = 8000000000;
     pMemoryProperties->memoryHeaps[1].flags = VK_MEMORY_HEAP_DEVICE_LOCAL_BIT;
     pMemoryProperties->memoryHeaps[1].size = 8000000000;
@@ -715,9 +775,9 @@ CUSTOM_C_INTERCEPTS = {
         *pQueueFamilyPropertyCount = 1;
     } else {
         if (*pQueueFamilyPropertyCount) {
-            pQueueFamilyProperties[0].queueFlags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT | VK_QUEUE_SPARSE_BINDING_BIT;
+            pQueueFamilyProperties[0].queueFlags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT | VK_QUEUE_SPARSE_BINDING_BIT | VK_QUEUE_PROTECTED_BIT;
             pQueueFamilyProperties[0].queueCount = 1;
-            pQueueFamilyProperties[0].timestampValidBits = 0;
+            pQueueFamilyProperties[0].timestampValidBits = 16;
             pQueueFamilyProperties[0].minImageTransferGranularity = {1,1,1};
         }
     }
@@ -804,9 +864,42 @@ CUSTOM_C_INTERCEPTS = {
     GetPhysicalDeviceImageFormatProperties(physicalDevice, pImageFormatInfo->format, pImageFormatInfo->type, pImageFormatInfo->tiling, pImageFormatInfo->usage, pImageFormatInfo->flags, &pImageFormatProperties->imageFormatProperties);
     return VK_SUCCESS;
 ''',
+'vkGetPhysicalDeviceSparseImageFormatProperties': '''
+    if (!pProperties) {
+        *pPropertyCount = 1;
+    } else {
+        // arbitrary
+        pProperties->imageGranularity = {4, 4, 4};
+        pProperties->flags = VK_SPARSE_IMAGE_FORMAT_SINGLE_MIPTAIL_BIT;
+        switch (format) {
+            case VK_FORMAT_D16_UNORM:
+            case VK_FORMAT_D32_SFLOAT:
+                pProperties->aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+                break;
+            case VK_FORMAT_S8_UINT:
+                pProperties->aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+                break;
+            case VK_FORMAT_X8_D24_UNORM_PACK32:
+            case VK_FORMAT_D16_UNORM_S8_UINT:
+            case VK_FORMAT_D24_UNORM_S8_UINT:
+            case VK_FORMAT_D32_SFLOAT_S8_UINT:
+                pProperties->aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+                break;
+            default:
+                pProperties->aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                break;
+        }
+    }
+''',
+'vkGetPhysicalDeviceSparseImageFormatProperties2KHR': '''
+    if (pPropertyCount && pProperties) {
+        GetPhysicalDeviceSparseImageFormatProperties(physicalDevice, pFormatInfo->format, pFormatInfo->type, pFormatInfo->samples, pFormatInfo->usage, pFormatInfo->tiling, pPropertyCount, &pProperties->properties);
+    } else {
+        GetPhysicalDeviceSparseImageFormatProperties(physicalDevice, pFormatInfo->format, pFormatInfo->type, pFormatInfo->samples, pFormatInfo->usage, pFormatInfo->tiling, pPropertyCount, nullptr);
+    }
+''',
 'vkGetPhysicalDeviceProperties': '''
-    // TODO: Just hard-coding some values for now
-    pProperties->apiVersion = kSupportedVulkanAPIVersion;
+    pProperties->apiVersion = VK_HEADER_VERSION_COMPLETE;
     pProperties->driverVersion = 1;
     pProperties->vendorID = 0xba5eba11;
     pProperties->deviceID = 0xf005ba11;
@@ -818,55 +911,94 @@ CUSTOM_C_INTERCEPTS = {
     pProperties->sparseProperties = { VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE };
 ''',
 'vkGetPhysicalDeviceProperties2KHR': '''
+    // The only value that need to be set are those the Profile layer can't set
+    // see https://github.com/KhronosGroup/Vulkan-Profiles/issues/352
+    // All values set are arbitrary
     GetPhysicalDeviceProperties(physicalDevice, &pProperties->properties);
-    const auto *desc_idx_props = lvl_find_in_chain<VkPhysicalDeviceDescriptorIndexingPropertiesEXT>(pProperties->pNext);
-    if (desc_idx_props) {
-        VkPhysicalDeviceDescriptorIndexingPropertiesEXT* write_props = (VkPhysicalDeviceDescriptorIndexingPropertiesEXT*)desc_idx_props;
-        write_props->maxUpdateAfterBindDescriptorsInAllPools = 500000;
-        write_props->shaderUniformBufferArrayNonUniformIndexingNative = false;
-        write_props->shaderSampledImageArrayNonUniformIndexingNative = false;
-        write_props->shaderStorageBufferArrayNonUniformIndexingNative = false;
-        write_props->shaderStorageImageArrayNonUniformIndexingNative = false;
-        write_props->shaderInputAttachmentArrayNonUniformIndexingNative = false;
-        write_props->robustBufferAccessUpdateAfterBind = true;
-        write_props->quadDivergentImplicitLod = true;
-        write_props->maxPerStageDescriptorUpdateAfterBindSamplers = 500000;
-        write_props->maxPerStageDescriptorUpdateAfterBindUniformBuffers = 500000;
-        write_props->maxPerStageDescriptorUpdateAfterBindStorageBuffers = 500000;
-        write_props->maxPerStageDescriptorUpdateAfterBindSampledImages = 500000;
-        write_props->maxPerStageDescriptorUpdateAfterBindStorageImages = 500000;
-        write_props->maxPerStageDescriptorUpdateAfterBindInputAttachments = 500000;
-        write_props->maxPerStageUpdateAfterBindResources = 500000;
-        write_props->maxDescriptorSetUpdateAfterBindSamplers = 500000;
-        write_props->maxDescriptorSetUpdateAfterBindUniformBuffers = 96;
-        write_props->maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = 8;
-        write_props->maxDescriptorSetUpdateAfterBindStorageBuffers = 500000;
-        write_props->maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = 4;
-        write_props->maxDescriptorSetUpdateAfterBindSampledImages = 500000;
-        write_props->maxDescriptorSetUpdateAfterBindStorageImages = 500000;
-        write_props->maxDescriptorSetUpdateAfterBindInputAttachments = 500000;
+
+    auto *props_11 = lvl_find_mod_in_chain<VkPhysicalDeviceVulkan11Properties>(pProperties->pNext);
+    if (props_11) {
+        props_11->protectedNoFault = VK_FALSE;
     }
 
-    const auto *push_descriptor_props = lvl_find_in_chain<VkPhysicalDevicePushDescriptorPropertiesKHR>(pProperties->pNext);
-    if (push_descriptor_props) {
-        VkPhysicalDevicePushDescriptorPropertiesKHR* write_props = (VkPhysicalDevicePushDescriptorPropertiesKHR*)push_descriptor_props;
-        write_props->maxPushDescriptors = 256;
+    auto *props_12 = lvl_find_mod_in_chain<VkPhysicalDeviceVulkan12Properties>(pProperties->pNext);
+    if (props_12) {
+        props_12->denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL;
+        props_12->roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL;
     }
 
-    const auto *depth_stencil_resolve_props = lvl_find_in_chain<VkPhysicalDeviceDepthStencilResolvePropertiesKHR>(pProperties->pNext);
-    if (depth_stencil_resolve_props) {
-        VkPhysicalDeviceDepthStencilResolvePropertiesKHR* write_props = (VkPhysicalDeviceDepthStencilResolvePropertiesKHR*)depth_stencil_resolve_props;
-        write_props->supportedDepthResolveModes = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR;
-        write_props->supportedStencilResolveModes = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR;
+    auto *props_13 = lvl_find_mod_in_chain<VkPhysicalDeviceVulkan13Properties>(pProperties->pNext);
+    if (props_13) {
+        props_13->storageTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
+        props_13->uniformTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
+        props_13->storageTexelBufferOffsetAlignmentBytes = 16;
+        props_13->uniformTexelBufferOffsetAlignmentBytes = 16;
     }
 
-    const auto *fragment_density_map2_props = lvl_find_in_chain<VkPhysicalDeviceFragmentDensityMap2PropertiesEXT>(pProperties->pNext);
+    auto *protected_memory_props = lvl_find_mod_in_chain<VkPhysicalDeviceProtectedMemoryProperties>(pProperties->pNext);
+    if (protected_memory_props) {
+        protected_memory_props->protectedNoFault = VK_FALSE;
+    }
+
+    auto *float_controls_props = lvl_find_mod_in_chain<VkPhysicalDeviceFloatControlsProperties>(pProperties->pNext);
+    if (float_controls_props) {
+        float_controls_props->denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL;
+        float_controls_props->roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL;
+    }
+
+    auto *conservative_raster_props = lvl_find_mod_in_chain<VkPhysicalDeviceConservativeRasterizationPropertiesEXT>(pProperties->pNext);
+    if (conservative_raster_props) {
+        conservative_raster_props->primitiveOverestimationSize = 0.00195313f;
+        conservative_raster_props->conservativePointAndLineRasterization = VK_TRUE;
+        conservative_raster_props->degenerateTrianglesRasterized = VK_TRUE;
+        conservative_raster_props->degenerateLinesRasterized = VK_TRUE;
+    }
+
+    auto *rt_pipeline_props = lvl_find_mod_in_chain<VkPhysicalDeviceRayTracingPipelinePropertiesKHR>(pProperties->pNext);
+    if (rt_pipeline_props) {
+        rt_pipeline_props->shaderGroupHandleSize = 32;
+        rt_pipeline_props->shaderGroupBaseAlignment = 64;
+        rt_pipeline_props->shaderGroupHandleCaptureReplaySize = 32;
+    }
+
+    auto *rt_pipeline_nv_props = lvl_find_mod_in_chain<VkPhysicalDeviceRayTracingPropertiesNV>(pProperties->pNext);
+    if (rt_pipeline_nv_props) {
+        rt_pipeline_nv_props->shaderGroupHandleSize = 32;
+        rt_pipeline_nv_props->shaderGroupBaseAlignment = 64;
+    }
+
+    auto *texel_buffer_props = lvl_find_mod_in_chain<VkPhysicalDeviceTexelBufferAlignmentProperties>(pProperties->pNext);
+    if (texel_buffer_props) {
+        texel_buffer_props->storageTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
+        texel_buffer_props->uniformTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
+        texel_buffer_props->storageTexelBufferOffsetAlignmentBytes = 16;
+        texel_buffer_props->uniformTexelBufferOffsetAlignmentBytes = 16;
+    }
+
+    auto *descriptor_buffer_props = lvl_find_mod_in_chain<VkPhysicalDeviceDescriptorBufferPropertiesEXT>(pProperties->pNext);
+    if (descriptor_buffer_props) {
+        descriptor_buffer_props->combinedImageSamplerDescriptorSingleArray = VK_TRUE;
+        descriptor_buffer_props->bufferlessPushDescriptors = VK_TRUE;
+        descriptor_buffer_props->allowSamplerImageViewPostSubmitCreation = VK_TRUE;
+        descriptor_buffer_props->descriptorBufferOffsetAlignment = 4;
+    }
+
+    auto *mesh_shader_props = lvl_find_mod_in_chain<VkPhysicalDeviceMeshShaderPropertiesEXT>(pProperties->pNext);
+    if (mesh_shader_props) {
+        mesh_shader_props->meshOutputPerVertexGranularity = 32;
+        mesh_shader_props->meshOutputPerPrimitiveGranularity = 32;
+        mesh_shader_props->prefersLocalInvocationVertexOutput = VK_TRUE;
+        mesh_shader_props->prefersLocalInvocationPrimitiveOutput = VK_TRUE;
+        mesh_shader_props->prefersCompactVertexOutput = VK_TRUE;
+        mesh_shader_props->prefersCompactPrimitiveOutput = VK_TRUE;
+    }
+
+    auto *fragment_density_map2_props = lvl_find_mod_in_chain<VkPhysicalDeviceFragmentDensityMap2PropertiesEXT>(pProperties->pNext);
     if (fragment_density_map2_props) {
-        VkPhysicalDeviceFragmentDensityMap2PropertiesEXT* write_props = (VkPhysicalDeviceFragmentDensityMap2PropertiesEXT*)fragment_density_map2_props;
-        write_props->subsampledLoads = VK_FALSE;
-        write_props->subsampledCoarseReconstructionEarlyAccess = VK_FALSE;
-        write_props->maxSubsampledArrayLayers = 2;
-        write_props->maxDescriptorSetSubsampledSamplers = 1;
+        fragment_density_map2_props->subsampledLoads = VK_FALSE;
+        fragment_density_map2_props->subsampledCoarseReconstructionEarlyAccess = VK_FALSE;
+        fragment_density_map2_props->maxSubsampledArrayLayers = 2;
+        fragment_density_map2_props->maxDescriptorSetSubsampledSamplers = 1;
     }
 ''',
 'vkGetPhysicalDeviceExternalSemaphoreProperties':'''
@@ -888,10 +1020,19 @@ CUSTOM_C_INTERCEPTS = {
     GetPhysicalDeviceExternalFenceProperties(physicalDevice, pExternalFenceInfo, pExternalFenceProperties);
 ''',
 'vkGetPhysicalDeviceExternalBufferProperties':'''
-    // Hard-code support for all handle types and features
-    pExternalBufferProperties->externalMemoryProperties.externalMemoryFeatures = 0x7;
-    pExternalBufferProperties->externalMemoryProperties.exportFromImportedHandleTypes = 0x1FF;
-    pExternalBufferProperties->externalMemoryProperties.compatibleHandleTypes = 0x1FF;
+    constexpr VkExternalMemoryHandleTypeFlags supported_flags = 0x1FF;
+    if (pExternalBufferInfo->handleType & supported_flags) {
+        pExternalBufferProperties->externalMemoryProperties.externalMemoryFeatures = 0x7;
+        pExternalBufferProperties->externalMemoryProperties.exportFromImportedHandleTypes = supported_flags;
+        pExternalBufferProperties->externalMemoryProperties.compatibleHandleTypes = supported_flags;
+    } else {
+        pExternalBufferProperties->externalMemoryProperties.externalMemoryFeatures = 0;
+        pExternalBufferProperties->externalMemoryProperties.exportFromImportedHandleTypes = 0;
+        // According to spec, handle type is always compatible with itself. Even if export/import
+        // not supported, it's important to properly implement self-compatibility property since
+        // application's control flow can rely on this.
+        pExternalBufferProperties->externalMemoryProperties.compatibleHandleTypes = pExternalBufferInfo->handleType;
+    }
 ''',
 'vkGetPhysicalDeviceExternalBufferPropertiesKHR':'''
     GetPhysicalDeviceExternalBufferProperties(physicalDevice, pExternalBufferInfo, pExternalBufferProperties);
@@ -902,6 +1043,7 @@ CUSTOM_C_INTERCEPTS = {
     pMemoryRequirements->alignment = 1;
     pMemoryRequirements->memoryTypeBits = 0xFFFF;
     // Return a better size based on the buffer size from the create info.
+    unique_lock_t lock(global_lock);
     auto d_iter = buffer_map.find(device);
     if (d_iter != buffer_map.end()) {
         auto iter = d_iter->second.find(buffer);
@@ -913,10 +1055,22 @@ CUSTOM_C_INTERCEPTS = {
 'vkGetBufferMemoryRequirements2KHR': '''
     GetBufferMemoryRequirements(device, pInfo->buffer, &pMemoryRequirements->memoryRequirements);
 ''',
+'vkGetDeviceBufferMemoryRequirements': '''
+    // TODO: Just hard-coding reqs for now
+    pMemoryRequirements->memoryRequirements.alignment = 1;
+    pMemoryRequirements->memoryRequirements.memoryTypeBits = 0xFFFF;
+
+    // Return a size based on the buffer size from the create info.
+    pMemoryRequirements->memoryRequirements.size = ((pInfo->pCreateInfo->size + 4095) / 4096) * 4096;
+''',
+'vkGetDeviceBufferMemoryRequirementsKHR': '''
+    GetDeviceBufferMemoryRequirements(device, pInfo, pMemoryRequirements);
+''',
 'vkGetImageMemoryRequirements': '''
     pMemoryRequirements->size = 0;
     pMemoryRequirements->alignment = 1;
 
+    unique_lock_t lock(global_lock);
     auto d_iter = image_memory_size_map.find(device);
     if(d_iter != image_memory_size_map.end()){
         auto iter = d_iter->second.find(image);
@@ -929,6 +1083,15 @@ CUSTOM_C_INTERCEPTS = {
 ''',
 'vkGetImageMemoryRequirements2KHR': '''
     GetImageMemoryRequirements(device, pInfo->image, &pMemoryRequirements->memoryRequirements);
+''',
+'vkGetDeviceImageMemoryRequirements': '''
+    pMemoryRequirements->memoryRequirements.size = GetImageSizeFromCreateInfo(pInfo->pCreateInfo);
+    pMemoryRequirements->memoryRequirements.alignment = 1;
+    // Here we hard-code that the memory type at index 3 doesn't support this image.
+    pMemoryRequirements->memoryRequirements.memoryTypeBits = 0xFFFF & ~(0x1 << 3);
+''',
+'vkGetDeviceImageMemoryRequirementsKHR': '''
+    GetDeviceImageMemoryRequirements(device, pInfo, pMemoryRequirements);
 ''',
 'vkMapMemory': '''
     unique_lock_t lock(global_lock);
@@ -943,12 +1106,19 @@ CUSTOM_C_INTERCEPTS = {
     *ppData = map_addr;
     return VK_SUCCESS;
 ''',
+'vkMapMemory2KHR': '''
+    return MapMemory(device, pMemoryMapInfo->memory, pMemoryMapInfo->offset, pMemoryMapInfo->size, pMemoryMapInfo->flags, ppData);
+''',
 'vkUnmapMemory': '''
     unique_lock_t lock(global_lock);
     for (auto map_addr : mapped_memory_map[memory]) {
         free(map_addr);
     }
     mapped_memory_map.erase(memory);
+''',
+'vkUnmapMemory2KHR': '''
+    UnmapMemory(device, pMemoryUnmapInfo->memory);
+    return VK_SUCCESS;
 ''',
 'vkGetImageSubresourceLayout': '''
     // Need safe values. Callers are computing memory offsets from pLayout, with no return code to flag failure.
@@ -991,7 +1161,16 @@ CUSTOM_C_INTERCEPTS = {
 'vkCreateBuffer': '''
     unique_lock_t lock(global_lock);
     *pBuffer = (VkBuffer)global_unique_handle++;
-    buffer_map[device][*pBuffer] = *pCreateInfo;
+     buffer_map[device][*pBuffer] = {
+         pCreateInfo->size,
+         current_available_address
+     };
+     current_available_address += pCreateInfo->size;
+     // Always align to next 64-bit pointer
+     const uint64_t alignment = current_available_address % 64;
+     if (alignment != 0) {
+         current_available_address += (64 - alignment);
+     }
     return VK_SUCCESS;
 ''',
 'vkDestroyBuffer': '''
@@ -1001,43 +1180,196 @@ CUSTOM_C_INTERCEPTS = {
 'vkCreateImage': '''
     unique_lock_t lock(global_lock);
     *pImage = (VkImage)global_unique_handle++;
-    // TODO: A pixel size is 32 bytes. This accounts for the largest possible pixel size of any format. It could be changed to more accurate size if need be.
-    image_memory_size_map[device][*pImage] = pCreateInfo->extent.width * pCreateInfo->extent.height * pCreateInfo->extent.depth *
-                                             32 * pCreateInfo->arrayLayers * (pCreateInfo->mipLevels > 1 ? 2 : 1);
-    // plane count
-    switch (pCreateInfo->format) {
-        case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
-        case VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM:
-        case VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM:
-        case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16:
-        case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16:
-        case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16:
-        case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16:
-        case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16:
-        case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16:
-        case VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM:
-        case VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM:
-        case VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM:
-            image_memory_size_map[device][*pImage] *= 3;
-            break;
-        case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
-        case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
-        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
-        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:
-        case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
-        case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16:
-        case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
-        case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM:
-            image_memory_size_map[device][*pImage] *= 2;
-            break;
-        default:
-            break;
-    }
+    image_memory_size_map[device][*pImage] = GetImageSizeFromCreateInfo(pCreateInfo);
     return VK_SUCCESS;
 ''',
 'vkDestroyImage': '''
     unique_lock_t lock(global_lock);
     image_memory_size_map[device].erase(image);
+''',
+'vkEnumeratePhysicalDeviceGroupsKHR': '''
+    if (!pPhysicalDeviceGroupProperties) {
+        *pPhysicalDeviceGroupCount = 1;
+    } else {
+        // arbitrary
+        pPhysicalDeviceGroupProperties->physicalDeviceCount = 1;
+        pPhysicalDeviceGroupProperties->physicalDevices[0] = physical_device_map.at(instance)[0];
+        pPhysicalDeviceGroupProperties->subsetAllocation = VK_FALSE;
+    }
+    return VK_SUCCESS;
+''',
+'vkGetPhysicalDeviceMultisamplePropertiesEXT': '''
+    if (pMultisampleProperties) {
+        // arbitrary
+        pMultisampleProperties->maxSampleLocationGridSize = {32, 32};
+    }
+''',
+'vkGetPhysicalDeviceFragmentShadingRatesKHR': '''
+    if (!pFragmentShadingRates) {
+        *pFragmentShadingRateCount = 1;
+    } else {
+        // arbitrary
+        pFragmentShadingRates->sampleCounts = VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_4_BIT;
+        pFragmentShadingRates->fragmentSize = {8, 8};
+    }
+    return VK_SUCCESS;
+''',
+'vkGetPhysicalDeviceCalibrateableTimeDomainsEXT': '''
+    if (!pTimeDomains) {
+        *pTimeDomainCount = 1;
+    } else {
+        // arbitrary
+        *pTimeDomains = VK_TIME_DOMAIN_DEVICE_EXT;
+    }
+    return VK_SUCCESS;
+''',
+'vkGetFenceWin32HandleKHR': '''
+    *pHandle = (HANDLE)0x12345678;
+    return VK_SUCCESS;
+''',
+'vkGetFenceFdKHR': '''
+    *pFd = 0x42;
+    return VK_SUCCESS;
+''',
+'vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR': '''
+    if (!pCounters) {
+        *pCounterCount = 3;
+    } else {
+        // arbitrary
+        pCounters[0].unit = VK_PERFORMANCE_COUNTER_UNIT_GENERIC_KHR;
+        pCounters[0].scope = VK_QUERY_SCOPE_COMMAND_BUFFER_KHR;
+        pCounters[0].storage = VK_PERFORMANCE_COUNTER_STORAGE_INT32_KHR;
+        pCounters[0].uuid[0] = 0x01;
+        pCounters[1].unit = VK_PERFORMANCE_COUNTER_UNIT_GENERIC_KHR;
+        pCounters[1].scope = VK_QUERY_SCOPE_RENDER_PASS_KHR;
+        pCounters[1].storage = VK_PERFORMANCE_COUNTER_STORAGE_INT32_KHR;
+        pCounters[1].uuid[0] = 0x02;
+        pCounters[2].unit = VK_PERFORMANCE_COUNTER_UNIT_GENERIC_KHR;
+        pCounters[2].scope = VK_QUERY_SCOPE_COMMAND_KHR;
+        pCounters[2].storage = VK_PERFORMANCE_COUNTER_STORAGE_INT32_KHR;
+        pCounters[2].uuid[0] = 0x03;
+    }
+    return VK_SUCCESS;
+''',
+'vkGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR': '''
+    if (pNumPasses) {
+        // arbitrary
+        *pNumPasses = 1;
+    }
+''',
+'vkGetShaderModuleIdentifierEXT': '''
+    if (pIdentifier) {
+        // arbitrary
+        pIdentifier->identifierSize = 1;
+        pIdentifier->identifier[0] = 0x01;
+    }
+''',
+'vkGetImageSparseMemoryRequirements': '''
+    if (!pSparseMemoryRequirements) {
+        *pSparseMemoryRequirementCount = 1;
+    } else {
+        // arbitrary
+        pSparseMemoryRequirements->imageMipTailFirstLod = 0;
+        pSparseMemoryRequirements->imageMipTailSize = 8;
+        pSparseMemoryRequirements->imageMipTailOffset = 0;
+        pSparseMemoryRequirements->imageMipTailStride = 4;
+        pSparseMemoryRequirements->formatProperties.imageGranularity = {4, 4, 4};
+        pSparseMemoryRequirements->formatProperties.flags = VK_SPARSE_IMAGE_FORMAT_SINGLE_MIPTAIL_BIT;
+        // Would need to track the VkImage to know format for better value here
+        pSparseMemoryRequirements->formatProperties.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_METADATA_BIT;
+    }
+
+''',
+'vkGetImageSparseMemoryRequirements2KHR': '''
+    if (pSparseMemoryRequirementCount && pSparseMemoryRequirements) {
+        GetImageSparseMemoryRequirements(device, pInfo->image, pSparseMemoryRequirementCount, &pSparseMemoryRequirements->memoryRequirements);
+    } else {
+        GetImageSparseMemoryRequirements(device, pInfo->image, pSparseMemoryRequirementCount, nullptr);
+    }
+''',
+'vkGetBufferDeviceAddress': '''
+    VkDeviceAddress address = 0;
+    auto d_iter = buffer_map.find(device);
+    if (d_iter != buffer_map.end()) {
+        auto iter = d_iter->second.find(pInfo->buffer);
+        if (iter != d_iter->second.end()) {
+            address = iter->second.address;
+        }
+    }
+    return address;
+''',
+'vkGetBufferDeviceAddressKHR': '''
+    return GetBufferDeviceAddress(device, pInfo);
+''',
+'vkGetBufferDeviceAddressEXT': '''
+    return GetBufferDeviceAddress(device, pInfo);
+''',
+'vkGetDescriptorSetLayoutSizeEXT': '''
+    // Need to give something non-zero
+    *pLayoutSizeInBytes = 4;
+''',
+'vkGetAccelerationStructureBuildSizesKHR': '''
+    // arbitrary
+    pSizeInfo->accelerationStructureSize = 4;
+    pSizeInfo->updateScratchSize = 4;
+    pSizeInfo->buildScratchSize = 4;
+''',
+'vkGetAccelerationStructureMemoryRequirementsNV': '''
+    // arbitrary
+    pMemoryRequirements->memoryRequirements.size = 4096;
+    pMemoryRequirements->memoryRequirements.alignment = 1;
+    pMemoryRequirements->memoryRequirements.memoryTypeBits = 0xFFFF;
+''',
+'vkGetAccelerationStructureDeviceAddressKHR': '''
+    // arbitrary - need to be aligned to 256 bytes
+    return 0x262144;
+''',
+'vkGetVideoSessionMemoryRequirementsKHR': '''
+    if (!pMemoryRequirements) {
+        *pMemoryRequirementsCount = 1;
+    } else {
+        // arbitrary
+        pMemoryRequirements[0].memoryBindIndex = 0;
+        pMemoryRequirements[0].memoryRequirements.size = 4096;
+        pMemoryRequirements[0].memoryRequirements.alignment = 1;
+        pMemoryRequirements[0].memoryRequirements.memoryTypeBits = 0xFFFF;
+    }
+    return VK_SUCCESS;
+''',
+'vkGetPhysicalDeviceVideoFormatPropertiesKHR': '''
+    if (!pVideoFormatProperties) {
+        *pVideoFormatPropertyCount = 2;
+    } else {
+        // arbitrary
+        pVideoFormatProperties[0].format = VK_FORMAT_R8G8B8A8_UNORM;
+        pVideoFormatProperties[0].imageCreateFlags = VK_IMAGE_TYPE_2D;
+        pVideoFormatProperties[0].imageType = VK_IMAGE_TYPE_2D;
+        pVideoFormatProperties[0].imageTiling = VK_IMAGE_TILING_OPTIMAL;
+        pVideoFormatProperties[0].imageUsageFlags = VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR | VK_IMAGE_USAGE_VIDEO_DECODE_SRC_BIT_KHR | VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR;
+        pVideoFormatProperties[1].format = VK_FORMAT_R8G8B8A8_SNORM;
+        pVideoFormatProperties[1].imageCreateFlags = VK_IMAGE_TYPE_2D;
+        pVideoFormatProperties[1].imageType = VK_IMAGE_TYPE_2D;
+        pVideoFormatProperties[1].imageTiling = VK_IMAGE_TILING_OPTIMAL;
+        pVideoFormatProperties[1].imageUsageFlags = VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR | VK_IMAGE_USAGE_VIDEO_DECODE_SRC_BIT_KHR | VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR;
+
+    }
+    return VK_SUCCESS;
+''',
+'vkGetPhysicalDeviceVideoCapabilitiesKHR': '''
+    // arbitrary
+    auto *decode_caps = lvl_find_mod_in_chain<VkVideoDecodeCapabilitiesKHR>(pCapabilities->pNext);
+    if (decode_caps) {
+        decode_caps->flags = VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_COINCIDE_BIT_KHR | VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_DISTINCT_BIT_KHR;
+    }
+    pCapabilities->flags = 0;
+    pCapabilities->minBitstreamBufferOffsetAlignment = 4;
+    pCapabilities->minBitstreamBufferSizeAlignment = 4;
+    pCapabilities->pictureAccessGranularity = {1, 1};
+    pCapabilities->minCodedExtent = {4, 4};
+    pCapabilities->maxCodedExtent = {16, 16};
+    pCapabilities->maxDpbSlots = 4;
+    pCapabilities->maxActiveReferencePictures = 4;
+    return VK_SUCCESS;
 ''',
 }
 
@@ -1465,6 +1797,7 @@ class MockICDOutputGenerator(OutputGenerator):
             self.appendSection('command', '//Destroy object')
             if 'FreeMemory' in api_function_name:
                 # Remove from allocation map
+                self.appendSection('command', '    unique_lock_t lock(global_lock);')
                 self.appendSection('command', '    allocated_memory_size_map.erase(memory);')
         else:
             self.appendSection('command', '//Not a CREATE or DESTROY function')

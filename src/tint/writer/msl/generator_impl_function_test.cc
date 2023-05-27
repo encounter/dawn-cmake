@@ -33,7 +33,7 @@ TEST_F(MslGeneratorImplTest, Emit_Function) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(  #include <metal_stdlib>
 
   using namespace metal;
@@ -59,7 +59,7 @@ TEST_F(MslGeneratorImplTest, Emit_Function_WithParams) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(  #include <metal_stdlib>
 
   using namespace metal;
@@ -76,7 +76,7 @@ TEST_F(MslGeneratorImplTest, Emit_Attribute_EntryPoint_NoReturn_Void) {
 
     GeneratorImpl& gen = Build();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(#include <metal_stdlib>
 
 using namespace metal;
@@ -91,7 +91,7 @@ TEST_F(MslGeneratorImplTest, Emit_Attribute_EntryPoint_WithInOutVars) {
     // fn frag_main(@location(0) foo : f32) -> @location(1) f32 {
     //   return foo;
     // }
-    auto* foo_in = Param("foo", ty.f32(), utils::Vector{Location(0)});
+    auto* foo_in = Param("foo", ty.f32(), utils::Vector{Location(0_a)});
     Func("frag_main", utils::Vector{foo_in}, ty.f32(),
          utils::Vector{
              Return("foo"),
@@ -100,12 +100,12 @@ TEST_F(MslGeneratorImplTest, Emit_Attribute_EntryPoint_WithInOutVars) {
              Stage(ast::PipelineStage::kFragment),
          },
          utils::Vector{
-             Location(1),
+             Location(1_a),
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(#include <metal_stdlib>
 
 using namespace metal;
@@ -136,7 +136,7 @@ TEST_F(MslGeneratorImplTest, Emit_Attribute_EntryPoint_WithInOut_Builtins) {
     //   return coord.x;
     // }
     auto* coord_in =
-        Param("coord", ty.vec4<f32>(), utils::Vector{Builtin(ast::BuiltinValue::kPosition)});
+        Param("coord", ty.vec4<f32>(), utils::Vector{Builtin(builtin::BuiltinValue::kPosition)});
     Func("frag_main", utils::Vector{coord_in}, ty.f32(),
          utils::Vector{
              Return(MemberAccessor("coord", "x")),
@@ -145,12 +145,12 @@ TEST_F(MslGeneratorImplTest, Emit_Attribute_EntryPoint_WithInOut_Builtins) {
              Stage(ast::PipelineStage::kFragment),
          },
          utils::Vector{
-             Builtin(ast::BuiltinValue::kFragDepth),
+             Builtin(builtin::BuiltinValue::kFragDepth),
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(#include <metal_stdlib>
 
 using namespace metal;
@@ -179,7 +179,7 @@ TEST_F(MslGeneratorImplTest, Emit_Attribute_EntryPoint_SharedStruct_DifferentSta
     //   @builtin(position) pos : vec4<f32>;
     // };
     // fn vert_main() -> Interface {
-    //   return Interface(0.4, 0.6, vec4<f32>());
+    //   return Interface(0.5, 0.25, vec4<f32>());
     // }
     // fn frag_main(colors : Interface) {
     //   const r = colors.col1;
@@ -188,14 +188,13 @@ TEST_F(MslGeneratorImplTest, Emit_Attribute_EntryPoint_SharedStruct_DifferentSta
     auto* interface_struct = Structure(
         "Interface",
         utils::Vector{
-            Member("col1", ty.f32(), utils::Vector{Location(1)}),
-            Member("col2", ty.f32(), utils::Vector{Location(2)}),
-            Member("pos", ty.vec4<f32>(), utils::Vector{Builtin(ast::BuiltinValue::kPosition)}),
+            Member("col1", ty.f32(), utils::Vector{Location(1_a)}),
+            Member("col2", ty.f32(), utils::Vector{Location(2_a)}),
+            Member("pos", ty.vec4<f32>(), utils::Vector{Builtin(builtin::BuiltinValue::kPosition)}),
         });
 
     Func("vert_main", utils::Empty, ty.Of(interface_struct),
-         utils::Vector{Return(Construct(ty.Of(interface_struct), Expr(0.5_f), Expr(0.25_f),
-                                        Construct(ty.vec4<f32>())))},
+         utils::Vector{Return(Call(ty.Of(interface_struct), 0.5_f, 0.25_f, vec4<f32>()))},
          utils::Vector{Stage(ast::PipelineStage::kVertex)});
 
     Func("frag_main", utils::Vector{Param("colors", ty.Of(interface_struct))}, ty.void_(),
@@ -207,7 +206,7 @@ TEST_F(MslGeneratorImplTest, Emit_Attribute_EntryPoint_SharedStruct_DifferentSta
 
     GeneratorImpl& gen = SanitizeAndBuild();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(#include <metal_stdlib>
 
 using namespace metal;
@@ -272,13 +271,13 @@ TEST_F(MslGeneratorImplTest, Emit_Attribute_EntryPoint_SharedStruct_HelperFuncti
     auto* vertex_output_struct = Structure(
         "VertexOutput",
         utils::Vector{
-            Member("pos", ty.vec4<f32>(), utils::Vector{Builtin(ast::BuiltinValue::kPosition)}),
+            Member("pos", ty.vec4<f32>(), utils::Vector{Builtin(builtin::BuiltinValue::kPosition)}),
         });
 
     Func("foo", utils::Vector{Param("x", ty.f32())}, ty.Of(vertex_output_struct),
          utils::Vector{
-             Return(Construct(ty.Of(vertex_output_struct),
-                              Construct(ty.vec4<f32>(), "x", "x", "x", Expr(1_f)))),
+             Return(
+                 Call(ty.Of(vertex_output_struct), Call(ty.vec4<f32>(), "x", "x", "x", Expr(1_f)))),
          });
     Func("vert_main1", utils::Empty, ty.Of(vertex_output_struct),
          utils::Vector{Return(Expr(Call("foo", Expr(0.5_f))))},
@@ -290,7 +289,7 @@ TEST_F(MslGeneratorImplTest, Emit_Attribute_EntryPoint_SharedStruct_HelperFuncti
 
     GeneratorImpl& gen = SanitizeAndBuild();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(#include <metal_stdlib>
 
 using namespace metal;
@@ -342,8 +341,8 @@ TEST_F(MslGeneratorImplTest, Emit_FunctionAttribute_EntryPoint_With_RW_StorageBu
                                     Member("b", ty.f32()),
                                 });
 
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Group(0),
-              Binding(0));
+    GlobalVar("coord", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kReadWrite,
+              Group(0_a), Binding(0_a));
 
     auto* var = Var("v", ty.f32(), MemberAccessor("coord", "b"));
 
@@ -358,7 +357,7 @@ TEST_F(MslGeneratorImplTest, Emit_FunctionAttribute_EntryPoint_With_RW_StorageBu
 
     GeneratorImpl& gen = SanitizeAndBuild();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(#include <metal_stdlib>
 
 using namespace metal;
@@ -381,8 +380,8 @@ TEST_F(MslGeneratorImplTest, Emit_FunctionAttribute_EntryPoint_With_RO_StorageBu
                                     Member("b", ty.f32()),
                                 });
 
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead, Group(0),
-              Binding(0));
+    GlobalVar("coord", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kRead,
+              Group(0_a), Binding(0_a));
 
     auto* var = Var("v", ty.f32(), MemberAccessor("coord", "b"));
 
@@ -397,7 +396,7 @@ TEST_F(MslGeneratorImplTest, Emit_FunctionAttribute_EntryPoint_With_RO_StorageBu
 
     GeneratorImpl& gen = SanitizeAndBuild();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(#include <metal_stdlib>
 
 using namespace metal;
@@ -416,7 +415,8 @@ fragment void frag_main(const device Data* tint_symbol [[buffer(0)]]) {
 
 TEST_F(MslGeneratorImplTest, Emit_Attribute_Called_By_EntryPoint_With_Uniform) {
     auto* ubo_ty = Structure("UBO", utils::Vector{Member("coord", ty.vec4<f32>())});
-    auto* ubo = GlobalVar("ubo", ty.Of(ubo_ty), ast::StorageClass::kUniform, Group(0), Binding(0));
+    auto* ubo =
+        GlobalVar("ubo", ty.Of(ubo_ty), builtin::AddressSpace::kUniform, Group(0_a), Binding(0_a));
 
     Func("sub_func",
          utils::Vector{
@@ -440,7 +440,7 @@ TEST_F(MslGeneratorImplTest, Emit_Attribute_Called_By_EntryPoint_With_Uniform) {
 
     GeneratorImpl& gen = SanitizeAndBuild();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(#include <metal_stdlib>
 
 using namespace metal;
@@ -466,8 +466,8 @@ TEST_F(MslGeneratorImplTest, Emit_FunctionAttribute_Called_By_EntryPoint_With_RW
                                     Member("b", ty.f32()),
                                 });
 
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Group(0),
-              Binding(0));
+    GlobalVar("coord", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kReadWrite,
+              Group(0_a), Binding(0_a));
 
     Func("sub_func",
          utils::Vector{
@@ -491,7 +491,7 @@ TEST_F(MslGeneratorImplTest, Emit_FunctionAttribute_Called_By_EntryPoint_With_RW
 
     GeneratorImpl& gen = SanitizeAndBuild();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(#include <metal_stdlib>
 
 using namespace metal;
@@ -518,8 +518,8 @@ TEST_F(MslGeneratorImplTest, Emit_FunctionAttribute_Called_By_EntryPoint_With_RO
                                     Member("b", ty.f32()),
                                 });
 
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead, Group(0),
-              Binding(0));
+    GlobalVar("coord", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kRead,
+              Group(0_a), Binding(0_a));
 
     Func("sub_func",
          utils::Vector{
@@ -543,7 +543,7 @@ TEST_F(MslGeneratorImplTest, Emit_FunctionAttribute_Called_By_EntryPoint_With_RO
 
     GeneratorImpl& gen = SanitizeAndBuild();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(#include <metal_stdlib>
 
 using namespace metal;
@@ -578,7 +578,7 @@ TEST_F(MslGeneratorImplTest, Emit_Function_WithArrayParams) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(  #include <metal_stdlib>
 
   using namespace metal;
@@ -605,14 +605,14 @@ struct tint_array {
 TEST_F(MslGeneratorImplTest, Emit_Function_WithArrayReturn) {
     Func("my_func", utils::Empty, ty.array<f32, 5>(),
          utils::Vector{
-             Return(Construct(ty.array<f32, 5>())),
+             Return(Call(ty.array<f32, 5>())),
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(  #include <metal_stdlib>
 
   using namespace metal;
@@ -656,8 +656,8 @@ TEST_F(MslGeneratorImplTest, Emit_Function_Multiple_EntryPoint_With_Same_ModuleV
 
     auto* s = Structure("Data", utils::Vector{Member("d", ty.f32())});
 
-    GlobalVar("data", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Group(0),
-              Binding(0));
+    GlobalVar("data", ty.Of(s), builtin::AddressSpace::kStorage, builtin::Access::kReadWrite,
+              Group(0_a), Binding(0_a));
 
     {
         auto* var = Var("v", ty.f32(), MemberAccessor("data", "d"));
@@ -689,7 +689,7 @@ TEST_F(MslGeneratorImplTest, Emit_Function_Multiple_EntryPoint_With_Same_ModuleV
 
     GeneratorImpl& gen = SanitizeAndBuild();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(#include <metal_stdlib>
 
 using namespace metal;

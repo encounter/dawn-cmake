@@ -29,10 +29,10 @@ import (
 	"dawn.googlesource.com/dawn/tools/src/buildbucket"
 	"dawn.googlesource.com/dawn/tools/src/cts/query"
 	"dawn.googlesource.com/dawn/tools/src/cts/result"
+	"dawn.googlesource.com/dawn/tools/src/fileutils"
 	"dawn.googlesource.com/dawn/tools/src/gerrit"
 	"dawn.googlesource.com/dawn/tools/src/resultsdb"
 	"dawn.googlesource.com/dawn/tools/src/subcmd"
-	"dawn.googlesource.com/dawn/tools/src/utils"
 	"go.chromium.org/luci/auth"
 	rdbpb "go.chromium.org/luci/resultdb/proto/v1"
 )
@@ -116,7 +116,7 @@ func (r *ResultSource) GetResults(ctx context.Context, cfg Config, auth auth.Opt
 		if err != nil {
 			return nil, err
 		}
-		*ps, err = gerrit.LatestPatchest(strconv.Itoa(ps.Change))
+		*ps, err = gerrit.LatestPatchset(strconv.Itoa(ps.Change))
 		if err != nil {
 			err := fmt.Errorf("failed to find latest patchset of change %v: %w",
 				ps.Change, err)
@@ -154,7 +154,7 @@ func CacheResults(
 
 	var cachePath string
 	if cacheDir != "" {
-		dir := utils.ExpandHome(cacheDir)
+		dir := fileutils.ExpandHome(cacheDir)
 		path := filepath.Join(dir, strconv.Itoa(ps.Change), fmt.Sprintf("ps-%v.txt", ps.Patchset))
 		if _, err := os.Stat(path); err == nil {
 			return result.Load(path)
@@ -204,47 +204,61 @@ func GetResults(
 	}
 
 	results := result.List{}
-	err := rdb.QueryTestResults(ctx, builds.ids(), cfg.Test.Prefix+".*", func(rpb *rdbpb.TestResult) error {
-		if time.Since(lastPrintedDot) > 5*time.Second {
-			lastPrintedDot = time.Now()
-			fmt.Printf(".")
-		}
-
-		if !strings.HasPrefix(rpb.GetTestId(), cfg.Test.Prefix) {
-			return nil
-		}
-
-		testName := rpb.GetTestId()[len(cfg.Test.Prefix):]
-		status := toStatus(rpb.Status)
-		tags := result.NewTags()
-
-		duration := rpb.GetDuration().AsDuration()
-
-		for _, sp := range rpb.Tags {
-			if sp.Key == "typ_tag" {
-				tags.Add(sp.Value)
+	var err error = nil
+	for _, prefix := range cfg.Test.Prefixes {
+		err = rdb.QueryTestResults(ctx, builds.ids(), prefix+".*", func(rpb *rdbpb.TestResult) error {
+			if time.Since(lastPrintedDot) > 5*time.Second {
+				lastPrintedDot = time.Now()
+				fmt.Printf(".")
 			}
-			if sp.Key == "javascript_duration" {
-				var err error
-				if duration, err = time.ParseDuration(sp.Value); err != nil {
-					return err
+
+			if !strings.HasPrefix(rpb.GetTestId(), prefix) {
+				return nil
+			}
+
+			testName := rpb.GetTestId()[len(prefix):]
+			status := toStatus(rpb.Status)
+			tags := result.NewTags()
+
+			duration := rpb.GetDuration().AsDuration()
+			mayExonerate := false
+
+			for _, sp := range rpb.Tags {
+				if sp.Key == "typ_tag" {
+					tags.Add(sp.Value)
+				}
+				if sp.Key == "javascript_duration" {
+					var err error
+					if duration, err = time.ParseDuration(sp.Value); err != nil {
+						return err
+					}
+				}
+				if sp.Key == "may_exonerate" {
+					var err error
+					if mayExonerate, err = strconv.ParseBool(sp.Value); err != nil {
+						return err
+					}
 				}
 			}
-		}
 
-		if status == result.Pass && duration > cfg.Test.SlowThreshold {
-			status = result.Slow
-		}
+			if status == result.Pass && duration > cfg.Test.SlowThreshold {
+				status = result.Slow
+			}
 
-		results = append(results, result.Result{
-			Query:    query.Parse(testName),
-			Status:   status,
-			Tags:     tags,
-			Duration: duration,
+			results = append(results, result.Result{
+				Query:        query.Parse(testName),
+				Status:       status,
+				Tags:         tags,
+				Duration:     duration,
+				MayExonerate: mayExonerate,
+			})
+
+			return nil
 		})
-
-		return nil
-	})
+		if err != nil {
+			break
+		}
+	}
 
 	fmt.Println(" done")
 
@@ -280,7 +294,7 @@ func LatestCTSRoll(g *gerrit.Gerrit) (gerrit.ChangeInfo, error) {
 
 // LatestPatchset returns the most recent patchset for the given change.
 func LatestPatchset(g *gerrit.Gerrit, change int) (gerrit.Patchset, error) {
-	ps, err := g.LatestPatchest(strconv.Itoa(change))
+	ps, err := g.LatestPatchset(strconv.Itoa(change))
 	if err != nil {
 		err := fmt.Errorf("failed to find latest patchset of change %v: %w",
 			ps.Change, err)

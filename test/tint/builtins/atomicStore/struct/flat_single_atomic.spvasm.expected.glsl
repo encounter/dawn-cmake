@@ -14,7 +14,7 @@ struct S {
 
 uint local_invocation_index_1 = 0u;
 shared S_atomic wg;
-void compute_main_inner(uint local_invocation_index) {
+void compute_main_inner(uint local_invocation_index_2) {
   wg.x = 0;
   atomicExchange(wg.a, 0u);
   wg.y = 0u;
@@ -24,7 +24,8 @@ void compute_main_inner(uint local_invocation_index) {
 }
 
 void compute_main_1() {
-  compute_main_inner(local_invocation_index_1);
+  uint x_35 = local_invocation_index_1;
+  compute_main_inner(x_35);
   return;
 }
 

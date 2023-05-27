@@ -21,8 +21,12 @@
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
+namespace dawn {
+namespace {
+
 class ShaderModuleValidationTest : public ValidationTest {};
 
+#if TINT_BUILD_SPV_READER
 // Test case with a simpler shader that should successfully be created
 TEST_F(ShaderModuleValidationTest, CreationSuccess) {
     const char* shader = R"(
@@ -53,23 +57,6 @@ TEST_F(ShaderModuleValidationTest, CreationSuccess) {
                    OpFunctionEnd)";
 
     utils::CreateShaderModuleFromASM(device, shader);
-}
-
-// Tests that if the output location exceeds kMaxColorAttachments the fragment shader will fail to
-// be compiled.
-TEST_F(ShaderModuleValidationTest, FragmentOutputLocationExceedsMaxColorAttachments) {
-    std::ostringstream stream;
-    stream << "@fragment fn main() -> @location(" << kMaxColorAttachments << R"() vec4<f32> {
-            return vec4<f32>(0.0, 1.0, 0.0, 1.0);
-        })";
-    ASSERT_DEVICE_ERROR(utils::CreateShaderModule(device, stream.str().c_str()));
-}
-
-// Test that it is invalid to create a shader module with no chained descriptor. (It must be
-// WGSL or SPIRV, not empty)
-TEST_F(ShaderModuleValidationTest, NoChainedDescriptor) {
-    wgpu::ShaderModuleDescriptor desc = {};
-    ASSERT_DEVICE_ERROR(device.CreateShaderModule(&desc));
 }
 
 // Test that it is not allowed to use combined texture and sampler.
@@ -154,25 +141,123 @@ TEST_F(ShaderModuleValidationTest, MultisampledArrayTexture) {
     ASSERT_DEVICE_ERROR(utils::CreateShaderModuleFromASM(device, shader));
 }
 
+const char* kShaderWithNonUniformDerivative = R"(
+               OpCapability Shader
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %foo "foo" %x
+               OpExecutionMode %foo OriginUpperLeft
+               OpDecorate %x Location 0
+      %float = OpTypeFloat 32
+%_ptr_Input_float = OpTypePointer Input %float
+          %x = OpVariable %_ptr_Input_float Input
+       %void = OpTypeVoid
+    %float_0 = OpConstantNull %float
+       %bool = OpTypeBool
+  %func_type = OpTypeFunction %void
+        %foo = OpFunction %void None %func_type
+  %foo_start = OpLabel
+    %x_value = OpLoad %float %x
+  %condition = OpFOrdGreaterThan %bool %x_value %float_0
+               OpSelectionMerge %merge None
+               OpBranchConditional %condition %true_branch %merge
+%true_branch = OpLabel
+     %result = OpDPdx %float %x_value
+               OpBranch %merge
+      %merge = OpLabel
+               OpReturn
+               OpFunctionEnd)";
+
+// Test that creating a module with a SPIR-V shader that has a uniformity violation fails when no
+// SPIR-V options descriptor is used.
+TEST_F(ShaderModuleValidationTest, NonUniformDerivatives_NoOptions) {
+    ASSERT_DEVICE_ERROR(utils::CreateShaderModuleFromASM(device, kShaderWithNonUniformDerivative));
+}
+
+// Test that creating a module with a SPIR-V shader that has a uniformity violation fails when
+// passing a SPIR-V options descriptor with the `allowNonUniformDerivatives` flag set to `false`.
+TEST_F(ShaderModuleValidationTest, NonUniformDerivatives_FlagSetToFalse) {
+    wgpu::DawnShaderModuleSPIRVOptionsDescriptor spirv_options_desc = {};
+    spirv_options_desc.allowNonUniformDerivatives = false;
+    ASSERT_DEVICE_ERROR(utils::CreateShaderModuleFromASM(device, kShaderWithNonUniformDerivative,
+                                                         &spirv_options_desc));
+}
+
+// Test that creating a module with a SPIR-V shader that has a uniformity violation succeeds when
+// passing a SPIR-V options descriptor with the `allowNonUniformDerivatives` flag set to `true`.
+TEST_F(ShaderModuleValidationTest, NonUniformDerivatives_FlagSetToTrue) {
+    wgpu::DawnShaderModuleSPIRVOptionsDescriptor spirv_options_desc = {};
+    spirv_options_desc.allowNonUniformDerivatives = true;
+    utils::CreateShaderModuleFromASM(device, kShaderWithNonUniformDerivative, &spirv_options_desc);
+}
+
+#endif  // TINT_BUILD_SPV_READER
+
+// Test that it is invalid to create a shader module with no chained descriptor. (It must be
+// WGSL or SPIRV, not empty)
+TEST_F(ShaderModuleValidationTest, NoChainedDescriptor) {
+    wgpu::ShaderModuleDescriptor desc = {};
+    ASSERT_DEVICE_ERROR(device.CreateShaderModule(&desc));
+}
+
+// Test that it is invalid to create a shader module that uses both the WGSL descriptor and the
+// SPIRV descriptor.
+TEST_F(ShaderModuleValidationTest, MultipleChainedDescriptor_WgslAndSpirv) {
+    uint32_t code = 42;
+    wgpu::ShaderModuleDescriptor desc = {};
+    wgpu::ShaderModuleSPIRVDescriptor spirv_desc = {};
+    spirv_desc.code = &code;
+    spirv_desc.codeSize = 1;
+    wgpu::ShaderModuleWGSLDescriptor wgsl_desc = {};
+    wgsl_desc.code = "";
+    wgsl_desc.nextInChain = &spirv_desc;
+    desc.nextInChain = &wgsl_desc;
+    ASSERT_DEVICE_ERROR(device.CreateShaderModule(&desc),
+                        testing::HasSubstr("is part of a group of exclusive sTypes"));
+}
+
+// Test that it is invalid to create a shader module that uses both the WGSL descriptor and the
+// Dawn SPIRV options descriptor.
+TEST_F(ShaderModuleValidationTest, MultipleChainedDescriptor_WgslAndDawnSpirvOptions) {
+    wgpu::ShaderModuleDescriptor desc = {};
+    wgpu::DawnShaderModuleSPIRVOptionsDescriptor spirv_options_desc = {};
+    wgpu::ShaderModuleWGSLDescriptor wgsl_desc = {};
+    wgsl_desc.nextInChain = &spirv_options_desc;
+    wgsl_desc.code = "";
+    desc.nextInChain = &wgsl_desc;
+    ASSERT_DEVICE_ERROR(
+        device.CreateShaderModule(&desc),
+        testing::HasSubstr("SPIR-V options descriptor not valid with WGSL descriptor"));
+}
+
+// Test that it is invalid to create a shader module that only uses the Dawn SPIRV options
+// descriptor without the SPIRV descriptor.
+TEST_F(ShaderModuleValidationTest, OnlySpirvOptionsDescriptor) {
+    wgpu::ShaderModuleDescriptor desc = {};
+    wgpu::DawnShaderModuleSPIRVOptionsDescriptor spirv_options_desc = {};
+    desc.nextInChain = &spirv_options_desc;
+    ASSERT_DEVICE_ERROR(
+        device.CreateShaderModule(&desc),
+        testing::HasSubstr("SPIR-V options descriptor can only be used with SPIR-V input"));
+}
+
 // Tests that shader module compilation messages can be queried.
 TEST_F(ShaderModuleValidationTest, GetCompilationMessages) {
-    // This test works assuming ShaderModule is backed by a dawn::native::ShaderModuleBase, which
+    // This test works assuming ShaderModule is backed by a native::ShaderModuleBase, which
     // is not the case on the wire.
     DAWN_SKIP_TEST_IF(UsesWire());
 
     wgpu::ShaderModule shaderModule = utils::CreateShaderModule(device, R"(
-        @fragment fn main() -> @location(0) vec4<f32> {
-            return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+        @fragment fn main() -> @location(0) vec4f {
+            return vec4f(0.0, 1.0, 0.0, 1.0);
         })");
 
-    dawn::native::ShaderModuleBase* shaderModuleBase = dawn::native::FromAPI(shaderModule.Get());
-    dawn::native::OwnedCompilationMessages* messages = shaderModuleBase->GetCompilationMessages();
+    native::ShaderModuleBase* shaderModuleBase = native::FromAPI(shaderModule.Get());
+    native::OwnedCompilationMessages* messages = shaderModuleBase->GetCompilationMessages();
     messages->ClearMessages();
-    messages->AddMessageForTesting("Info Message");
-    messages->AddMessageForTesting("Warning Message", wgpu::CompilationMessageType::Warning);
-    messages->AddMessageForTesting("Error Message", wgpu::CompilationMessageType::Error, 3, 4);
-    messages->AddMessageForTesting("Complete Message", wgpu::CompilationMessageType::Info, 3, 4, 5,
-                                   6);
+    messages->AddMessage("Info Message");
+    messages->AddMessage("Warning Message", wgpu::CompilationMessageType::Warning);
+    messages->AddMessage("Error Message", wgpu::CompilationMessageType::Error, 3, 4);
+    messages->AddMessage("Complete Message", wgpu::CompilationMessageType::Info, 3, 4, 5, 6);
 
     auto callback = [](WGPUCompilationInfoRequestStatus status, const WGPUCompilationInfo* info,
                        void* userdata) {
@@ -223,7 +308,7 @@ TEST_F(ShaderModuleValidationTest, MaximumShaderIOLocations) {
         }
 
         if (failingShaderStage == wgpu::ShaderStage::Vertex) {
-            stream << " @builtin(position) pos: vec4<f32>,";
+            stream << " @builtin(position) pos: vec4f,";
         }
         stream << "}\n";
 
@@ -243,14 +328,14 @@ TEST_F(ShaderModuleValidationTest, MaximumShaderIOLocations) {
                 pDesc.vertex.module = utils::CreateShaderModule(device, (ioStruct + R"(
                     @vertex fn failingVertex() -> ShaderIO {
                         var shaderIO : ShaderIO;
-                        shaderIO.pos = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+                        shaderIO.pos = vec4f(0.0, 0.0, 0.0, 1.0);
                         return shaderIO;
                      }
                 )")
                                                                             .c_str());
                 pDesc.cFragment.module = utils::CreateShaderModule(device, R"(
-                    @fragment fn main() -> @location(0) vec4<f32> {
-                        return vec4<f32>(0.0);
+                    @fragment fn main() -> @location(0) vec4f {
+                        return vec4f(0.0);
                     }
                 )");
                 break;
@@ -260,14 +345,14 @@ TEST_F(ShaderModuleValidationTest, MaximumShaderIOLocations) {
                 errorMatcher = "failingFragment";
                 pDesc.cFragment.entryPoint = "failingFragment";
                 pDesc.cFragment.module = utils::CreateShaderModule(device, (ioStruct + R"(
-                    @fragment fn failingFragment(io : ShaderIO) -> @location(0) vec4<f32> {
-                        return vec4<f32>(0.0);
+                    @fragment fn failingFragment(io : ShaderIO) -> @location(0) vec4f {
+                        return vec4f(0.0);
                      }
                 )")
                                                                                .c_str());
                 pDesc.vertex.module = utils::CreateShaderModule(device, R"(
-                    @vertex fn main() -> @builtin(position) vec4<f32> {
-                        return vec4<f32>(0.0);
+                    @vertex fn main() -> @builtin(position) vec4f {
+                        return vec4f(0.0);
                     }
                 )");
                 break;
@@ -278,31 +363,34 @@ TEST_F(ShaderModuleValidationTest, MaximumShaderIOLocations) {
         }
 
         if (success) {
-            ASSERT_DEVICE_ERROR(
-                device.CreateRenderPipeline(&pDesc),
-                testing::HasSubstr(
-                    "One or more fragment inputs and vertex outputs are not one-to-one matching"));
+            if (failingShaderStage == wgpu::ShaderStage::Vertex) {
+                // It is allowed that fragment inputs are a subset of the vertex output variables.
+                device.CreateRenderPipeline(&pDesc);
+            } else {
+                ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&pDesc),
+                                    testing::HasSubstr("The fragment input at location"));
+            }
         } else {
             ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&pDesc),
                                 testing::HasSubstr(errorMatcher));
         }
     };
 
-    constexpr uint32_t kMaxInterShaderIOLocation = kMaxInterStageShaderComponents / 4 - 1;
+    // It is allowed to create a shader module with the maximum active vertex output location ==
+    // (kMaxInterStageShaderVariables - 1);
+    CheckTestPipeline(true, kMaxInterStageShaderVariables - 1, wgpu::ShaderStage::Vertex);
 
-    // It is allowed to create a shader module with the maximum active vertex output location == 14;
-    CheckTestPipeline(true, kMaxInterShaderIOLocation, wgpu::ShaderStage::Vertex);
-
-    // It isn't allowed to create a shader module with the maximum active vertex output location >
-    // 14;
-    CheckTestPipeline(false, kMaxInterShaderIOLocation + 1, wgpu::ShaderStage::Vertex);
+    // It isn't allowed to create a shader module with the maximum active vertex output location ==
+    // kMaxInterStageShaderVariables;
+    CheckTestPipeline(false, kMaxInterStageShaderVariables, wgpu::ShaderStage::Vertex);
 
     // It is allowed to create a shader module with the maximum active fragment input location ==
-    // 14;
-    CheckTestPipeline(true, kMaxInterShaderIOLocation, wgpu::ShaderStage::Fragment);
+    // (kMaxInterStageShaderVariables - 1);
+    CheckTestPipeline(true, kMaxInterStageShaderVariables - 1, wgpu::ShaderStage::Fragment);
 
-    // It is allowed to create a shader module with the maximum active vertex output location > 14;
-    CheckTestPipeline(false, kMaxInterShaderIOLocation + 1, wgpu::ShaderStage::Fragment);
+    // It isn't allowed to create a shader module with the maximum active vertex output location ==
+    // kMaxInterStageShaderVariables;
+    CheckTestPipeline(false, kMaxInterStageShaderVariables, wgpu::ShaderStage::Fragment);
 }
 
 // Validate the maximum number of total inter-stage user-defined variable component count and
@@ -311,7 +399,8 @@ TEST_F(ShaderModuleValidationTest, MaximumInterStageShaderComponents) {
     auto CheckTestPipeline = [&](bool success,
                                  uint32_t totalUserDefinedInterStageShaderComponentCount,
                                  wgpu::ShaderStage failingShaderStage,
-                                 const char* extraBuiltInDeclarations = "") {
+                                 const char* extraBuiltInDeclarations = "",
+                                 bool usePointListAsPrimitiveType = false) {
         // Build the ShaderIO struct containing totalUserDefinedInterStageShaderComponentCount
         // components. Components are added in two parts, a bunch of vec4s, then one additional
         // variable for the remaining components.
@@ -320,8 +409,7 @@ TEST_F(ShaderModuleValidationTest, MaximumInterStageShaderComponents) {
         uint32_t vec4InputLocations = totalUserDefinedInterStageShaderComponentCount / 4;
 
         for (uint32_t location = 0; location < vec4InputLocations; ++location) {
-            stream << "@location(" << location << ") var" << location << ": vec4<f32>,"
-                   << std::endl;
+            stream << "@location(" << location << ") var" << location << ": vec4f," << std::endl;
         }
 
         uint32_t lastComponentCount = totalUserDefinedInterStageShaderComponentCount % 4;
@@ -336,7 +424,7 @@ TEST_F(ShaderModuleValidationTest, MaximumInterStageShaderComponents) {
         }
 
         if (failingShaderStage == wgpu::ShaderStage::Vertex) {
-            stream << " @builtin(position) pos: vec4<f32>,";
+            stream << " @builtin(position) pos: vec4f,";
         }
         stream << "}\n";
 
@@ -347,23 +435,32 @@ TEST_F(ShaderModuleValidationTest, MaximumInterStageShaderComponents) {
         // string "failingVertex" or "failingFragment" in the error message.
         utils::ComboRenderPipelineDescriptor pDesc;
         pDesc.cTargets[0].format = wgpu::TextureFormat::RGBA8Unorm;
+        if (usePointListAsPrimitiveType) {
+            pDesc.primitive.topology = wgpu::PrimitiveTopology::PointList;
+        } else {
+            pDesc.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
+        }
 
         const char* errorMatcher = nullptr;
         switch (failingShaderStage) {
             case wgpu::ShaderStage::Vertex: {
-                errorMatcher = "failingVertex";
+                if (usePointListAsPrimitiveType) {
+                    errorMatcher = "PointList";
+                } else {
+                    errorMatcher = "failingVertex";
+                }
                 pDesc.vertex.entryPoint = "failingVertex";
                 pDesc.vertex.module = utils::CreateShaderModule(device, (ioStruct + R"(
                     @vertex fn failingVertex() -> ShaderIO {
                         var shaderIO : ShaderIO;
-                        shaderIO.pos = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+                        shaderIO.pos = vec4f(0.0, 0.0, 0.0, 1.0);
                         return shaderIO;
                      }
                 )")
                                                                             .c_str());
                 pDesc.cFragment.module = utils::CreateShaderModule(device, R"(
-                    @fragment fn main() -> @location(0) vec4<f32> {
-                        return vec4<f32>(0.0);
+                    @fragment fn main() -> @location(0) vec4f {
+                        return vec4f(0.0);
                     }
                 )");
                 break;
@@ -373,14 +470,14 @@ TEST_F(ShaderModuleValidationTest, MaximumInterStageShaderComponents) {
                 errorMatcher = "failingFragment";
                 pDesc.cFragment.entryPoint = "failingFragment";
                 pDesc.cFragment.module = utils::CreateShaderModule(device, (ioStruct + R"(
-                    @fragment fn failingFragment(io : ShaderIO) -> @location(0) vec4<f32> {
-                        return vec4<f32>(0.0);
+                    @fragment fn failingFragment(io : ShaderIO) -> @location(0) vec4f {
+                        return vec4f(0.0);
                      }
                 )")
                                                                                .c_str());
                 pDesc.vertex.module = utils::CreateShaderModule(device, R"(
-                    @vertex fn main() -> @builtin(position) vec4<f32> {
-                        return vec4<f32>(0.0);
+                    @vertex fn main() -> @builtin(position) vec4f {
+                        return vec4f(0.0);
                     }
                 )");
                 break;
@@ -391,10 +488,13 @@ TEST_F(ShaderModuleValidationTest, MaximumInterStageShaderComponents) {
         }
 
         if (success) {
-            ASSERT_DEVICE_ERROR(
-                device.CreateRenderPipeline(&pDesc),
-                testing::HasSubstr(
-                    "One or more fragment inputs and vertex outputs are not one-to-one matching"));
+            if (failingShaderStage == wgpu::ShaderStage::Vertex) {
+                // It is allowed that fragment inputs are a subset of the vertex output variables.
+                device.CreateRenderPipeline(&pDesc);
+            } else {
+                ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&pDesc),
+                                    testing::HasSubstr("The fragment input at location"));
+            }
         } else {
             ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&pDesc),
                                 testing::HasSubstr(errorMatcher));
@@ -408,21 +508,29 @@ TEST_F(ShaderModuleValidationTest, MaximumInterStageShaderComponents) {
         CheckTestPipeline(false, kMaxInterStageShaderComponents + 1, wgpu::ShaderStage::Fragment);
     }
 
-    // @builtin(position) should be counted into the maximum inter-stage component count.
-    // Note that in vertex shader we always have @position so we don't need to specify it
-    // again in the parameter "builtInDeclarations" of generateShaderForTest().
+    // Verify the total user-defined vertex output component count must be less than
+    // kMaxInterStageShaderComponents.
     {
-        CheckTestPipeline(true, kMaxInterStageShaderComponents - 4, wgpu::ShaderStage::Vertex);
-        CheckTestPipeline(false, kMaxInterStageShaderComponents - 3, wgpu::ShaderStage::Vertex);
+        CheckTestPipeline(true, kMaxInterStageShaderComponents, wgpu::ShaderStage::Vertex);
+        CheckTestPipeline(false, kMaxInterStageShaderComponents + 1, wgpu::ShaderStage::Vertex);
     }
 
-    // @builtin(position) in fragment shaders should be counted into the maximum inter-stage
+    // Verify the total user-defined vertex output component count must be less than
+    // (kMaxInterStageShaderComponents - 1) when the primitive topology is PointList.
+    {
+        constexpr bool kUsePointListAsPrimitiveTopology = true;
+        const char* kExtraBuiltins = "";
+        CheckTestPipeline(true, kMaxInterStageShaderComponents - 1, wgpu::ShaderStage::Vertex,
+                          kExtraBuiltins, kUsePointListAsPrimitiveTopology);
+        CheckTestPipeline(false, kMaxInterStageShaderComponents, wgpu::ShaderStage::Vertex,
+                          kExtraBuiltins, kUsePointListAsPrimitiveTopology);
+    }
+
+    // @builtin(position) in fragment shaders shouldn't be counted into the maximum inter-stage
     // component count.
     {
-        CheckTestPipeline(true, kMaxInterStageShaderComponents - 4, wgpu::ShaderStage::Fragment,
-                          "@builtin(position) fragCoord : vec4<f32>,");
-        CheckTestPipeline(false, kMaxInterStageShaderComponents - 3, wgpu::ShaderStage::Fragment,
-                          "@builtin(position) fragCoord : vec4<f32>,");
+        CheckTestPipeline(true, kMaxInterStageShaderComponents, wgpu::ShaderStage::Fragment,
+                          "@builtin(position) fragCoord : vec4f,");
     }
 
     // @builtin(front_facing) should be counted into the maximum inter-stage component count.
@@ -450,87 +558,6 @@ TEST_F(ShaderModuleValidationTest, MaximumInterStageShaderComponents) {
     }
 }
 
-// Tests that we validate workgroup size limits.
-TEST_F(ShaderModuleValidationTest, ComputeWorkgroupSizeLimits) {
-    auto CheckShaderWithWorkgroupSize = [this](bool success, uint32_t x, uint32_t y, uint32_t z) {
-        std::ostringstream ss;
-        ss << "@compute @workgroup_size(" << x << "," << y << "," << z << ") fn main() {}";
-
-        wgpu::ComputePipelineDescriptor desc;
-        desc.compute.entryPoint = "main";
-        desc.compute.module = utils::CreateShaderModule(device, ss.str().c_str());
-
-        if (success) {
-            device.CreateComputePipeline(&desc);
-        } else {
-            ASSERT_DEVICE_ERROR(device.CreateComputePipeline(&desc));
-        }
-    };
-
-    wgpu::Limits supportedLimits = GetSupportedLimits().limits;
-
-    CheckShaderWithWorkgroupSize(true, 1, 1, 1);
-    CheckShaderWithWorkgroupSize(true, supportedLimits.maxComputeWorkgroupSizeX, 1, 1);
-    CheckShaderWithWorkgroupSize(true, 1, supportedLimits.maxComputeWorkgroupSizeY, 1);
-    CheckShaderWithWorkgroupSize(true, 1, 1, supportedLimits.maxComputeWorkgroupSizeZ);
-
-    CheckShaderWithWorkgroupSize(false, supportedLimits.maxComputeWorkgroupSizeX + 1, 1, 1);
-    CheckShaderWithWorkgroupSize(false, 1, supportedLimits.maxComputeWorkgroupSizeY + 1, 1);
-    CheckShaderWithWorkgroupSize(false, 1, 1, supportedLimits.maxComputeWorkgroupSizeZ + 1);
-
-    // No individual dimension exceeds its limit, but the combined size should definitely exceed the
-    // total invocation limit.
-    CheckShaderWithWorkgroupSize(false, supportedLimits.maxComputeWorkgroupSizeX,
-                                 supportedLimits.maxComputeWorkgroupSizeY,
-                                 supportedLimits.maxComputeWorkgroupSizeZ);
-}
-
-// Tests that we validate workgroup storage size limits.
-TEST_F(ShaderModuleValidationTest, ComputeWorkgroupStorageSizeLimits) {
-    wgpu::Limits supportedLimits = GetSupportedLimits().limits;
-
-    constexpr uint32_t kVec4Size = 16;
-    const uint32_t maxVec4Count = supportedLimits.maxComputeWorkgroupStorageSize / kVec4Size;
-    constexpr uint32_t kMat4Size = 64;
-    const uint32_t maxMat4Count = supportedLimits.maxComputeWorkgroupStorageSize / kMat4Size;
-
-    auto CheckPipelineWithWorkgroupStorage = [this](bool success, uint32_t vec4_count,
-                                                    uint32_t mat4_count) {
-        std::ostringstream ss;
-        std::ostringstream body;
-        if (vec4_count > 0) {
-            ss << "var<workgroup> vec4_data: array<vec4<f32>, " << vec4_count << ">;";
-            body << "_ = vec4_data;";
-        }
-        if (mat4_count > 0) {
-            ss << "var<workgroup> mat4_data: array<mat4x4<f32>, " << mat4_count << ">;";
-            body << "_ = mat4_data;";
-        }
-        ss << "@compute @workgroup_size(1) fn main() { " << body.str() << " }";
-
-        wgpu::ComputePipelineDescriptor desc;
-        desc.compute.entryPoint = "main";
-        desc.compute.module = utils::CreateShaderModule(device, ss.str().c_str());
-
-        if (success) {
-            device.CreateComputePipeline(&desc);
-        } else {
-            ASSERT_DEVICE_ERROR(device.CreateComputePipeline(&desc));
-        }
-    };
-
-    CheckPipelineWithWorkgroupStorage(true, 1, 1);
-    CheckPipelineWithWorkgroupStorage(true, maxVec4Count, 0);
-    CheckPipelineWithWorkgroupStorage(true, 0, maxMat4Count);
-    CheckPipelineWithWorkgroupStorage(true, maxVec4Count - 4, 1);
-    CheckPipelineWithWorkgroupStorage(true, 4, maxMat4Count - 1);
-
-    CheckPipelineWithWorkgroupStorage(false, maxVec4Count + 1, 0);
-    CheckPipelineWithWorkgroupStorage(false, maxVec4Count - 3, 1);
-    CheckPipelineWithWorkgroupStorage(false, 0, maxMat4Count + 1);
-    CheckPipelineWithWorkgroupStorage(false, 4, maxMat4Count);
-}
-
 // Test that numeric ID must be unique
 TEST_F(ShaderModuleValidationTest, OverridableConstantsNumericIDConflicts) {
     ASSERT_DEVICE_ERROR(utils::CreateShaderModule(device, R"(
@@ -550,25 +577,25 @@ struct Buf {
 })"));
 }
 
-// Test that @binding must be less then kMaxBindingNumber
+// Test that @binding must be less then kMaxBindingsPerBindGroup
 TEST_F(ShaderModuleValidationTest, MaxBindingNumber) {
-    static_assert(kMaxBindingNumber == 65535);
+    static_assert(kMaxBindingsPerBindGroup == 1000);
 
     wgpu::ComputePipelineDescriptor desc;
     desc.compute.entryPoint = "main";
 
-    // kMaxBindingNumber is valid.
+    // kMaxBindingsPerBindGroup-1 is valid.
     desc.compute.module = utils::CreateShaderModule(device, R"(
-        @group(0) @binding(65535) var s : sampler;
+        @group(0) @binding(999) var s : sampler;
         @compute @workgroup_size(1) fn main() {
             _ = s;
         }
     )");
     device.CreateComputePipeline(&desc);
 
-    // kMaxBindingNumber + 1 is an error
+    // kMaxBindingsPerBindGroup is an error
     desc.compute.module = utils::CreateShaderModule(device, R"(
-        @group(0) @binding(65536) var s : sampler;
+        @group(0) @binding(1000) var s : sampler;
         @compute @workgroup_size(1) fn main() {
             _ = s;
         }
@@ -580,12 +607,12 @@ TEST_F(ShaderModuleValidationTest, MaxBindingNumber) {
 TEST_F(ShaderModuleValidationTest, MissingDecorations) {
     // Vertex input.
     utils::CreateShaderModule(device, R"(
-        @vertex fn main(@location(0) a : vec4<f32>) -> @builtin(position) vec4<f32> {
+        @vertex fn main(@location(0) a : vec4f) -> @builtin(position) vec4f {
             return vec4(1.0);
         }
     )");
     ASSERT_DEVICE_ERROR(utils::CreateShaderModule(device, R"(
-        @vertex fn main(a : vec4<f32>) -> @builtin(position) vec4<f32> {
+        @vertex fn main(a : vec4f) -> @builtin(position) vec4f {
             return vec4(1.0);
         }
     )"));
@@ -593,7 +620,7 @@ TEST_F(ShaderModuleValidationTest, MissingDecorations) {
     // Vertex output
     utils::CreateShaderModule(device, R"(
         struct Output {
-            @builtin(position) pos : vec4<f32>,
+            @builtin(position) pos : vec4f,
             @location(0) a : f32,
         }
         @vertex fn main() -> Output {
@@ -603,7 +630,7 @@ TEST_F(ShaderModuleValidationTest, MissingDecorations) {
     )");
     ASSERT_DEVICE_ERROR(utils::CreateShaderModule(device, R"(
         struct Output {
-            @builtin(position) pos : vec4<f32>,
+            @builtin(position) pos : vec4f,
             a : f32,
         }
         @vertex fn main() -> Output {
@@ -614,12 +641,12 @@ TEST_F(ShaderModuleValidationTest, MissingDecorations) {
 
     // Fragment input
     utils::CreateShaderModule(device, R"(
-        @fragment fn main(@location(0) a : vec4<f32>) -> @location(0) f32 {
+        @fragment fn main(@location(0) a : vec4f) -> @location(0) f32 {
             return 1.0;
         }
     )");
     ASSERT_DEVICE_ERROR(utils::CreateShaderModule(device, R"(
-        @fragment fn main(a : vec4<f32>) -> @location(0) f32 {
+        @fragment fn main(a : vec4f) -> @location(0) f32 {
             return 1.0;
         }
     )"));
@@ -667,3 +694,67 @@ enable f16;
 
 @compute @workgroup_size(1) fn main() {})"));
 }
+
+// Test that passing a WGSL extension without setting the shader string should fail.
+TEST_F(ShaderModuleValidationTest, WgslNullptrShader) {
+    wgpu::ShaderModuleWGSLDescriptor wgslDesc = {};
+    wgpu::ShaderModuleDescriptor descriptor = {};
+    descriptor.nextInChain = &wgslDesc;
+    ASSERT_DEVICE_ERROR(device.CreateShaderModule(&descriptor));
+}
+
+// Tests that WGSL extension with deprecated source member still works but emits warning.
+TEST_F(ShaderModuleValidationTest, SourceToCodeMemberDeprecation) {
+    // This test works assuming ShaderModule is backed by a native::ShaderModuleBase, which
+    // is not the case on the wire.
+    DAWN_SKIP_TEST_IF(UsesWire());
+
+    wgpu::ShaderModuleWGSLDescriptor wgslDesc = {};
+    wgpu::ShaderModuleDescriptor descriptor = {};
+    descriptor.nextInChain = &wgslDesc;
+
+    wgpu::ShaderModule sourceShader;
+    wgslDesc.source = "@compute @workgroup_size(1) fn main() {}";
+    // Note that there are actually 2 warnings emitted because 1 is for the blueprint and one is for
+    // the actual shader.
+    EXPECT_DEPRECATION_WARNINGS(sourceShader = device.CreateShaderModule(&descriptor), 2);
+
+    wgslDesc.source = nullptr;
+    wgslDesc.code = "@compute @workgroup_size(1) fn main() {}";
+    wgpu::ShaderModule codeShader = device.CreateShaderModule(&descriptor);
+
+    EXPECT_TRUE(native::ShaderModuleBase::EqualityFunc()(native::FromAPI(sourceShader.Get()),
+                                                         native::FromAPI(codeShader.Get())));
+}
+
+// Test creating an error shader module with device.CreateErrorShaderModule()
+TEST_F(ShaderModuleValidationTest, CreateErrorShaderModule) {
+    wgpu::ShaderModuleWGSLDescriptor wgslDesc = {};
+    wgpu::ShaderModuleDescriptor descriptor = {};
+    descriptor.nextInChain = &wgslDesc;
+    wgslDesc.code = "@compute @workgroup_size(1) fn main() {}";
+
+    wgpu::ShaderModule errorShaderModule;
+    ASSERT_DEVICE_ERROR(errorShaderModule = device.CreateErrorShaderModule(
+                            &descriptor, "Shader compilation error"));
+
+    auto callback = [](WGPUCompilationInfoRequestStatus status, const WGPUCompilationInfo* info,
+                       void* userdata) {
+        ASSERT_EQ(WGPUCompilationInfoRequestStatus_Success, status);
+        ASSERT_NE(nullptr, info);
+        ASSERT_EQ(1u, info->messageCount);
+
+        const WGPUCompilationMessage* message = &info->messages[0];
+        ASSERT_STREQ("Shader compilation error", message->message);
+        ASSERT_EQ(WGPUCompilationMessageType_Error, message->type);
+        ASSERT_EQ(0u, message->lineNum);
+        ASSERT_EQ(0u, message->linePos);
+    };
+
+    errorShaderModule.GetCompilationInfo(callback, nullptr);
+
+    FlushWire();
+}
+
+}  // anonymous namespace
+}  // namespace dawn

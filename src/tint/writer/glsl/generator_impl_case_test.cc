@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "src/tint/ast/fallthrough_statement.h"
 #include "src/tint/writer/glsl/test_helper.h"
+
+#include "gmock/gmock.h"
 
 using namespace tint::number_suffixes;  // NOLINT
 
@@ -23,14 +24,14 @@ namespace {
 using GlslGeneratorImplTest_Case = TestHelper;
 
 TEST_F(GlslGeneratorImplTest_Case, Emit_Case) {
-    auto* s = Switch(1_i, Case(Expr(5_i), Block(create<ast::BreakStatement>())), DefaultCase());
+    auto* s =
+        Switch(1_i, Case(CaseSelector(5_i), Block(create<ast::BreakStatement>())), DefaultCase());
     WrapInFunction(s);
 
     GeneratorImpl& gen = Build();
 
     gen.increment_indent();
-
-    ASSERT_TRUE(gen.EmitCase(s->body[0])) << gen.error();
+    gen.EmitCase(s->body[0]);
     EXPECT_EQ(gen.result(), R"(  case 5: {
     break;
   }
@@ -38,32 +39,16 @@ TEST_F(GlslGeneratorImplTest_Case, Emit_Case) {
 }
 
 TEST_F(GlslGeneratorImplTest_Case, Emit_Case_BreaksByDefault) {
-    auto* s = Switch(1_i, Case(Expr(5_i), Block()), DefaultCase());
+    auto* s = Switch(1_i, Case(CaseSelector(5_i), Block()), DefaultCase());
     WrapInFunction(s);
 
     GeneratorImpl& gen = Build();
 
     gen.increment_indent();
-
-    ASSERT_TRUE(gen.EmitCase(s->body[0])) << gen.error();
+    gen.EmitCase(s->body[0]);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  case 5: {
     break;
-  }
-)");
-}
-
-TEST_F(GlslGeneratorImplTest_Case, Emit_Case_WithFallthrough) {
-    auto* s =
-        Switch(1_i, Case(Expr(5_i), Block(create<ast::FallthroughStatement>())), DefaultCase());
-    WrapInFunction(s);
-
-    GeneratorImpl& gen = Build();
-
-    gen.increment_indent();
-
-    ASSERT_TRUE(gen.EmitCase(s->body[0])) << gen.error();
-    EXPECT_EQ(gen.result(), R"(  case 5: {
-    /* fallthrough */
   }
 )");
 }
@@ -72,8 +57,8 @@ TEST_F(GlslGeneratorImplTest_Case, Emit_Case_MultipleSelectors) {
     auto* s = Switch(1_i,
                      Case(
                          utils::Vector{
-                             Expr(5_i),
-                             Expr(6_i),
+                             CaseSelector(5_i),
+                             CaseSelector(6_i),
                          },
                          Block(create<ast::BreakStatement>())),
                      DefaultCase());
@@ -82,8 +67,8 @@ TEST_F(GlslGeneratorImplTest_Case, Emit_Case_MultipleSelectors) {
     GeneratorImpl& gen = Build();
 
     gen.increment_indent();
-
-    ASSERT_TRUE(gen.EmitCase(s->body[0])) << gen.error();
+    gen.EmitCase(s->body[0]);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  case 5:
   case 6: {
     break;
@@ -98,8 +83,8 @@ TEST_F(GlslGeneratorImplTest_Case, Emit_Case_Default) {
     GeneratorImpl& gen = Build();
 
     gen.increment_indent();
-
-    ASSERT_TRUE(gen.EmitCase(s->body[0])) << gen.error();
+    gen.EmitCase(s->body[0]);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  default: {
     break;
   }

@@ -14,7 +14,7 @@ modf_result_f16 tint_modf(float16_t param_0) {
 
 
 void modf_8dbbbf() {
-  float16_t arg_0 = 0.0hf;
+  float16_t arg_0 = -1.5hf;
   modf_result_f16 res = tint_modf(arg_0);
 }
 
@@ -33,7 +33,7 @@ void main() {
 }
 #version 310 es
 #extension GL_AMD_gpu_shader_half_float : require
-precision mediump float;
+precision highp float;
 
 struct modf_result_f16 {
   float16_t fract;
@@ -48,7 +48,7 @@ modf_result_f16 tint_modf(float16_t param_0) {
 
 
 void modf_8dbbbf() {
-  float16_t arg_0 = 0.0hf;
+  float16_t arg_0 = -1.5hf;
   modf_result_f16 res = tint_modf(arg_0);
 }
 
@@ -76,7 +76,7 @@ modf_result_f16 tint_modf(float16_t param_0) {
 
 
 void modf_8dbbbf() {
-  float16_t arg_0 = 0.0hf;
+  float16_t arg_0 = -1.5hf;
   modf_result_f16 res = tint_modf(arg_0);
 }
 

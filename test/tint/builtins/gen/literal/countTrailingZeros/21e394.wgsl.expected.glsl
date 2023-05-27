@@ -1,22 +1,12 @@
 #version 310 es
 
-uint tint_count_trailing_zeros(uint v) {
-  uint x = uint(v);
-  uint b16 = (bool((x & 65535u)) ? 0u : 16u);
-  x = (x >> b16);
-  uint b8 = (bool((x & 255u)) ? 0u : 8u);
-  x = (x >> b8);
-  uint b4 = (bool((x & 15u)) ? 0u : 4u);
-  x = (x >> b4);
-  uint b2 = (bool((x & 3u)) ? 0u : 2u);
-  x = (x >> b2);
-  uint b1 = (bool((x & 1u)) ? 0u : 1u);
-  uint is_zero = ((x == 0u) ? 1u : 0u);
-  return uint((((((b16 | b8) | b4) | b2) | b1) + is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uint inner;
+} prevent_dce;
 
 void countTrailingZeros_21e394() {
-  uint res = tint_count_trailing_zeros(1u);
+  uint res = 0u;
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -33,25 +23,15 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-uint tint_count_trailing_zeros(uint v) {
-  uint x = uint(v);
-  uint b16 = (bool((x & 65535u)) ? 0u : 16u);
-  x = (x >> b16);
-  uint b8 = (bool((x & 255u)) ? 0u : 8u);
-  x = (x >> b8);
-  uint b4 = (bool((x & 15u)) ? 0u : 4u);
-  x = (x >> b4);
-  uint b2 = (bool((x & 3u)) ? 0u : 2u);
-  x = (x >> b2);
-  uint b1 = (bool((x & 1u)) ? 0u : 1u);
-  uint is_zero = ((x == 0u) ? 1u : 0u);
-  return uint((((((b16 | b8) | b4) | b2) | b1) + is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uint inner;
+} prevent_dce;
 
 void countTrailingZeros_21e394() {
-  uint res = tint_count_trailing_zeros(1u);
+  uint res = 0u;
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -64,23 +44,13 @@ void main() {
 }
 #version 310 es
 
-uint tint_count_trailing_zeros(uint v) {
-  uint x = uint(v);
-  uint b16 = (bool((x & 65535u)) ? 0u : 16u);
-  x = (x >> b16);
-  uint b8 = (bool((x & 255u)) ? 0u : 8u);
-  x = (x >> b8);
-  uint b4 = (bool((x & 15u)) ? 0u : 4u);
-  x = (x >> b4);
-  uint b2 = (bool((x & 3u)) ? 0u : 2u);
-  x = (x >> b2);
-  uint b1 = (bool((x & 1u)) ? 0u : 1u);
-  uint is_zero = ((x == 0u) ? 1u : 0u);
-  return uint((((((b16 | b8) | b4) | b2) | b1) + is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uint inner;
+} prevent_dce;
 
 void countTrailingZeros_21e394() {
-  uint res = tint_count_trailing_zeros(1u);
+  uint res = 0u;
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

@@ -16,6 +16,7 @@
 #include "src/tint/reader/spirv/function.h"
 #include "src/tint/reader/spirv/parser_impl_test_helper.h"
 #include "src/tint/reader/spirv/spirv_tools_helpers_test.h"
+#include "src/tint/utils/string_stream.h"
 
 namespace tint::reader::spirv {
 namespace {
@@ -26,7 +27,7 @@ using ::testing::HasSubstr;
 /// @returns a SPIR-V assembly segment which assigns debug names
 /// to particular IDs.
 std::string Names(std::vector<std::string> ids) {
-    std::ostringstream outs;
+    utils::StringStream outs;
     for (auto& id : ids) {
         outs << "    OpName %" << id << " \"" << id << "\"\n";
     }
@@ -180,11 +181,11 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_ScalarInitializers) {
     EXPECT_TRUE(fe.EmitFunctionVariables());
 
     auto ast_body = fe.ast_body();
-    EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr(R"(var a : bool = true;
-var b : bool = false;
-var c : i32 = -1i;
-var d : u32 = 1u;
-var e : f32 = 1.5f;
+    EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr(R"(var a = true;
+var b = false;
+var c = -1i;
+var d = 1u;
+var e = 1.5f;
 )"));
 }
 
@@ -209,10 +210,10 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_ScalarNullInitializers) {
     EXPECT_TRUE(fe.EmitFunctionVariables());
 
     auto ast_body = fe.ast_body();
-    EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr(R"(var a : bool = false;
-var b : i32 = 0i;
-var c : u32 = 0u;
-var d : f32 = 0.0f;
+    EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr(R"(var a = false;
+var b = 0i;
+var c = 0u;
+var d = 0.0f;
 )"));
 }
 
@@ -234,7 +235,7 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_VectorInitializer) {
 
     auto ast_body = fe.ast_body();
     EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr("var x_200 : vec2<f32> = vec2<f32>(1.5f, 2.0f);"));
+                HasSubstr("var x_200 = vec2f(1.5f, 2.0f);"));
 }
 
 TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_MatrixInitializer) {
@@ -259,11 +260,10 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_MatrixInitializer) {
     EXPECT_TRUE(fe.EmitFunctionVariables());
 
     auto ast_body = fe.ast_body();
-    EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr("var x_200 : mat3x2<f32> = mat3x2<f32>("
-                          "vec2<f32>(1.5f, 2.0f), "
-                          "vec2<f32>(2.0f, 3.0f), "
-                          "vec2<f32>(3.0f, 4.0f));"));
+    EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr("var x_200 = mat3x2f("
+                                                                  "vec2f(1.5f, 2.0f), "
+                                                                  "vec2f(2.0f, 3.0f), "
+                                                                  "vec2f(3.0f, 4.0f));"));
 }
 
 TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_ArrayInitializer) {
@@ -284,7 +284,7 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_ArrayInitializer) {
 
     auto ast_body = fe.ast_body();
     EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr("var x_200 : array<u32, 2u> = array<u32, 2u>(1u, 2u);"));
+                HasSubstr("var x_200 = array<u32, 2u>(1u, 2u);"));
 }
 
 TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_ArrayInitializer_Alias) {
@@ -311,7 +311,7 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_ArrayInitializer_Alias) {
 
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
-    const char* expect = "var x_200 : Arr = Arr(1u, 2u);\n";
+    const char* expect = "var x_200 = Arr(1u, 2u);\n";
     EXPECT_EQ(expect, got);
 }
 
@@ -332,8 +332,7 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_ArrayInitializer_Null) {
     EXPECT_TRUE(fe.EmitFunctionVariables());
 
     auto ast_body = fe.ast_body();
-    EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr("var x_200 : array<u32, 2u> = array<u32, 2u>();"));
+    EXPECT_THAT(test::ToString(p->program(), ast_body), HasSubstr("var x_200 = array<u32, 2u>();"));
 }
 
 TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_ArrayInitializer_Alias_Null) {
@@ -360,7 +359,7 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_ArrayInitializer_Alias_Nu
 
     auto ast_body = fe.ast_body();
     EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr("var x_200 : Arr = @stride(16) array<u32, 2u>();"));
+                HasSubstr("var x_200 = @stride(16) array<u32, 2u>();"));
 }
 
 TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_StructInitializer) {
@@ -382,7 +381,7 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_StructInitializer) {
 
     auto ast_body = fe.ast_body();
     EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr("var x_200 : S = S(1u, 1.5f, array<u32, 2u>(1u, 2u));"));
+                HasSubstr("var x_200 = S(1u, 1.5f, array<u32, 2u>(1u, 2u));"));
 }
 
 TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_StructInitializer_Null) {
@@ -404,7 +403,7 @@ TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_StructInitializer_Null) {
 
     auto ast_body = fe.ast_body();
     EXPECT_THAT(test::ToString(p->program(), ast_body),
-                HasSubstr("var x_200 : S = S(0u, 0.0f, array<u32, 2u>());"));
+                HasSubstr("var x_200 = S(0u, 0.0f, array<u32, 2u>());"));
 }
 
 TEST_F(SpvParserFunctionVarTest, EmitFunctionVariables_Decorate_RelaxedPrecision) {
@@ -556,7 +555,7 @@ TEST_F(SpvParserFunctionVarTest, EmitStatement_CombinatorialValue_Immediate_Used
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
     auto* expect = R"(var x_25 : u32;
-let x_2 : u32 = (1u + 1u);
+let x_2 = (1u + 1u);
 x_25 = 1u;
 x_25 = x_2;
 x_25 = x_2;
@@ -601,7 +600,7 @@ TEST_F(SpvParserFunctionVarTest,
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
     auto* expect = R"(var x_25 : u32;
-let x_2 : u32 = (1u + 1u);
+let x_2 = (1u + 1u);
 x_25 = 1u;
 loop {
 
@@ -689,9 +688,7 @@ loop {
 
   continuing {
     x_1 = 4u;
-    if (false) {
-      break;
-    }
+    break if false;
   }
 }
 x_1 = 5u;
@@ -742,10 +739,10 @@ TEST_F(SpvParserFunctionVarTest,
     // a const definition.
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
-    auto* expect = R"(let x_1 : u32 = 1u;
+    auto* expect = R"(let x_1 = 1u;
 if (true) {
 }
-let x_3 : u32 = x_1;
+let x_3 = x_1;
 x_200 = x_3;
 return;
 )";
@@ -803,10 +800,10 @@ TEST_F(SpvParserFunctionVarTest,
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
     auto* expect = R"(if (true) {
-  let x_1 : u32 = 1u;
+  let x_1 = 1u;
   if (true) {
   }
-  let x_3 : u32 = x_1;
+  let x_3 = x_1;
   x_200 = x_3;
 }
 return;
@@ -859,14 +856,14 @@ TEST_F(SpvParserFunctionVarTest,
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
     auto* expect = R"(if (true) {
-  let x_1 : u32 = 1u;
+  let x_1 = 1u;
   switch(1u) {
     case 0u: {
     }
     default: {
     }
   }
-  let x_3 : u32 = x_1;
+  let x_3 = x_1;
   x_200 = x_3;
 }
 return;
@@ -913,9 +910,55 @@ TEST_F(SpvParserFunctionVarTest,
     // a const definition.
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
-    auto* expect = R"(let x_1 : u32 = 1u;
-let x_2 : u32 = x_1;
+    auto* expect = R"(let x_1 = 1u;
+let x_2 = x_1;
 if (true) {
+}
+return;
+)";
+    EXPECT_EQ(expect, got);
+}
+
+TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_SimultaneousAssignment) {
+    // Phis must act as if they are simutaneously assigned.
+    // %101 and %102 should exchange values on each iteration, and never have
+    // the same value.
+    auto assembly = Preamble() + R"(
+%100 = OpFunction %void None %voidfn
+
+%10 = OpLabel
+OpBranch %20
+
+%20 = OpLabel
+%101 = OpPhi %bool %true %10 %102 %20
+%102 = OpPhi %bool %false %10 %101 %20
+OpLoopMerge %99 %20 None
+OpBranchConditional %true %99 %20
+
+%99 = OpLabel
+OpReturn
+
+OpFunctionEnd
+  )";
+    auto p = parser(test::Assemble(assembly));
+    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << assembly;
+    auto fe = p->function_emitter(100);
+    EXPECT_TRUE(fe.EmitBody()) << p->error();
+
+    auto ast_body = fe.ast_body();
+    auto got = test::ToString(p->program(), ast_body);
+    auto* expect = R"(var x_101 : bool;
+var x_102 : bool;
+x_101 = true;
+x_102 = false;
+loop {
+  let x_101_c20 = x_101;
+  let x_102_c20 = x_102;
+  x_101 = x_102_c20;
+  x_102 = x_101_c20;
+  if (true) {
+    break;
+  }
 }
 return;
 )";
@@ -969,20 +1012,19 @@ TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_SingleBlockLoopIndex) {
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
     auto* expect = R"(loop {
-  var x_2_phi : u32;
-  var x_3_phi : u32;
-  let x_101 : bool = x_7;
-  let x_102 : bool = x_8;
-  x_2_phi = 0u;
-  x_3_phi = 1u;
+  var x_2 : u32;
+  var x_3 : u32;
+  let x_101 = x_7;
+  let x_102 = x_8;
+  x_2 = 0u;
+  x_3 = 1u;
   if (x_101) {
     break;
   }
   loop {
-    let x_2 : u32 = x_2_phi;
-    let x_3 : u32 = x_3_phi;
-    x_2_phi = (x_2 + 1u);
-    x_3_phi = x_3;
+    let x_3_c20 = x_3;
+    x_2 = (x_2 + 1u);
+    x_3 = x_3_c20;
     if (x_102) {
       break;
     }
@@ -1043,27 +1085,26 @@ TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_MultiBlockLoopIndex) {
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
     auto* expect = R"(loop {
-  var x_2_phi : u32;
-  var x_3_phi : u32;
-  let x_101 : bool = x_7;
-  let x_102 : bool = x_8;
-  x_2_phi = 0u;
-  x_3_phi = 1u;
+  var x_2 : u32;
+  var x_3 : u32;
+  let x_101 = x_7;
+  let x_102 = x_8;
+  x_2 = 0u;
+  x_3 = 1u;
   if (x_101) {
     break;
   }
   loop {
     var x_4 : u32;
-    let x_2 : u32 = x_2_phi;
-    let x_3 : u32 = x_3_phi;
     if (x_102) {
       break;
     }
 
     continuing {
       x_4 = (x_2 + 1u);
-      x_2_phi = x_4;
-      x_3_phi = x_3;
+      let x_3_c30 = x_3;
+      x_2 = x_4;
+      x_3 = x_3_c30;
     }
   }
 }
@@ -1101,6 +1142,7 @@ TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_ValueFromLoopBodyAndContinuin
 
      %30 = OpLabel
      %7 = OpIAdd %uint %4 %6 ; use %4 again
+     %8 = OpCopyObject %uint %5 ; use %5
      OpBranch %20
 
      %79 = OpLabel
@@ -1121,26 +1163,27 @@ TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_ValueFromLoopBodyAndContinuin
 
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
-    auto* expect = R"(let x_101 : bool = x_17;
+    auto* expect = R"(let x_101 = x_17;
 loop {
-  var x_2_phi : u32;
-  var x_5_phi : u32;
-  x_2_phi = 0u;
-  x_5_phi = 1u;
+  var x_2 : u32;
+  var x_5 : u32;
+  x_2 = 0u;
+  x_5 = 1u;
   loop {
+    var x_4 : u32;
+    var x_6 : u32;
     var x_7 : u32;
-    let x_2 : u32 = x_2_phi;
-    let x_5 : u32 = x_5_phi;
-    let x_4 : u32 = (x_2 + 1u);
-    let x_6 : u32 = (x_4 + 1u);
+    x_4 = (x_2 + 1u);
+    x_6 = (x_4 + 1u);
     if (x_101) {
       break;
     }
 
     continuing {
       x_7 = (x_4 + x_6);
-      x_2_phi = x_4;
-      x_5_phi = x_7;
+      let x_8 = x_5;
+      x_2 = x_4;
+      x_5 = x_7;
     }
   }
 }
@@ -1200,24 +1243,23 @@ TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_FromElseAndThen) {
 
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
-    auto* expect = R"(let x_101 : bool = x_7;
-let x_102 : bool = x_8;
+    auto* expect = R"(let x_101 = x_7;
+let x_102 = x_8;
 loop {
-  var x_2_phi : u32;
+  var x_2 : u32;
   if (x_101) {
     break;
   }
   if (x_102) {
-    x_2_phi = 0u;
+    x_2 = 0u;
     continue;
   } else {
-    x_2_phi = 1u;
+    x_2 = 1u;
     continue;
   }
-  x_2_phi = 0u;
+  x_2 = 0u;
 
   continuing {
-    let x_2 : u32 = x_2_phi;
     x_1 = x_2;
   }
 }
@@ -1274,16 +1316,16 @@ TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_FromHeaderAndThen) {
 
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
-    auto* expect = R"(let x_101 : bool = x_7;
-let x_102 : bool = x_8;
+    auto* expect = R"(let x_101 = x_7;
+let x_102 = x_8;
 loop {
-  var x_2_phi : u32;
+  var x_2 : u32;
   if (x_101) {
     break;
   }
-  x_2_phi = 0u;
+  x_2 = 0u;
   if (x_102) {
-    x_2_phi = 1u;
+    x_2 = 1u;
     continue;
   } else {
     continue;
@@ -1291,7 +1333,6 @@ loop {
   return;
 
   continuing {
-    let x_2 : u32 = x_2_phi;
     x_1 = x_2;
   }
 }
@@ -1300,76 +1341,7 @@ return;
     EXPECT_EQ(expect, got) << got;
 }
 
-TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_InMerge_PredecessorsDominatdByNestedSwitchCase) {
-    // This is the essence of the bug report from crbug.com/tint/495
-    auto assembly = Preamble() + R"(
-     %cond = OpConstantTrue %bool
-     %pty = OpTypePointer Private %uint
-     %1 = OpVariable %pty Private
-     %boolpty = OpTypePointer Private %bool
-     %7 = OpVariable %boolpty Private
-     %8 = OpVariable %boolpty Private
-
-     %100 = OpFunction %void None %voidfn
-
-     %10 = OpLabel
-     OpSelectionMerge %99 None
-     OpSwitch %uint_1 %20 0 %20 1 %30
-
-       %20 = OpLabel ; case 0
-       OpBranch %30 ;; fall through
-
-       %30 = OpLabel ; case 1
-       OpSelectionMerge %50 None
-       OpBranchConditional %true %40 %45
-
-         %40 = OpLabel
-         OpBranch %50
-
-         %45 = OpLabel
-         OpBranch %99 ; break
-
-       %50 = OpLabel ; end the case
-       OpBranch %99
-
-     %99 = OpLabel
-     ; predecessors are all dominated by case construct head at %30
-     %phi = OpPhi %uint %uint_0 %45 %uint_1 %50
-     OpReturn
-
-     OpFunctionEnd
-  )";
-    auto p = parser(test::Assemble(assembly));
-    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << assembly;
-    auto fe = p->function_emitter(100);
-    EXPECT_TRUE(fe.EmitBody()) << p->error();
-
-    auto ast_body = fe.ast_body();
-    auto got = test::ToString(p->program(), ast_body);
-    auto* expect = R"(var x_41_phi : u32;
-switch(1u) {
-  default: {
-    fallthrough;
-  }
-  case 0u: {
-    fallthrough;
-  }
-  case 1u: {
-    if (true) {
-    } else {
-      x_41_phi = 0u;
-      break;
-    }
-    x_41_phi = 1u;
-  }
-}
-let x_41 : u32 = x_41_phi;
-return;
-)";
-    EXPECT_EQ(expect, got) << got << assembly;
-}
-
-TEST_F(SpvParserFunctionVarTest, EmitStatement_UseInPhiCountsAsUse) {
+TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_UseInPhiCountsAsUse) {
     // From crbug.com/215
     // If the only use of a combinatorially computed ID is as the value
     // in an OpPhi, then we still have to emit it.  The algorithm fix
@@ -1393,6 +1365,7 @@ TEST_F(SpvParserFunctionVarTest, EmitStatement_UseInPhiCountsAsUse) {
 
          %99 = OpLabel
         %101 = OpPhi %bool %11 %10 %12 %20
+        %102 = OpCopyObject %bool %101  ;; ensure a use of %101
                OpReturn
 
                OpFunctionEnd
@@ -1405,14 +1378,326 @@ TEST_F(SpvParserFunctionVarTest, EmitStatement_UseInPhiCountsAsUse) {
 
     auto ast_body = fe.ast_body();
     auto got = test::ToString(p->program(), ast_body);
-    auto* expect = R"(var x_101_phi : bool;
-let x_11 : bool = (true & true);
-let x_12 : bool = !(x_11);
-x_101_phi = x_11;
+    auto* expect = R"(var x_101 : bool;
+let x_11 = (true & true);
+let x_12 = !(x_11);
+x_101 = x_11;
 if (true) {
-  x_101_phi = x_12;
+  x_101 = x_12;
 }
-let x_101 : bool = x_101_phi;
+let x_102 = x_101;
+return;
+)";
+    EXPECT_EQ(expect, got);
+}
+
+TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_PhiInLoopHeader_FedByHoistedVar_PhiUnused) {
+    // From investigation into crbug.com/1649
+    //
+    // Value %999 is defined deep in control flow, then we arrange for
+    // it to dominate the backedge of the outer loop. The %999 value is then
+    // fed back into the phi in the loop header.  So %999 needs to be hoisted
+    // out of the loop.  The phi assignment needs to use the hoisted variable.
+    // The hoisted variable needs to be placed such that its scope encloses
+    // that phi in the header of the outer loop. The compiler needs
+    // to "see" that there is an implicit use of %999 in the backedge block
+    // of that outer loop.
+    auto assembly = Preamble() + R"(
+%100 = OpFunction %void None %voidfn
+
+%10 = OpLabel
+OpBranch %20
+
+%20 = OpLabel
+%101 = OpPhi %bool %true %10 %999 %80
+OpLoopMerge %99 %80 None
+OpBranchConditional %true %30 %99
+
+  %30 = OpLabel
+  OpSelectionMerge %50 None
+  OpBranchConditional %true %40 %50
+
+    %40 = OpLabel
+    %999 = OpCopyObject %bool %true
+    OpBranch %60
+
+    %50 = OpLabel
+    OpReturn
+
+  %60 = OpLabel ; if merge
+  OpBranch %80
+
+  %80 = OpLabel ; continue target
+  OpBranch %20
+
+%99 = OpLabel
+OpReturn
+
+OpFunctionEnd
+
+  )";
+    auto p = parser(test::Assemble(assembly));
+    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << assembly;
+    auto fe = p->function_emitter(100);
+    EXPECT_TRUE(fe.EmitBody()) << p->error();
+
+    auto ast_body = fe.ast_body();
+    auto got = test::ToString(p->program(), ast_body);
+    auto* expect = R"(loop {
+  var x_999 : bool;
+  if (true) {
+  } else {
+    break;
+  }
+  if (true) {
+    x_999 = true;
+    continue;
+  }
+  return;
+}
+return;
+)";
+    EXPECT_EQ(expect, got);
+}
+
+TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_PhiInLoopHeader_FedByHoistedVar_PhiUsed) {
+    // From investigation into crbug.com/1649
+    //
+    // Value %999 is defined deep in control flow, then we arrange for
+    // it to dominate the backedge of the outer loop. The %999 value is then
+    // fed back into the phi in the loop header.  So %999 needs to be hoisted
+    // out of the loop.  The phi assignment needs to use the hoisted variable.
+    // The hoisted variable needs to be placed such that its scope encloses
+    // that phi in the header of the outer loop. The compiler needs
+    // to "see" that there is an implicit use of %999 in the backedge block
+    // of that outer loop.
+    auto assembly = Preamble() + R"(
+%100 = OpFunction %void None %voidfn
+
+%10 = OpLabel
+OpBranch %20
+
+%20 = OpLabel
+%101 = OpPhi %bool %true %10 %999 %80
+OpLoopMerge %99 %80 None
+OpBranchConditional %true %30 %99
+
+  %30 = OpLabel
+  OpSelectionMerge %50 None
+  OpBranchConditional %true %40 %50
+
+    %40 = OpLabel
+    %999 = OpCopyObject %bool %true
+    OpBranch %60
+
+    %50 = OpLabel
+    OpReturn
+
+  %60 = OpLabel ; if merge
+  OpBranch %80
+
+  %80 = OpLabel ; continue target
+  OpBranch %20
+
+%99 = OpLabel
+%1000 = OpCopyObject %bool %101
+OpReturn
+
+OpFunctionEnd
+
+  )";
+    auto p = parser(test::Assemble(assembly));
+    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << assembly;
+    auto fe = p->function_emitter(100);
+    EXPECT_TRUE(fe.EmitBody()) << p->error();
+
+    auto ast_body = fe.ast_body();
+    auto got = test::ToString(p->program(), ast_body);
+    auto* expect = R"(var x_101 : bool;
+x_101 = true;
+loop {
+  var x_999 : bool;
+  if (true) {
+  } else {
+    break;
+  }
+  if (true) {
+    x_999 = true;
+    continue;
+  }
+  return;
+
+  continuing {
+    x_101 = x_999;
+  }
+}
+let x_1000 = x_101;
+return;
+)";
+    EXPECT_EQ(expect, got);
+}
+
+TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_PhiInLoopHeader_FedByPhi_PhiUnused) {
+    // From investigation into crbug.com/1649
+    //
+    // This is a reduction of one of the hard parts of test case
+    // vk-gl-cts/graphicsfuzz/stable-binarysearch-tree-false-if-discard-loop/1.spvasm
+    // In particular, see the data flow around %114 in that case.
+    //
+    // Here value %999 is is a *phi* defined deep in control flow, then we
+    // arrange for it to dominate the backedge of the outer loop. The %999
+    // value is then fed back into the phi in the loop header.  The variable
+    // generated to hold the %999 value needs to be placed such that its scope
+    // encloses that phi in the header of the outer loop. The compiler needs
+    // to "see" that there is an implicit use of %999 in the backedge block
+    // of that outer loop.
+    auto assembly = Preamble() + R"(
+%100 = OpFunction %void None %voidfn
+
+%10 = OpLabel
+OpBranch %20
+
+%20 = OpLabel
+%101 = OpPhi %bool %true %10 %999 %80
+OpLoopMerge %99 %80 None
+OpBranchConditional %true %99 %30
+
+  %30 = OpLabel
+  OpLoopMerge %70 %60 None
+  OpBranch %40
+
+    %40 = OpLabel
+    OpBranchConditional %true %60 %50
+
+      %50 = OpLabel
+      OpBranch %60
+
+    %60 = OpLabel ; inner continue
+    %999 = OpPhi %bool %true %40 %false %50
+    OpBranchConditional %true %70 %30
+
+  %70 = OpLabel  ; inner merge
+  OpBranch %80
+
+  %80 = OpLabel ; outer continue target
+  OpBranch %20
+
+%99 = OpLabel
+OpReturn
+
+OpFunctionEnd
+  )";
+    auto p = parser(test::Assemble(assembly));
+    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << assembly;
+    auto fe = p->function_emitter(100);
+    EXPECT_TRUE(fe.EmitBody()) << p->error();
+
+    auto ast_body = fe.ast_body();
+    auto got = test::ToString(p->program(), ast_body);
+    auto* expect = R"(loop {
+  var x_999 : bool;
+  if (true) {
+    break;
+  }
+  loop {
+    x_999 = true;
+    if (true) {
+      continue;
+    }
+    x_999 = false;
+
+    continuing {
+      break if true;
+    }
+  }
+}
+return;
+)";
+    EXPECT_EQ(expect, got);
+}
+
+TEST_F(SpvParserFunctionVarTest, EmitStatement_Phi_PhiInLoopHeader_FedByPhi_PhiUsed) {
+    // From investigation into crbug.com/1649
+    //
+    // This is a reduction of one of the hard parts of test case
+    // vk-gl-cts/graphicsfuzz/stable-binarysearch-tree-false-if-discard-loop/1.spvasm
+    // In particular, see the data flow around %114 in that case.
+    //
+    // Here value %999 is is a *phi* defined deep in control flow, then we
+    // arrange for it to dominate the backedge of the outer loop. The %999
+    // value is then fed back into the phi in the loop header.  The variable
+    // generated to hold the %999 value needs to be placed such that its scope
+    // encloses that phi in the header of the outer loop. The compiler needs
+    // to "see" that there is an implicit use of %999 in the backedge block
+    // of that outer loop.
+    auto assembly = Preamble() + R"(
+%100 = OpFunction %void None %voidfn
+
+%10 = OpLabel
+OpBranch %20
+
+%20 = OpLabel
+%101 = OpPhi %bool %true %10 %999 %80
+OpLoopMerge %99 %80 None
+OpBranchConditional %true %99 %30
+
+  %30 = OpLabel
+  OpLoopMerge %70 %60 None
+  OpBranch %40
+
+    %40 = OpLabel
+    OpBranchConditional %true %60 %50
+
+      %50 = OpLabel
+      OpBranch %60
+
+    %60 = OpLabel ; inner continue
+    %999 = OpPhi %bool %true %40 %false %50
+    OpBranchConditional %true %70 %30
+
+  %70 = OpLabel  ; inner merge
+  OpBranch %80
+
+  %80 = OpLabel ; outer continue target
+  OpBranch %20
+
+%99 = OpLabel
+%1000 = OpCopyObject %bool %101
+OpReturn
+
+OpFunctionEnd
+  )";
+    auto p = parser(test::Assemble(assembly));
+    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << assembly;
+    auto fe = p->function_emitter(100);
+    EXPECT_TRUE(fe.EmitBody()) << p->error();
+
+    auto ast_body = fe.ast_body();
+    auto got = test::ToString(p->program(), ast_body);
+    auto* expect = R"(var x_101 : bool;
+x_101 = true;
+loop {
+  var x_999 : bool;
+  if (true) {
+    break;
+  }
+  loop {
+    x_999 = true;
+    if (true) {
+      continue;
+    }
+    x_999 = false;
+
+    continuing {
+      break if true;
+    }
+  }
+
+  continuing {
+    x_101 = x_999;
+  }
+}
+let x_1000 = x_101;
 return;
 )";
     EXPECT_EQ(expect, got);
@@ -1444,14 +1729,14 @@ TEST_F(SpvParserFunctionVarTest, EmitStatement_Hoist_CompositeInsert) {
     auto fe = p->function_emitter(100);
     EXPECT_TRUE(fe.EmitBody()) << p->error();
 
-    const auto* expected = R"(var x_200 : vec2<i32>;
+    const auto* expected = R"(var x_200 : vec2i;
 if (true) {
-  x_200 = vec2<i32>();
+  x_200 = vec2i();
   x_200.x = 0i;
 } else {
   return;
 }
-let x_201 : vec2<i32> = x_200;
+let x_201 = x_200;
 return;
 )";
     auto ast_body = fe.ast_body();
@@ -1487,14 +1772,14 @@ TEST_F(SpvParserFunctionVarTest, EmitStatement_Hoist_VectorInsertDynamic) {
 
     auto ast_body = fe.ast_body();
     const auto got = test::ToString(p->program(), ast_body);
-    const auto* expected = R"(var x_200 : vec2<i32>;
+    const auto* expected = R"(var x_200 : vec2i;
 if (true) {
-  x_200 = vec2<i32>();
+  x_200 = vec2i();
   x_200[1i] = 3i;
 } else {
   return;
 }
-let x_201 : vec2<i32> = x_200;
+let x_201 = x_200;
 return;
 )";
     EXPECT_EQ(got, expected) << got;

@@ -2,12 +2,19 @@
 
 uint local_invocation_index_1 = 0u;
 shared uint wg[4];
-void compute_main_inner(uint local_invocation_index) {
+void compute_main_inner(uint local_invocation_index_2) {
   uint idx = 0u;
-  idx = local_invocation_index;
-  {
-    for(; !(!((idx < 4u))); idx = (idx + 1u)) {
-      atomicExchange(wg[idx], 0u);
+  idx = local_invocation_index_2;
+  while (true) {
+    uint x_21 = idx;
+    if (!((x_21 < 4u))) {
+      break;
+    }
+    uint x_26 = idx;
+    atomicExchange(wg[x_26], 0u);
+    {
+      uint x_33 = idx;
+      idx = (x_33 + 1u);
     }
   }
   barrier();
@@ -16,7 +23,8 @@ void compute_main_inner(uint local_invocation_index) {
 }
 
 void compute_main_1() {
-  compute_main_inner(local_invocation_index_1);
+  uint x_47 = local_invocation_index_1;
+  compute_main_inner(x_47);
   return;
 }
 

@@ -3,14 +3,18 @@ int tint_extract_bits(int v, uint offset, uint count) {
   const uint e = min(32u, (s + count));
   const uint shl = (32u - e);
   const uint shr = (shl + s);
-  return ((v << shl) >> shr);
+  const int shl_result = ((shl < 32u) ? (v << shl) : 0);
+  return ((shr < 32u) ? (shl_result >> shr) : ((shl_result >> 31u) >> 1u));
 }
+
+RWByteAddressBuffer prevent_dce : register(u0, space2);
 
 void extractBits_249874() {
   int arg_0 = 1;
   uint arg_1 = 1u;
   uint arg_2 = 1u;
   int res = tint_extract_bits(arg_0, arg_1, arg_2);
+  prevent_dce.Store(0u, asuint(res));
 }
 
 struct tint_symbol {

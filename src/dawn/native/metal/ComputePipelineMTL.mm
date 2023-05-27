@@ -15,7 +15,9 @@
 #include "dawn/native/metal/ComputePipelineMTL.h"
 
 #include "dawn/common/Math.h"
+#include "dawn/native/Adapter.h"
 #include "dawn/native/CreatePipelineAsyncTask.h"
+#include "dawn/native/Instance.h"
 #include "dawn/native/metal/DeviceMTL.h"
 #include "dawn/native/metal/ShaderModuleMTL.h"
 #include "dawn/native/metal/UtilsMetal.h"
@@ -40,12 +42,24 @@ MaybeError ComputePipeline::Initialize() {
     const ProgrammableStage& computeStage = GetStage(SingleShaderStage::Compute);
     ShaderModule::MetalFunctionData computeData;
 
-    DAWN_TRY(CreateMTLFunction(computeStage, SingleShaderStage::Compute, ToBackend(GetLayout()),
-                               &computeData));
+    DAWN_TRY(ToBackend(computeStage.module.Get())
+                 ->CreateFunction(SingleShaderStage::Compute, computeStage, ToBackend(GetLayout()),
+                                  &computeData));
 
     NSError* error = nullptr;
-    mMtlComputePipelineState.Acquire(
-        [mtlDevice newComputePipelineStateWithFunction:computeData.function.Get() error:&error]);
+    NSRef<NSString> label = MakeDebugName(GetDevice(), "Dawn_ComputePipeline", GetLabel());
+
+    NSRef<MTLComputePipelineDescriptor> descriptorRef =
+        AcquireNSRef([MTLComputePipelineDescriptor new]);
+    MTLComputePipelineDescriptor* descriptor = descriptorRef.Get();
+    descriptor.computeFunction = computeData.function.Get();
+    descriptor.label = label.Get();
+
+    mMtlComputePipelineState.Acquire([mtlDevice
+        newComputePipelineStateWithDescriptor:descriptor
+                                      options:MTLPipelineOptionNone
+                                   reflection:nil
+                                        error:&error]);
     if (error != nullptr) {
         return DAWN_INTERNAL_ERROR("Error creating pipeline state " +
                                    std::string([error.localizedDescription UTF8String]));
@@ -53,8 +67,7 @@ MaybeError ComputePipeline::Initialize() {
     ASSERT(mMtlComputePipelineState != nil);
 
     // Copy over the local workgroup size as it is passed to dispatch explicitly in Metal
-    Origin3D localSize = GetStage(SingleShaderStage::Compute).metadata->localWorkgroupSize;
-    mLocalWorkgroupSize = MTLSizeMake(localSize.x, localSize.y, localSize.z);
+    mLocalWorkgroupSize = computeData.localWorkgroupSize;
 
     mRequiresStorageBufferLength = computeData.needsStorageBufferLength;
     mWorkgroupAllocations = std::move(computeData.workgroupAllocations);
@@ -84,9 +97,17 @@ bool ComputePipeline::RequiresStorageBufferLength() const {
 void ComputePipeline::InitializeAsync(Ref<ComputePipelineBase> computePipeline,
                                       WGPUCreateComputePipelineAsyncCallback callback,
                                       void* userdata) {
+    PhysicalDeviceBase* physicalDevice = computePipeline->GetDevice()->GetPhysicalDevice();
     std::unique_ptr<CreateComputePipelineAsyncTask> asyncTask =
         std::make_unique<CreateComputePipelineAsyncTask>(std::move(computePipeline), callback,
                                                          userdata);
+    // Workaround a crash where the validation layers on AMD crash with partition alloc.
+    // See crbug.com/dawn/1200.
+    if (physicalDevice->GetInstance()->IsBackendValidationEnabled() &&
+        gpu_info::IsAMD(physicalDevice->GetVendorId())) {
+        asyncTask->Run();
+        return;
+    }
     CreateComputePipelineAsyncTask::RunAsync(std::move(asyncTask));
 }
 

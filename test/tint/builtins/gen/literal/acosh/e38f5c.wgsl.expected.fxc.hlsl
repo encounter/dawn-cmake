@@ -1,9 +1,8 @@
-float3 tint_acosh(float3 x) {
-  return log((x + sqrt(((x * x) - 1.0f))));
-}
+RWByteAddressBuffer prevent_dce : register(u0, space2);
 
 void acosh_e38f5c() {
-  float3 res = tint_acosh((1.0f).xxx);
+  float3 res = (1.0f).xxx;
+  prevent_dce.Store3(0u, asuint(res));
 }
 
 struct tint_symbol {

@@ -15,9 +15,11 @@
 #ifndef SRC_DAWN_COMMON_CONSTANTS_H_
 #define SRC_DAWN_COMMON_CONSTANTS_H_
 
+#include <cstddef>
 #include <cstdint>
 
 static constexpr uint32_t kMaxBindGroups = 4u;
+static constexpr uint32_t kMaxBindingsPerBindGroup = 1000u;
 static constexpr uint8_t kMaxVertexAttributes = 16u;
 static constexpr uint8_t kMaxVertexBuffers = 8u;
 static constexpr uint32_t kMaxVertexBufferArrayStride = 2048u;
@@ -25,18 +27,16 @@ static constexpr uint32_t kNumStages = 3;
 static constexpr uint8_t kMaxColorAttachments = 8u;
 static constexpr uint32_t kTextureBytesPerRowAlignment = 256u;
 static constexpr uint32_t kMaxInterStageShaderComponents = 60u;
-static constexpr uint32_t kMaxInterStageShaderVariables = kMaxInterStageShaderComponents / 4;
+static constexpr uint32_t kMaxInterStageShaderVariables = 16u;
+static constexpr uint64_t kAssumedMaxBufferSize =
+    0x80000000u;  // Use 2 GB when the limit is unavailable
 
-// Per stage limits
+// Per stage maximum limits used to optimized Dawn internals.
 static constexpr uint32_t kMaxSampledTexturesPerShaderStage = 16;
 static constexpr uint32_t kMaxSamplersPerShaderStage = 16;
 static constexpr uint32_t kMaxStorageBuffersPerShaderStage = 8;
-static constexpr uint32_t kMaxStorageTexturesPerShaderStage = 4;
+static constexpr uint32_t kMaxStorageTexturesPerShaderStage = 8;
 static constexpr uint32_t kMaxUniformBuffersPerShaderStage = 12;
-
-// Per pipeline layout limits
-static constexpr uint32_t kMaxDynamicUniformBuffersPerPipelineLayout = 8u;
-static constexpr uint32_t kMaxDynamicStorageBuffersPerPipelineLayout = 4u;
 
 // Indirect command sizes
 static constexpr uint64_t kDispatchIndirectSize = 3 * sizeof(uint32_t);
@@ -51,10 +51,9 @@ static constexpr float kLodMax = 1000.0;
 // on macOS, but we decide to do it on all platforms.
 static constexpr uint64_t kCopyBufferToBufferOffsetAlignment = 4u;
 
-// The maximum size of visibilityResultBuffer is 256KB on Metal, to fit the restriction, limit the
-// maximum size of query set to 64KB. The size of a query is 8-bytes, the maximum query count is 64
-// * 1024 / 8.
-static constexpr uint32_t kMaxQueryCount = 8192u;
+// Metal has a maximum size of 32Kb for a counter set buffer. Each query is 8 bytes.
+// So, the maximum nymber of queries is 32Kb / 8.
+static constexpr uint32_t kMaxQueryCount = 4096;
 
 // An external texture occupies multiple binding slots. These are the per-external-texture bindings
 // needed.
@@ -62,7 +61,7 @@ static constexpr uint8_t kSampledTexturesPerExternalTexture = 4u;
 static constexpr uint8_t kSamplersPerExternalTexture = 1u;
 static constexpr uint8_t kUniformsPerExternalTexture = 1u;
 
-// A spec defined constant but that doesn't have a name.
-static constexpr uint32_t kMaxBindingNumber = 65535;
+// Wire buffer alignments.
+static constexpr size_t kWireBufferAlignment = 8u;
 
 #endif  // SRC_DAWN_COMMON_CONSTANTS_H_

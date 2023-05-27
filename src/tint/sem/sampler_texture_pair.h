@@ -19,6 +19,7 @@
 #include <functional>
 
 #include "src/tint/sem/binding_point.h"
+#include "src/tint/utils/string_stream.h"
 
 namespace tint::sem {
 
@@ -42,6 +43,15 @@ struct SamplerTexturePair {
     /// @returns true if this SamplerTexturePair is not equal to `rhs`
     inline bool operator!=(const SamplerTexturePair& rhs) const { return !(*this == rhs); }
 };
+
+/// Prints the SamplerTexturePair @p stp to @p o
+/// @param o the stream to write to
+/// @param stp the SamplerTexturePair
+/// @return the stream so calls can be chained
+inline utils::StringStream& operator<<(utils::StringStream& o, const SamplerTexturePair& stp) {
+    return o << "[sampler: " << stp.sampler_binding_point
+             << ", texture: " << stp.sampler_binding_point << "]";
+}
 
 }  // namespace tint::sem
 

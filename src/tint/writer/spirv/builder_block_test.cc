@@ -26,20 +26,19 @@ TEST_F(BuilderTest, Block) {
     // Note, this test uses shadow variables which aren't allowed in WGSL but
     // serves to prove the block code is pushing new scopes as needed.
     auto* inner = Block(Decl(Var("var", ty.f32())), Assign("var", 2_f));
-    auto* outer = Block(Decl(Var("var", ty.f32())), Assign("var", 1_f),
-                        inner, Assign("var", 3_f));
+    auto* outer = Block(Decl(Var("var", ty.f32())), Assign("var", 1_f), inner, Assign("var", 3_f));
 
     WrapInFunction(outer);
 
     spirv::Builder& b = Build();
 
-    b.push_function(Function{});
-    ASSERT_FALSE(b.has_error()) << b.error();
+    b.PushFunctionForTesting();
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
 
-    EXPECT_TRUE(b.GenerateStatement(outer)) << b.error();
+    EXPECT_TRUE(b.GenerateStatement(outer)) << b.Diagnostics();
     EXPECT_FALSE(b.has_error());
 
-    EXPECT_EQ(DumpInstructions(b.types()), R"(%3 = OpTypeFloat 32
+    EXPECT_EQ(DumpInstructions(b.Module().Types()), R"(%3 = OpTypeFloat 32
 %2 = OpTypePointer Function %3
 %4 = OpConstantNull %3
 %5 = OpConstant %3 1
@@ -47,12 +46,12 @@ TEST_F(BuilderTest, Block) {
 %8 = OpConstant %3 3
 )");
 
-    EXPECT_EQ(DumpInstructions(b.functions()[0].variables()),
+    EXPECT_EQ(DumpInstructions(b.CurrentFunction().variables()),
               R"(%1 = OpVariable %2 Function %4
 %6 = OpVariable %2 Function %4
 )");
 
-    EXPECT_EQ(DumpInstructions(b.functions()[0].instructions()),
+    EXPECT_EQ(DumpInstructions(b.CurrentFunction().instructions()),
               R"(OpStore %1 %5
 OpStore %6 %7
 OpStore %1 %8

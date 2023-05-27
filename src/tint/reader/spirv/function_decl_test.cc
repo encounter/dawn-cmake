@@ -16,6 +16,7 @@
 #include "src/tint/reader/spirv/function.h"
 #include "src/tint/reader/spirv/parser_impl_test_helper.h"
 #include "src/tint/reader/spirv/spirv_tools_helpers_test.h"
+#include "src/tint/utils/string_stream.h"
 
 namespace tint::reader::spirv {
 namespace {
@@ -34,7 +35,7 @@ std::string Preamble() {
 /// @returns a SPIR-V assembly segment which assigns debug names
 /// to particular IDs.
 std::string Names(std::vector<std::string> ids) {
-    std::ostringstream outs;
+    utils::StringStream outs;
     for (auto& id : ids) {
         outs << "    OpName %" << id << " \"" << id << "\"\n";
     }
@@ -49,6 +50,19 @@ std::string CommonTypes() {
     %uint = OpTypeInt 32 0
     %int = OpTypeInt 32 1
     %float_0 = OpConstant %float 0.0
+  )";
+}
+
+std::string CommonHandleTypes() {
+    return CommonTypes() + R"(
+    %v2float = OpTypeVector %float 2
+    %v4float = OpTypeVector %float 4
+    %v2_0 = OpConstantNull %v2float
+    %sampler = OpTypeSampler
+    %tex2d_f32 = OpTypeImage %float 2D 0 0 0 1 Unknown
+    %sampled_image_2d_f32 = OpTypeSampledImage %tex2d_f32
+    %ptr_sampler = OpTypePointer UniformConstant %sampler
+    %ptr_tex2d_f32 = OpTypePointer UniformConstant %tex2d_f32
   )";
 }
 
@@ -145,6 +159,68 @@ TEST_F(SpvParserTest, Emit_GenerateParamNames) {
 }
 )";
     EXPECT_THAT(got, HasSubstr(expect));
+}
+
+TEST_F(SpvParserTest, Emit_FunctionDecl_ParamPtrTexture_ParamPtrSampler) {
+    auto p = parser(test::Assemble(Preamble() + CommonHandleTypes() + R"(
+
+     ; This is how Glslang generates functions that take texture and sampler arguments.
+     ; It passes them by pointer.
+     %fn_ty = OpTypeFunction %void %ptr_tex2d_f32 %ptr_sampler
+
+     %200 = OpFunction %void None %fn_ty
+     %14 = OpFunctionParameter %ptr_tex2d_f32
+     %15 = OpFunctionParameter %ptr_sampler
+     %mixed_entry = OpLabel
+     ; access the texture, to give the handles usages.
+     %im = OpLoad %tex2d_f32 %14
+     %sam = OpLoad %sampler %15
+     %imsam = OpSampledImage %sampled_image_2d_f32 %im %sam
+     %20 = OpImageSampleImplicitLod %v4float %imsam %v2_0
+     OpReturn
+     OpFunctionEnd
+  )" + MainBody()));
+    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions());
+    auto fe = p->function_emitter(200);
+    EXPECT_TRUE(fe.Emit());
+
+    auto got = test::ToString(p->program());
+    std::string expect = R"(fn x_200(x_14 : texture_2d<f32>, x_15 : sampler) {
+  let x_20 = textureSample(x_14, x_15, vec2f());
+  return;
+}
+)";
+    EXPECT_EQ(got, expect);
+}
+
+TEST_F(SpvParserTest, Emit_FunctionDecl_ParamTexture_ParamSampler) {
+    auto assembly = Preamble() + CommonHandleTypes() + R"(
+
+     ; It is valid in SPIR-V to pass textures and samplers by value.
+     %fn_ty = OpTypeFunction %void %tex2d_f32 %sampler
+
+     %200 = OpFunction %void None %fn_ty
+     %14 = OpFunctionParameter %tex2d_f32
+     %15 = OpFunctionParameter %sampler
+     %mixed_entry = OpLabel
+     ; access the texture, to give the handles usages.
+     %imsam = OpSampledImage %sampled_image_2d_f32 %14 %15
+     %20 = OpImageSampleImplicitLod %v4float %imsam %v2_0
+     OpReturn
+     OpFunctionEnd
+  )" + MainBody();
+    auto p = parser(test::Assemble(assembly));
+    ASSERT_TRUE(p->BuildAndParseInternalModuleExceptFunctions()) << p->error() << assembly;
+    auto fe = p->function_emitter(200);
+    EXPECT_TRUE(fe.Emit());
+
+    auto got = test::ToString(p->program());
+    std::string expect = R"(fn x_200(x_14 : texture_2d<f32>, x_15 : sampler) {
+  let x_20 = textureSample(x_14, x_15, vec2f());
+  return;
+}
+)";
+    EXPECT_EQ(got, expect);
 }
 
 }  // namespace

@@ -15,21 +15,21 @@
 #ifndef SRC_TINT_FUZZERS_SHUFFLE_TRANSFORM_H_
 #define SRC_TINT_FUZZERS_SHUFFLE_TRANSFORM_H_
 
-#include "src/tint/transform/transform.h"
+#include "src/tint/ast/transform/transform.h"
 
 namespace tint::fuzzers {
 
 /// ShuffleTransform reorders the module scope declarations into a random order
-class ShuffleTransform : public tint::transform::Transform {
+class ShuffleTransform : public ast::transform::Transform {
   public:
     /// Constructor
     /// @param seed the random seed to use for the shuffling
     explicit ShuffleTransform(size_t seed);
 
-  protected:
-    void Run(CloneContext& ctx,
-             const tint::transform::DataMap&,
-             tint::transform::DataMap&) const override;
+    /// @copydoc ast::transform::Transform::Apply
+    ApplyResult Apply(const Program* program,
+                      const transform::DataMap& inputs,
+                      transform::DataMap& outputs) const override;
 
   private:
     size_t seed_;

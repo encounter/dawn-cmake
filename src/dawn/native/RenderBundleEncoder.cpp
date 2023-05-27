@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "dawn/common/StackContainer.h"
 #include "dawn/native/CommandValidation.h"
 #include "dawn/native/Commands.h"
 #include "dawn/native/Device.h"
@@ -57,7 +58,7 @@ MaybeError ValidateDepthStencilAttachmentFormat(const DeviceBase* device,
     return {};
 }
 
-MaybeError ValidateRenderBundleEncoderDescriptor(const DeviceBase* device,
+MaybeError ValidateRenderBundleEncoderDescriptor(DeviceBase* device,
                                                  const RenderBundleEncoderDescriptor* descriptor) {
     DAWN_INVALID_IF(!IsValidSampleCount(descriptor->sampleCount),
                     "Sample count (%u) is not supported.", descriptor->sampleCount);
@@ -68,14 +69,18 @@ MaybeError ValidateRenderBundleEncoderDescriptor(const DeviceBase* device,
                     descriptor->colorFormatsCount, maxColorAttachments);
 
     bool allColorFormatsUndefined = true;
+    ColorAttachmentFormats colorAttachmentFormats;
     for (uint32_t i = 0; i < descriptor->colorFormatsCount; ++i) {
         wgpu::TextureFormat format = descriptor->colorFormats[i];
         if (format != wgpu::TextureFormat::Undefined) {
             DAWN_TRY_CONTEXT(ValidateColorAttachmentFormat(device, format),
                              "validating colorFormats[%u]", i);
+            colorAttachmentFormats->push_back(&device->GetValidInternalFormat(format));
             allColorFormatsUndefined = false;
         }
     }
+    DAWN_TRY_CONTEXT(ValidateColorAttachmentBytesPerSample(device, colorAttachmentFormats),
+                     "validating color attachment bytes per sample.");
 
     if (descriptor->depthStencilFormat != wgpu::TextureFormat::Undefined) {
         DAWN_TRY_CONTEXT(ValidateDepthStencilAttachmentFormat(
@@ -100,11 +105,11 @@ RenderBundleEncoder::RenderBundleEncoder(DeviceBase* device,
                         descriptor->depthReadOnly,
                         descriptor->stencilReadOnly),
       mBundleEncodingContext(device, this) {
-    TrackInDevice();
+    GetObjectTrackingList()->Track(this);
 }
 
-RenderBundleEncoder::RenderBundleEncoder(DeviceBase* device, ErrorTag errorTag)
-    : RenderEncoderBase(device, &mBundleEncodingContext, errorTag),
+RenderBundleEncoder::RenderBundleEncoder(DeviceBase* device, ErrorTag errorTag, const char* label)
+    : RenderEncoderBase(device, &mBundleEncodingContext, errorTag, label),
       mBundleEncodingContext(device, this) {}
 
 void RenderBundleEncoder::DestroyImpl() {
@@ -120,8 +125,8 @@ Ref<RenderBundleEncoder> RenderBundleEncoder::Create(
 }
 
 // static
-RenderBundleEncoder* RenderBundleEncoder::MakeError(DeviceBase* device) {
-    return new RenderBundleEncoder(device, ObjectBase::kError);
+RenderBundleEncoder* RenderBundleEncoder::MakeError(DeviceBase* device, const char* label) {
+    return new RenderBundleEncoder(device, ObjectBase::kError, label);
 }
 
 ObjectType RenderBundleEncoder::GetType() const {
@@ -137,7 +142,10 @@ RenderBundleBase* RenderBundleEncoder::APIFinish(const RenderBundleDescriptor* d
 
     if (GetDevice()->ConsumedError(FinishImpl(descriptor), &result, "calling %s.Finish(%s).", this,
                                    descriptor)) {
-        return RenderBundleBase::MakeError(GetDevice());
+        RenderBundleBase* errorRenderBundle =
+            RenderBundleBase::MakeError(GetDevice(), descriptor ? descriptor->label : nullptr);
+        errorRenderBundle->SetEncoderLabel(this->GetLabel());
+        return errorRenderBundle;
     }
 
     return result;

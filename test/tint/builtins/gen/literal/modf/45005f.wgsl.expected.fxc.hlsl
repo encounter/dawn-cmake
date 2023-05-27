@@ -4,14 +4,8 @@ struct modf_result_vec3_f16 {
   vector<float16_t, 3> fract;
   vector<float16_t, 3> whole;
 };
-modf_result_vec3_f16 tint_modf(vector<float16_t, 3> param_0) {
-  modf_result_vec3_f16 result;
-  result.fract = modf(param_0, result.whole);
-  return result;
-}
-
 void modf_45005f() {
-  modf_result_vec3_f16 res = tint_modf((float16_t(0.0h)).xxx);
+  modf_result_vec3_f16 res = {(float16_t(-0.5h)).xxx, (float16_t(-1.0h)).xxx};
 }
 
 struct tint_symbol {
@@ -40,6 +34,3 @@ void compute_main() {
   modf_45005f();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001B818324B80(2,10-18): error X3000: syntax error: unexpected token 'float16_t'
-

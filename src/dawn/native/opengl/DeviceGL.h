@@ -43,7 +43,8 @@ class Device final : public DeviceBase {
     static ResultOrError<Ref<Device>> Create(AdapterBase* adapter,
                                              const DeviceDescriptor* descriptor,
                                              const OpenGLFunctions& functions,
-                                             std::unique_ptr<Context> context);
+                                             std::unique_ptr<Context> context,
+                                             const TogglesState& deviceToggles);
     ~Device() override;
 
     MaybeError Initialize(const DeviceDescriptor* descriptor);
@@ -66,22 +67,22 @@ class Device final : public DeviceBase {
 
     MaybeError TickImpl() override;
 
-    ResultOrError<std::unique_ptr<StagingBufferBase>> CreateStagingBuffer(size_t size) override;
-    MaybeError CopyFromStagingToBuffer(StagingBufferBase* source,
-                                       uint64_t sourceOffset,
-                                       BufferBase* destination,
-                                       uint64_t destinationOffset,
-                                       uint64_t size) override;
+    MaybeError CopyFromStagingToBufferImpl(BufferBase* source,
+                                           uint64_t sourceOffset,
+                                           BufferBase* destination,
+                                           uint64_t destinationOffset,
+                                           uint64_t size) override;
 
-    MaybeError CopyFromStagingToTexture(const StagingBufferBase* source,
-                                        const TextureDataLayout& src,
-                                        TextureCopy* dst,
-                                        const Extent3D& copySizePixels) override;
+    MaybeError CopyFromStagingToTextureImpl(const BufferBase* source,
+                                            const TextureDataLayout& src,
+                                            const TextureCopy& dst,
+                                            const Extent3D& copySizePixels) override;
 
     uint32_t GetOptimalBytesPerRowAlignment() const override;
     uint64_t GetOptimalBufferToTextureCopyOffsetAlignment() const override;
 
     float GetTimestampPeriodInNS() const override;
+    void ForceEventualFlushOfCommands() override;
 
     class Context {
       public:
@@ -93,7 +94,8 @@ class Device final : public DeviceBase {
     Device(AdapterBase* adapter,
            const DeviceDescriptor* descriptor,
            const OpenGLFunctions& functions,
-           std::unique_ptr<Context> context);
+           std::unique_ptr<Context> context,
+           const TogglesState& deviceToggless);
 
     ResultOrError<Ref<BindGroupBase>> CreateBindGroupImpl(
         const BindGroupDescriptor* descriptor) override;
@@ -111,10 +113,8 @@ class Device final : public DeviceBase {
         ShaderModuleParseResult* parseResult,
         OwnedCompilationMessages* compilationMessages) override;
     ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
-        const SwapChainDescriptor* descriptor) override;
-    ResultOrError<Ref<NewSwapChainBase>> CreateSwapChainImpl(
         Surface* surface,
-        NewSwapChainBase* previousSwapChain,
+        SwapChainBase* previousSwapChain,
         const SwapChainDescriptor* descriptor) override;
     ResultOrError<Ref<TextureBase>> CreateTextureImpl(const TextureDescriptor* descriptor) override;
     ResultOrError<Ref<TextureViewBase>> CreateTextureViewImpl(
@@ -125,11 +125,14 @@ class Device final : public DeviceBase {
     Ref<RenderPipelineBase> CreateUninitializedRenderPipelineImpl(
         const RenderPipelineDescriptor* descriptor) override;
 
-    void InitTogglesFromDriver();
+    ResultOrError<wgpu::TextureUsage> GetSupportedSurfaceUsageImpl(
+        const Surface* surface) const override;
+
     GLenum GetBGRAInternalFormat() const;
     ResultOrError<ExecutionSerial> CheckAndUpdateCompletedSerials() override;
     void DestroyImpl() override;
     MaybeError WaitForIdleForDestruction() override;
+    bool HasPendingCommands() const override;
 
     const OpenGLFunctions mGL;
 
@@ -137,6 +140,8 @@ class Device final : public DeviceBase {
 
     GLFormatTable mFormatTable;
     std::unique_ptr<Context> mContext = nullptr;
+    // Has pending GL commands which are not associated with a fence.
+    mutable bool mHasPendingCommands = false;
 };
 
 }  // namespace dawn::native::opengl

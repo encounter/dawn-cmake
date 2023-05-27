@@ -69,7 +69,7 @@ void DumpLayers(Printer &p, std::vector<LayerExtensionList> layers, const std::v
             IndentWrapper indent(p);
 
             for (auto &layer : layers) {
-                auto v_str = VkVersionString(layer.layer_properties.specVersion);
+                std::string v_str = VulkanVersion(layer.layer_properties.specVersion);
                 auto props = layer.layer_properties;
 
                 std::string header = p.DecorateAsType(props.layerName) + " (" + props.description + ") Vulkan version " +
@@ -80,7 +80,7 @@ void DumpLayers(Printer &p, std::vector<LayerExtensionList> layers, const std::v
 
                 ArrayWrapper arr_devices(p, "Devices", gpus.size());
                 for (auto &gpu : gpus) {
-                    p.PrintKeyValue("GPU id", gpu->id, gpu->props.deviceName);
+                    p.SetValueDescription(std::string(gpu->props.deviceName)).PrintKeyValue("GPU id", gpu->id);
                     auto exts = gpu->inst.AppGetPhysicalDeviceLayerExtensions(gpu->phys_device, props.layerName);
                     DumpExtensions(p, "Layer-Device Extensions", exts);
                     p.AddNewline();
@@ -99,14 +99,14 @@ void DumpLayers(Printer &p, std::vector<LayerExtensionList> layers, const std::v
                 ObjectWrapper obj_name(p, layer.layer_properties.layerName);
                 p.SetMinKeyWidth(21);
                 p.PrintKeyString("layerName", layer.layer_properties.layerName);
-                p.PrintKeyString("version", VkVersionString(layer.layer_properties.specVersion));
+                p.PrintKeyString("version", VulkanVersion(layer.layer_properties.specVersion).str());
                 p.PrintKeyValue("implementation version", layer.layer_properties.implementationVersion);
                 p.PrintKeyString("description", layer.layer_properties.description);
                 DumpExtensions(p, "Layer Extensions", layer.extension_properties);
                 ObjectWrapper obj_devices(p, "Devices");
                 for (auto &gpu : gpus) {
                     ObjectWrapper obj_gpu(p, gpu->props.deviceName);
-                    p.PrintKeyValue("GPU id", gpu->id, gpu->props.deviceName);
+                    p.SetValueDescription(std::string(gpu->props.deviceName)).PrintKeyValue("GPU id", gpu->id);
                     auto exts = gpu->inst.AppGetPhysicalDeviceLayerExtensions(gpu->phys_device, layer.layer_properties.layerName);
                     DumpExtensions(p, "Layer-Device Extensions", exts);
                 }
@@ -295,13 +295,19 @@ void GpuDumpProps(Printer &p, AppGpu &gpu) {
     {
         ObjectWrapper obj(p, "VkPhysicalDeviceProperties");
         p.SetMinKeyWidth(17);
-        p.PrintKeyValue("apiVersion", props.apiVersion, VkVersionString(props.apiVersion));
-        p.PrintKeyValue("driverVersion", props.driverVersion, to_hex_str(props.driverVersion));
+        if (p.Type() == OutputType::json) {
+            p.PrintKeyValue("apiVersion", props.apiVersion);
+            p.PrintKeyValue("driverVersion", props.driverVersion);
+        } else {
+            p.SetValueDescription(std::to_string(props.apiVersion)).PrintKeyString("apiVersion", VulkanVersion(props.apiVersion));
+            p.SetValueDescription(std::to_string(props.driverVersion))
+                .PrintKeyString("driverVersion", gpu.GetDriverVersionString());
+        }
         p.PrintKeyString("vendorID", to_hex_str(props.vendorID));
         p.PrintKeyString("deviceID", to_hex_str(props.deviceID));
         p.PrintKeyString("deviceType", VkPhysicalDeviceTypeString(props.deviceType));
         p.PrintKeyString("deviceName", props.deviceName);
-        p.PrintKeyString("pipelineCacheUUID", to_string_16(props.pipelineCacheUUID));
+        p.PrintKeyValue("pipelineCacheUUID", props.pipelineCacheUUID);
     }
     p.AddNewline();
     DumpVkPhysicalDeviceLimits(p, "VkPhysicalDeviceLimits", gpu.props.limits);
@@ -466,34 +472,28 @@ void GpuDumpFeatures(Printer &p, AppGpu &gpu) {
     }
 }
 
-void GpuDumpFormatProperty(Printer &p, VkFormat fmt, VkFormatProperties prop) {
-    std::string name{};
-    switch (p.Type()) {
-        case OutputType::text: {
-            name = "Properties";
-            break;
-        }
-        case OutputType::html: {
-            name = VkFormatString(fmt);
-            break;
-        }
-        case OutputType::json: {
-            name = "VkFormatProperties";
-            break;
-        }
-        case OutputType::vkconfig_output: {
-            name = VkFormatString(fmt);
-            break;
+void GpuDumpTextFormatProperty(Printer &p, const AppGpu &gpu, PropFlags formats, std::vector<VkFormat> format_list,
+                               uint32_t counter) {
+    p.SetElementIndex(counter);
+    ObjectWrapper obj_common_group(p, "Common Format Group");
+    IndentWrapper indent_inner(p);
+    {
+        ArrayWrapper arr_formats(p, "Formats", format_list.size());
+        for (auto &fmt : format_list) {
+            p.SetAsType().PrintString(VkFormatString(fmt));
         }
     }
-    p.SetTitleAsType();
-    ObjectWrapper obj(p, name);
-    p.SetOpenDetails();
-    DumpVkFormatFeatureFlags(p, "linearTilingFeatures", prop.linearTilingFeatures);
-    p.SetOpenDetails();
-    DumpVkFormatFeatureFlags(p, "optimalTilingFeatures", prop.optimalTilingFeatures);
-    p.SetOpenDetails();
-    DumpVkFormatFeatureFlags(p, "bufferFeatures", prop.bufferFeatures);
+    ObjectWrapper obj(p, "Properties");
+    if (gpu.CheckPhysicalDeviceExtensionIncluded(VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME)) {
+        DumpVkFormatFeatureFlags2(p, "linearTilingFeatures", formats.props3.linearTilingFeatures);
+        DumpVkFormatFeatureFlags2(p, "optimalTilingFeatures", formats.props3.optimalTilingFeatures);
+        DumpVkFormatFeatureFlags2(p, "bufferFeatures", formats.props3.bufferFeatures);
+    } else {
+        DumpVkFormatFeatureFlags(p, "linearTilingFeatures", formats.props.linearTilingFeatures);
+        DumpVkFormatFeatureFlags(p, "optimalTilingFeatures", formats.props.optimalTilingFeatures);
+        DumpVkFormatFeatureFlags(p, "bufferFeatures", formats.props.bufferFeatures);
+    }
+    p.AddNewline();
 }
 
 void GpuDumpToolingInfo(Printer &p, AppGpu &gpu) {
@@ -519,26 +519,14 @@ void GpuDevDump(Printer &p, AppGpu &gpu) {
         int counter = 0;
         std::vector<VkFormat> unsupported_formats;
         for (auto &prop : fmtPropMap) {
-            VkFormatProperties props;
-            props.linearTilingFeatures = prop.first.linear;
-            props.optimalTilingFeatures = prop.first.optimal;
-            props.bufferFeatures = prop.first.buffer;
-            if (props.linearTilingFeatures == 0 && props.optimalTilingFeatures == 0 && props.bufferFeatures == 0) {
+            VkFormatProperties props = prop.first.props;
+            VkFormatProperties3 props3 = prop.first.props3;
+            if (props.linearTilingFeatures == 0 && props.optimalTilingFeatures == 0 && props.bufferFeatures == 0 &&
+                props3.linearTilingFeatures == 0 && props3.optimalTilingFeatures == 0 && props3.bufferFeatures == 0) {
                 unsupported_formats = prop.second;
                 continue;
             }
-
-            p.SetElementIndex(counter++);
-            ObjectWrapper obj_common_group(p, "Common Format Group");
-            IndentWrapper indent_inner(p);
-            {
-                ArrayWrapper arr_formats(p, "Formats", prop.second.size());
-                for (auto &fmt : prop.second) {
-                    p.SetAsType().PrintString(VkFormatString(fmt));
-                }
-            }
-            GpuDumpFormatProperty(p, VK_FORMAT_UNDEFINED, props);
-            p.AddNewline();
+            GpuDumpTextFormatProperty(p, gpu, prop.first, prop.second, counter++);
         }
 
         ArrayWrapper arr_unsupported_formats(p, "Unsupported Formats", unsupported_formats.size());
@@ -550,11 +538,13 @@ void GpuDevDump(Printer &p, AppGpu &gpu) {
             if (gpu.FormatRangeSupported(format)) {
                 for (int32_t fmt_counter = format.first_format; fmt_counter <= format.last_format; ++fmt_counter) {
                     VkFormat fmt = static_cast<VkFormat>(fmt_counter);
-
-                    VkFormatProperties props;
-                    gpu.inst.dll.fp_vkGetPhysicalDeviceFormatProperties(gpu.phys_device, fmt, &props);
-
-                    GpuDumpFormatProperty(p, fmt, props);
+                    auto formats = get_format_properties(gpu, fmt);
+                    p.SetTitleAsType();
+                    if (gpu.CheckPhysicalDeviceExtensionIncluded(VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME)) {
+                        DumpVkFormatProperties3(p, VkFormatString(fmt), formats.props3);
+                    } else {
+                        DumpVkFormatProperties(p, VkFormatString(fmt), formats.props);
+                    }
                 }
             }
         }
@@ -607,11 +597,12 @@ void DumpGpuProfileCapabilities(Printer &p, AppGpu &gpu) {
             {
                 ObjectWrapper props_obj(p, "VkPhysicalDeviceProperties");
                 auto props = gpu.GetDeviceProperties();
-                p.PrintKeyValue("apiVersion", props.apiVersion, VkVersionString(props.apiVersion));
+                p.PrintKeyValue("apiVersion", props.apiVersion);
                 p.PrintKeyValue("deviceID", props.deviceID);
                 p.PrintKeyString("deviceName", props.deviceName);
                 p.PrintKeyString("deviceType", std::string("VK_") + VkPhysicalDeviceTypeString(props.deviceType));
                 p.PrintKeyValue("driverVersion", props.driverVersion);
+
                 DumpVkPhysicalDeviceLimits(p, "VkPhysicalDeviceLimits", gpu.props.limits);
                 {
                     ArrayWrapper arr(p, "pipelineCacheUUID");
@@ -631,20 +622,21 @@ void DumpGpuProfileCapabilities(Printer &p, AppGpu &gpu) {
                 if (gpu.FormatRangeSupported(format)) {
                     for (int32_t fmt_counter = format.first_format; fmt_counter <= format.last_format; ++fmt_counter) {
                         VkFormat fmt = static_cast<VkFormat>(fmt_counter);
-
-                        VkFormatProperties props;
-                        gpu.inst.dll.fp_vkGetPhysicalDeviceFormatProperties(gpu.phys_device, fmt, &props);
+                        auto formats = get_format_properties(gpu, fmt);
 
                         // don't print format properties that are unsupported
-                        if ((props.linearTilingFeatures || props.optimalTilingFeatures || props.bufferFeatures) == 0) continue;
+                        if (formats.props.linearTilingFeatures == 0 && formats.props.optimalTilingFeatures == 0 &&
+                            formats.props.bufferFeatures == 0 && formats.props3.linearTilingFeatures == 0 &&
+                            formats.props3.optimalTilingFeatures == 0 && formats.props3.bufferFeatures == 0)
+                            continue;
 
                         ObjectWrapper format_obj(p, std::string("VK_") + VkFormatString(fmt));
                         {
-                            GpuDumpFormatProperty(p, fmt, props);
-
+                            // Want to explicitly list VkFormatProperties in addition to VkFormatProperties3 if available
+                            DumpVkFormatProperties(p, "VkFormatProperties", formats.props);
                             VkFormatProperties2 format_props2{};
                             format_props2.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
-                            format_props2.formatProperties = props;
+                            format_props2.formatProperties = formats.props;
                             std::unique_ptr<format_properties2_chain> chain_for_format_props2;
                             setup_format_properties2_chain(format_props2, chain_for_format_props2);
                             gpu.inst.ext_funcs.vkGetPhysicalDeviceFormatProperties2KHR(gpu.phys_device, fmt, &format_props2);
@@ -718,7 +710,7 @@ void PrintProfileBaseInfo(Printer &p, const std::string &device_name, uint32_t a
                           const std::vector<std::string> &capabilities) {
     ObjectWrapper vk_info(p, device_name);
     p.PrintKeyValue("version", 1);
-    p.PrintKeyString("api-version", VkVersionString(apiVersion));
+    p.PrintKeyString("api-version", VulkanVersion(apiVersion).str());
     p.PrintKeyString("label", device_label);
     p.PrintKeyString("description", "Exported from vulkaninfo");
     { ObjectWrapper contributors(p, "contributors"); }
@@ -742,9 +734,9 @@ void PrintProfileBaseInfo(Printer &p, const std::string &device_name, uint32_t a
 void DumpGpuProfileInfo(Printer &p, AppGpu &gpu) {
     ObjectWrapper profiles(p, "profiles");
 
-    std::string device_label = std::string(gpu.props.deviceName) + " driver " + VkVersionString(gpu.props.driverVersion);
+    std::string device_label = std::string(gpu.props.deviceName) + " driver " + gpu.GetDriverVersionString();
     std::string device_name =
-        std::string("VP_VULKANINFO_") + std::string(gpu.props.deviceName) + "_" + VkVersionString(gpu.props.driverVersion);
+        std::string("VP_VULKANINFO_") + std::string(gpu.props.deviceName) + "_" + gpu.GetDriverVersionString();
     ;
     for (auto &c : device_name) {
         if (c == ' ' || c == '.') c = '_';
@@ -781,10 +773,10 @@ void DumpSummaryInstance(Printer &p, AppInstance &inst) {
         auto props = layer.layer_properties;
         layer_name_max = std::max(layer_name_max, strlen(props.layerName));
         layer_desc_max = std::max(layer_desc_max, strlen(props.description));
-        layer_version_max = std::max(layer_version_max, VkVersionString(layer.layer_properties.specVersion).size());
+        layer_version_max = std::max(layer_version_max, VulkanVersion(layer.layer_properties.specVersion).str().size());
     }
     for (auto &layer : inst.global_layers) {
-        auto v_str = VkVersionString(layer.layer_properties.specVersion);
+        auto v_str = VulkanVersion(layer.layer_properties.specVersion).str();
         auto props = layer.layer_properties;
 
         auto name_padding = std::string(layer_name_max - strlen(props.layerName), ' ');
@@ -800,32 +792,26 @@ void DumpSummaryGPU(Printer &p, AppGpu &gpu) {
     ObjectWrapper obj(p, "GPU" + std::to_string(gpu.id));
     p.SetMinKeyWidth(18);
     auto props = gpu.GetDeviceProperties();
-    p.PrintKeyValue("apiVersion", props.apiVersion, VkVersionString(props.apiVersion));
-    p.PrintKeyValue("driverVersion", props.driverVersion, to_hex_str(props.driverVersion));
+    p.PrintKeyValue("apiVersion", VulkanVersion(props.apiVersion));
+    if (gpu.found_driver_props) {
+        p.PrintKeyString("driverVersion", gpu.GetDriverVersionString());
+    } else {
+        p.PrintKeyValue("driverVersion", props.driverVersion);
+    }
     p.PrintKeyString("vendorID", to_hex_str(props.vendorID));
     p.PrintKeyString("deviceID", to_hex_str(props.deviceID));
     p.PrintKeyString("deviceType", VkPhysicalDeviceTypeString(props.deviceType));
     p.PrintKeyString("deviceName", props.deviceName);
 
-    if (gpu.inst.CheckExtensionEnabled(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) &&
-        (gpu.CheckPhysicalDeviceExtensionIncluded(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME) || gpu.api_version.minor >= 2)) {
-        void *place = gpu.props2.pNext;
-        while (place) {
-            VkBaseOutStructure *structure = static_cast<VkBaseOutStructure *>(place);
-            if (structure->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES) {
-                VkPhysicalDeviceDriverProperties *driver_props = reinterpret_cast<VkPhysicalDeviceDriverProperties *>(structure);
-                DumpVkDriverId(p, "driverID", driver_props->driverID);
-                p.PrintKeyString("driverName", driver_props->driverName);
-                p.PrintKeyString("driverInfo", driver_props->driverInfo);
-                p.PrintKeyString("conformanceVersion", VkConformanceVersionString(driver_props->conformanceVersion));
-            }
-            if (structure->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES) {
-                VkPhysicalDeviceIDProperties *device_id_props = reinterpret_cast<VkPhysicalDeviceIDProperties *>(structure);
-                p.PrintKeyString("deviceUUID", to_string_16(device_id_props->deviceUUID));
-                p.PrintKeyString("driverUUID", to_string_16(device_id_props->driverUUID));
-            }
-            place = structure->pNext;
-        }
+    if (gpu.found_driver_props) {
+        DumpVkDriverId(p, "driverID", gpu.driver_props.driverID);
+        p.PrintKeyString("driverName", gpu.driver_props.driverName);
+        p.PrintKeyString("driverInfo", gpu.driver_props.driverInfo);
+        p.PrintKeyValue("conformanceVersion", gpu.driver_props.conformanceVersion);
+    }
+    if (gpu.found_device_id_props) {
+        p.PrintKeyValue("deviceUUID", gpu.device_id_props.deviceUUID);
+        p.PrintKeyValue("driverUUID", gpu.device_id_props.driverUUID);
     }
 }
 
@@ -986,7 +972,7 @@ PrinterCreateDetails get_printer_create_details(ParsedResults &parse_data, AppIn
                 std::string("{\n\t\"$schema\": ") + "\"https://schema.khronos.org/vulkan/profiles-0.8-latest.json\"";
             if (parse_data.filename.empty()) {
                 create.file_name = std::string("VP_VULKANINFO_") + std::string(selected_gpu.props.deviceName) + "_" +
-                                   VkVersionString(selected_gpu.props.driverVersion);
+                                   selected_gpu.GetDriverVersionString();
                 for (auto &c : create.file_name) {
                     if (c == ' ' || c == '.') c = '_';
                 }
@@ -995,7 +981,7 @@ PrinterCreateDetails get_printer_create_details(ParsedResults &parse_data, AppIn
             break;
         case (OutputCategory::vkconfig_output):
             create.output_type = OutputType::vkconfig_output;
-            create.start_string = "{\n\t\"Vulkan Instance Version\": \"" + VkVersionString(inst.vk_version) + "\"";
+            create.start_string = "{\n\t\"Vulkan Instance Version\": \"" + VulkanVersion(inst.vk_version).str() + "\"";
             break;
     }
     return create;
@@ -1103,6 +1089,12 @@ int main(int argc, char **argv) {
             surface_extension.surface = surface_extension.create_surface(instance);
             for (auto &phys_device : phys_devices) {
                 try {
+                    // check if the surface is supported by the physical device before adding it to the list
+                    VkBool32 supported = VK_FALSE;
+                    VkResult err = instance.ext_funcs.vkGetPhysicalDeviceSurfaceSupportKHR(phys_device, 0,
+                                                                                           surface_extension.surface, &supported);
+                    if (err != VK_SUCCESS || supported == VK_FALSE) continue;
+
                     surfaces.push_back(std::unique_ptr<AppSurface>(new AppSurface(instance, phys_device, surface_extension)));
                 } catch (std::exception &e) {
                     std::cerr << "ERROR while creating surface for extension " << surface_extension.name << " : " << e.what()
@@ -1147,6 +1139,8 @@ int main(int argc, char **argv) {
 
         RunPrinter(*(printer.get()), parse_data, instance, gpus, surfaces);
 
+        // Call the printer's destructor before the file handle gets closed
+        printer.reset(nullptr);
 #if defined(VULKANINFO_WSI_ENABLED)
         for (auto &surface_extension : instance.surface_extensions) {
             AppDestroySurface(instance, surface_extension.surface);
@@ -1160,9 +1154,10 @@ int main(int argc, char **argv) {
             printer->FinishOutput();
         }
         return_code = 1;
+
+        // Call the printer's destructor before the file handle gets closed
+        printer.reset(nullptr);
     }
-    // Call the printer's destructor before the file handle gets closed
-    printer.reset(nullptr);
 
 #ifdef _WIN32
     if (parse_data.output_category == OutputCategory::text && !parse_data.print_to_file) wait_for_console_destroy();

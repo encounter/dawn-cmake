@@ -22,20 +22,22 @@ TEST_F(ParserImplTest, SwitchStmt_WithoutDefault) {
   case 1: {}
   case 2: {}
 })");
-    auto e = p->switch_statement();
+    ParserImpl::AttributeList attrs;
+    auto e = p->switch_statement(attrs);
     EXPECT_TRUE(e.matched);
     EXPECT_FALSE(e.errored);
     EXPECT_FALSE(p->has_error()) << p->error();
     ASSERT_NE(e.value, nullptr);
     ASSERT_TRUE(e->Is<ast::SwitchStatement>());
     ASSERT_EQ(e->body.Length(), 2u);
-    EXPECT_FALSE(e->body[0]->IsDefault());
-    EXPECT_FALSE(e->body[1]->IsDefault());
+    EXPECT_FALSE(e->body[0]->ContainsDefault());
+    EXPECT_FALSE(e->body[1]->ContainsDefault());
 }
 
 TEST_F(ParserImplTest, SwitchStmt_Empty) {
     auto p = parser("switch a { }");
-    auto e = p->switch_statement();
+    ParserImpl::AttributeList attrs;
+    auto e = p->switch_statement(attrs);
     EXPECT_TRUE(e.matched);
     EXPECT_FALSE(e.errored);
     EXPECT_FALSE(p->has_error()) << p->error();
@@ -50,7 +52,8 @@ TEST_F(ParserImplTest, SwitchStmt_DefaultInMiddle) {
   default: {}
   case 2: {}
 })");
-    auto e = p->switch_statement();
+    ParserImpl::AttributeList attrs;
+    auto e = p->switch_statement(attrs);
     EXPECT_TRUE(e.matched);
     EXPECT_FALSE(e.errored);
     EXPECT_FALSE(p->has_error()) << p->error();
@@ -58,14 +61,31 @@ TEST_F(ParserImplTest, SwitchStmt_DefaultInMiddle) {
     ASSERT_TRUE(e->Is<ast::SwitchStatement>());
 
     ASSERT_EQ(e->body.Length(), 3u);
-    ASSERT_FALSE(e->body[0]->IsDefault());
-    ASSERT_TRUE(e->body[1]->IsDefault());
-    ASSERT_FALSE(e->body[2]->IsDefault());
+    ASSERT_FALSE(e->body[0]->ContainsDefault());
+    ASSERT_TRUE(e->body[1]->ContainsDefault());
+    ASSERT_FALSE(e->body[2]->ContainsDefault());
+}
+
+TEST_F(ParserImplTest, SwitchStmt_Default_Mixed) {
+    auto p = parser(R"(switch a {
+  case 1, default, 2: {}
+})");
+    ParserImpl::AttributeList attrs;
+    auto e = p->switch_statement(attrs);
+    EXPECT_TRUE(e.matched);
+    EXPECT_FALSE(e.errored);
+    EXPECT_FALSE(p->has_error()) << p->error();
+    ASSERT_NE(e.value, nullptr);
+    ASSERT_TRUE(e->Is<ast::SwitchStatement>());
+
+    ASSERT_EQ(e->body.Length(), 1u);
+    ASSERT_TRUE(e->body[0]->ContainsDefault());
 }
 
 TEST_F(ParserImplTest, SwitchStmt_WithParens) {
     auto p = parser("switch(a+b) { }");
-    auto e = p->switch_statement();
+    ParserImpl::AttributeList attrs;
+    auto e = p->switch_statement(attrs);
     EXPECT_TRUE(e.matched);
     EXPECT_FALSE(e.errored);
     EXPECT_FALSE(p->has_error()) << p->error();
@@ -74,9 +94,40 @@ TEST_F(ParserImplTest, SwitchStmt_WithParens) {
     ASSERT_EQ(e->body.Length(), 0u);
 }
 
+TEST_F(ParserImplTest, SwitchStmt_WithAttributes) {
+    auto p = parser("@diagnostic(off, derivative_uniformity) switch a { default{} }");
+    auto a = p->attribute_list();
+    auto e = p->switch_statement(a.value);
+    EXPECT_TRUE(e.matched);
+    EXPECT_FALSE(e.errored);
+    EXPECT_FALSE(p->has_error()) << p->error();
+    ASSERT_NE(e.value, nullptr);
+    ASSERT_TRUE(e->Is<ast::SwitchStatement>());
+
+    EXPECT_TRUE(a->IsEmpty());
+    ASSERT_EQ(e->attributes.Length(), 1u);
+    EXPECT_TRUE(e->attributes[0]->Is<ast::DiagnosticAttribute>());
+}
+
+TEST_F(ParserImplTest, SwitchStmt_WithBodyAttributes) {
+    auto p = parser("switch a @diagnostic(off, derivative_uniformity) { default{} }");
+    ParserImpl::AttributeList attrs;
+    auto e = p->switch_statement(attrs);
+    EXPECT_TRUE(e.matched);
+    EXPECT_FALSE(e.errored);
+    EXPECT_FALSE(p->has_error()) << p->error();
+    ASSERT_NE(e.value, nullptr);
+    ASSERT_TRUE(e->Is<ast::SwitchStatement>());
+
+    EXPECT_TRUE(e->attributes.IsEmpty());
+    ASSERT_EQ(e->body_attributes.Length(), 1u);
+    EXPECT_TRUE(e->body_attributes[0]->Is<ast::DiagnosticAttribute>());
+}
+
 TEST_F(ParserImplTest, SwitchStmt_InvalidExpression) {
     auto p = parser("switch a=b {}");
-    auto e = p->switch_statement();
+    ParserImpl::AttributeList attrs;
+    auto e = p->switch_statement(attrs);
     EXPECT_FALSE(e.matched);
     EXPECT_TRUE(e.errored);
     EXPECT_EQ(e.value, nullptr);
@@ -86,7 +137,8 @@ TEST_F(ParserImplTest, SwitchStmt_InvalidExpression) {
 
 TEST_F(ParserImplTest, SwitchStmt_MissingExpression) {
     auto p = parser("switch {}");
-    auto e = p->switch_statement();
+    ParserImpl::AttributeList attrs;
+    auto e = p->switch_statement(attrs);
     EXPECT_FALSE(e.matched);
     EXPECT_TRUE(e.errored);
     EXPECT_EQ(e.value, nullptr);
@@ -96,7 +148,8 @@ TEST_F(ParserImplTest, SwitchStmt_MissingExpression) {
 
 TEST_F(ParserImplTest, SwitchStmt_MissingBracketLeft) {
     auto p = parser("switch a }");
-    auto e = p->switch_statement();
+    ParserImpl::AttributeList attrs;
+    auto e = p->switch_statement(attrs);
     EXPECT_FALSE(e.matched);
     EXPECT_TRUE(e.errored);
     EXPECT_EQ(e.value, nullptr);
@@ -106,7 +159,8 @@ TEST_F(ParserImplTest, SwitchStmt_MissingBracketLeft) {
 
 TEST_F(ParserImplTest, SwitchStmt_MissingBracketRight) {
     auto p = parser("switch a {");
-    auto e = p->switch_statement();
+    ParserImpl::AttributeList attrs;
+    auto e = p->switch_statement(attrs);
     EXPECT_FALSE(e.matched);
     EXPECT_TRUE(e.errored);
     EXPECT_EQ(e.value, nullptr);
@@ -118,12 +172,13 @@ TEST_F(ParserImplTest, SwitchStmt_InvalidBody) {
     auto p = parser(R"(switch a {
   case: {}
 })");
-    auto e = p->switch_statement();
+    ParserImpl::AttributeList attrs;
+    auto e = p->switch_statement(attrs);
     EXPECT_FALSE(e.matched);
     EXPECT_TRUE(e.errored);
     EXPECT_EQ(e.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "2:7: unable to parse case selectors");
+    EXPECT_EQ(p->error(), "2:7: expected case selector expression or `default`");
 }
 
 }  // namespace

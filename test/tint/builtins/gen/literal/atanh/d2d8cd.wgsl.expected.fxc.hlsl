@@ -1,11 +1,10 @@
 SKIP: FAILED
 
-float16_t tint_atanh(float16_t x) {
-  return (log(((float16_t(1.0h) + x) / (float16_t(1.0h) - x))) * float16_t(0.5h));
-}
+RWByteAddressBuffer prevent_dce : register(u0, space2);
 
 void atanh_d2d8cd() {
-  float16_t res = tint_atanh(float16_t(0.0h));
+  float16_t res = float16_t(0.548828125h);
+  prevent_dce.Store<float16_t>(0u, res);
 }
 
 struct tint_symbol {
@@ -34,6 +33,3 @@ void compute_main() {
   atanh_d2d8cd();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001760B391820(1,1-9): error X3000: unrecognized identifier 'float16_t'
-

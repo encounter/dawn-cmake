@@ -16,9 +16,11 @@
 #define SRC_TINT_SEM_FUNCTION_H_
 
 #include <array>
+#include <optional>
 #include <utility>
 #include <vector>
 
+#include "src/tint/ast/diagnostic_control.h"
 #include "src/tint/ast/variable.h"
 #include "src/tint/sem/call.h"
 #include "src/tint/utils/unique_vector.h"
@@ -38,35 +40,28 @@ class Variable;
 
 namespace tint::sem {
 
-/// WorkgroupDimension describes the size of a single dimension of an entry
-/// point's workgroup size.
-struct WorkgroupDimension {
-    /// The size of this dimension.
-    uint32_t value;
-    /// A pipeline-overridable constant that overrides the size, or nullptr if
-    /// this dimension is not overridable.
-    const ast::Variable* overridable_const = nullptr;
-};
-
 /// WorkgroupSize is a three-dimensional array of WorkgroupDimensions.
-using WorkgroupSize = std::array<WorkgroupDimension, 3>;
+/// Each dimension is a std::optional as a workgroup size can be a const-expression or
+/// override-expression. Override expressions are not known at compilation time, so these will be
+/// std::nullopt.
+using WorkgroupSize = std::array<std::optional<uint32_t>, 3>;
 
 /// Function holds the semantic information for function nodes.
-class Function final : public Castable<Function, CallTarget> {
+class Function final : public utils::Castable<Function, CallTarget> {
   public:
     /// A vector of [Variable*, sem::BindingPoint] pairs
     using VariableBindings = std::vector<std::pair<const Variable*, sem::BindingPoint>>;
 
     /// Constructor
     /// @param declaration the ast::Function
-    /// @param return_type the return type of the function
-    /// @param parameters the parameters to the function
-    Function(const ast::Function* declaration,
-             Type* return_type,
-             utils::VectorRef<Parameter*> parameters);
+    explicit Function(const ast::Function* declaration);
 
     /// Destructor
     ~Function() override;
+
+    /// Sets the function's return location
+    /// @param return_location the location value
+    void SetReturnLocation(uint32_t return_location) { return_location_ = return_location; }
 
     /// @returns the ast::Function declaration
     const ast::Function* Declaration() const { return declaration_; }
@@ -139,13 +134,11 @@ class Function final : public Castable<Function, CallTarget> {
 
     /// @returns the list of texture/sampler pairs that this function uses
     /// (directly or indirectly).
-    const utils::Vector<VariablePair, 8>& TextureSamplerPairs() const {
-        return texture_sampler_pairs_;
-    }
+    utils::VectorRef<VariablePair> TextureSamplerPairs() const { return texture_sampler_pairs_; }
 
     /// @returns the list of direct calls to functions / builtins made by this
     /// function
-    std::vector<const Call*> DirectCallStatements() const { return direct_calls_; }
+    std::vector<const Call*> DirectCalls() const { return direct_calls_; }
 
     /// Adds a record of the direct function / builtin calls made by this
     /// function
@@ -164,7 +157,7 @@ class Function final : public Castable<Function, CallTarget> {
         return nullptr;
     }
 
-    /// @returns the list of callsites of this function
+    /// @returns the list of callsites to this function
     std::vector<const Call*> CallSites() const { return callsites_; }
 
     /// Adds a record of a callsite to this function
@@ -226,14 +219,14 @@ class Function final : public Castable<Function, CallTarget> {
     /// must be decorated with both binding and group attributes.
     /// @param type the type of the variables to find
     /// @returns the referenced variables
-    VariableBindings TransitivelyReferencedVariablesOfType(const tint::TypeInfo* type) const;
+    VariableBindings TransitivelyReferencedVariablesOfType(const tint::utils::TypeInfo* type) const;
 
     /// Retrieves any referenced variables of the given type. Note, the variables
     /// must be decorated with both binding and group attributes.
     /// @returns the referenced variables
     template <typename T>
     VariableBindings TransitivelyReferencedVariablesOfType() const {
-        return TransitivelyReferencedVariablesOfType(&TypeInfo::Of<T>());
+        return TransitivelyReferencedVariablesOfType(&utils::TypeInfo::Of<T>());
     }
 
     /// Checks if the given entry point is an ancestor
@@ -241,12 +234,17 @@ class Function final : public Castable<Function, CallTarget> {
     /// @returns true if `sym` is an ancestor entry point of this function
     bool HasAncestorEntryPoint(Symbol sym) const;
 
-    /// Sets that this function has a discard statement
-    void SetHasDiscard() { has_discard_ = true; }
+    /// Records the first discard statement in the function
+    /// @param stmt the `discard` statement.
+    void SetDiscardStatement(const Statement* stmt) {
+        if (!discard_stmt_) {
+            discard_stmt_ = stmt;
+        }
+    }
 
-    /// Returns true if this function has a discard statement
-    /// @returns true if this function has a discard statement
-    bool HasDiscard() const { return has_discard_; }
+    /// @returns the first discard statement for the function, or nullptr if the function does not
+    /// use `discard`.
+    const Statement* DiscardStatement() const { return discard_stmt_; }
 
     /// @return the behaviors of this function
     const sem::Behaviors& Behaviors() const { return behaviors_; }
@@ -254,11 +252,26 @@ class Function final : public Castable<Function, CallTarget> {
     /// @return the behaviors of this function
     sem::Behaviors& Behaviors() { return behaviors_; }
 
+    /// @return the location for the return, if provided
+    std::optional<uint32_t> ReturnLocation() const { return return_location_; }
+
+    /// Modifies the severity of a specific diagnostic rule for this function.
+    /// @param rule the diagnostic rule
+    /// @param severity the new diagnostic severity
+    void SetDiagnosticSeverity(builtin::DiagnosticRule rule, builtin::DiagnosticSeverity severity) {
+        diagnostic_severities_[rule] = severity;
+    }
+
+    /// @returns the diagnostic severity modifications applied to this function
+    const builtin::DiagnosticRuleSeverities& DiagnosticSeverities() const {
+        return diagnostic_severities_;
+    }
+
   private:
     Function(const Function&) = delete;
     Function(Function&&) = delete;
 
-    VariableBindings TransitivelyReferencedSamplerVariablesImpl(ast::SamplerKind kind) const;
+    VariableBindings TransitivelyReferencedSamplerVariablesImpl(type::SamplerKind kind) const;
     VariableBindings TransitivelyReferencedSampledTextureVariablesImpl(bool multisampled) const;
 
     const ast::Function* const declaration_;
@@ -272,8 +285,11 @@ class Function final : public Castable<Function, CallTarget> {
     std::vector<const Call*> direct_calls_;
     std::vector<const Call*> callsites_;
     std::vector<const Function*> ancestor_entry_points_;
-    bool has_discard_ = false;
+    const Statement* discard_stmt_ = nullptr;
     sem::Behaviors behaviors_{sem::Behavior::kNext};
+    builtin::DiagnosticRuleSeverities diagnostic_severities_;
+
+    std::optional<uint32_t> return_location_;
 };
 
 }  // namespace tint::sem

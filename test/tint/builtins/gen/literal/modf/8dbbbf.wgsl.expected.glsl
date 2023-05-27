@@ -6,15 +6,9 @@ struct modf_result_f16 {
   float16_t whole;
 };
 
-modf_result_f16 tint_modf(float16_t param_0) {
-  modf_result_f16 result;
-  result.fract = modf(param_0, result.whole);
-  return result;
-}
-
 
 void modf_8dbbbf() {
-  modf_result_f16 res = tint_modf(0.0hf);
+  modf_result_f16 res = modf_result_f16(-0.5hf, -1.0hf);
 }
 
 vec4 vertex_main() {
@@ -32,22 +26,16 @@ void main() {
 }
 #version 310 es
 #extension GL_AMD_gpu_shader_half_float : require
-precision mediump float;
+precision highp float;
 
 struct modf_result_f16 {
   float16_t fract;
   float16_t whole;
 };
 
-modf_result_f16 tint_modf(float16_t param_0) {
-  modf_result_f16 result;
-  result.fract = modf(param_0, result.whole);
-  return result;
-}
-
 
 void modf_8dbbbf() {
-  modf_result_f16 res = tint_modf(0.0hf);
+  modf_result_f16 res = modf_result_f16(-0.5hf, -1.0hf);
 }
 
 void fragment_main() {
@@ -66,15 +54,9 @@ struct modf_result_f16 {
   float16_t whole;
 };
 
-modf_result_f16 tint_modf(float16_t param_0) {
-  modf_result_f16 result;
-  result.fract = modf(param_0, result.whole);
-  return result;
-}
-
 
 void modf_8dbbbf() {
-  modf_result_f16 res = tint_modf(0.0hf);
+  modf_result_f16 res = modf_result_f16(-0.5hf, -1.0hf);
 }
 
 void compute_main() {

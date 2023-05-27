@@ -24,11 +24,10 @@
 
 // fn textureStore(texture: texture_storage_3d<r32sint, write>, coords: vec3<i32>, value: vec4<i32>)
 fn textureStore_eb78b9() {
-  var arg_1 = vec3<i32>();
-  var arg_2 = vec4<i32>();
+  var arg_1 = vec3<i32>(1i);
+  var arg_2 = vec4<i32>(1i);
   textureStore(arg_0, arg_1, arg_2);
 }
-
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {
   textureStore_eb78b9();

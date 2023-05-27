@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "gmock/gmock.h"
 #include "src/tint/number.h"
 #include "src/tint/writer/glsl/test_helper.h"
+
+#include "gmock/gmock.h"
 
 using ::testing::HasSubstr;
 using namespace tint::number_suffixes;  // NOLINT
@@ -33,12 +34,12 @@ void TestAlign(ProgramBuilder* ctx) {
     // @group(0) @binding(0) var<storage, read_write> nephews : Nephews;
     auto* nephews = ctx->Structure(
         "Nephews", utils::Vector{
-                       ctx->Member("huey", ctx->ty.f32(), utils::Vector{ctx->MemberAlign(256_u)}),
-                       ctx->Member("dewey", ctx->ty.f32(), utils::Vector{ctx->MemberAlign(256_u)}),
-                       ctx->Member("louie", ctx->ty.f32(), utils::Vector{ctx->MemberAlign(256_u)}),
+                       ctx->Member("huey", ctx->ty.f32(), utils::Vector{ctx->MemberAlign(256_i)}),
+                       ctx->Member("dewey", ctx->ty.f32(), utils::Vector{ctx->MemberAlign(256_i)}),
+                       ctx->Member("louie", ctx->ty.f32(), utils::Vector{ctx->MemberAlign(256_i)}),
                    });
-    ctx->GlobalVar("nephews", ctx->ty.Of(nephews), ast::StorageClass::kStorage, ctx->Binding(0),
-                   ctx->Group(0));
+    ctx->GlobalVar("nephews", ctx->ty.Of(nephews), builtin::AddressSpace::kStorage,
+                   ctx->Binding(0_a), ctx->Group(0_a));
 }
 
 TEST_F(GlslGeneratorImplTest_StorageBuffer, Align) {
@@ -48,7 +49,8 @@ TEST_F(GlslGeneratorImplTest_StorageBuffer, Align) {
 
     // TODO(crbug.com/tint/1421) offsets do not currently work on GLSL ES.
     // They will likely require manual padding.
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
 
 struct Nephews {
@@ -57,11 +59,12 @@ struct Nephews {
   float louie;
 };
 
-layout(binding = 0, std430) buffer Nephews_1 {
+layout(binding = 0, std430) buffer Nephews_ssbo {
   float huey;
   float dewey;
   float louie;
 } nephews;
+
 )");
 }
 
@@ -69,8 +72,8 @@ TEST_F(GlslGeneratorImplTest_StorageBuffer, Align_Desktop) {
     TestAlign(this);
 
     GeneratorImpl& gen = Build(Version(Version::Standard::kDesktop, 4, 4));
-
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 440
 
 struct Nephews {
@@ -79,11 +82,12 @@ struct Nephews {
   float louie;
 };
 
-layout(binding = 0, std430) buffer Nephews_1 {
+layout(binding = 0, std430) buffer Nephews_ssbo {
   float huey;
-  layout(offset=256) float dewey;
-  layout(offset=512) float louie;
+  float dewey;
+  float louie;
 } nephews;
+
 )");
 }
 

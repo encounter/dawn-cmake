@@ -15,6 +15,7 @@
 #include "dawn/native/opengl/TextureGL.h"
 
 #include <limits>
+#include <utility>
 
 #include "dawn/common/Assert.h"
 #include "dawn/common/Constants.h"
@@ -31,6 +32,7 @@ namespace {
 
 GLenum TargetForTexture(const TextureDescriptor* descriptor) {
     switch (descriptor->dimension) {
+        case wgpu::TextureDimension::e1D:
         case wgpu::TextureDimension::e2D:
             if (descriptor->size.depthOrArrayLayers > 1) {
                 ASSERT(descriptor->sampleCount == 1);
@@ -45,9 +47,6 @@ GLenum TargetForTexture(const TextureDescriptor* descriptor) {
         case wgpu::TextureDimension::e3D:
             ASSERT(descriptor->sampleCount == 1);
             return GL_TEXTURE_3D;
-
-        case wgpu::TextureDimension::e1D:
-            break;
     }
     UNREACHABLE();
 }
@@ -56,6 +55,7 @@ GLenum TargetForTextureViewDimension(wgpu::TextureViewDimension dimension,
                                      uint32_t arrayLayerCount,
                                      uint32_t sampleCount) {
     switch (dimension) {
+        case wgpu::TextureViewDimension::e1D:
         case wgpu::TextureViewDimension::e2D:
             return (sampleCount > 1) ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
         case wgpu::TextureViewDimension::e2DArray:
@@ -76,7 +76,6 @@ GLenum TargetForTextureViewDimension(wgpu::TextureViewDimension dimension,
         case wgpu::TextureViewDimension::e3D:
             return GL_TEXTURE_3D;
 
-        case wgpu::TextureViewDimension::e1D:
         case wgpu::TextureViewDimension::Undefined:
             break;
     }
@@ -172,6 +171,16 @@ void AllocateTexture(const OpenGLFunctions& gl,
 
 // Texture
 
+// static
+ResultOrError<Ref<Texture>> Texture::Create(Device* device, const TextureDescriptor* descriptor) {
+    Ref<Texture> texture = AcquireRef(new Texture(device, descriptor));
+    if (device->IsToggleEnabled(Toggle::NonzeroClearResourcesOnCreationForTesting)) {
+        DAWN_TRY(
+            texture->ClearTexture(texture->GetAllSubresources(), TextureBase::ClearValue::NonZero));
+    }
+    return std::move(texture);
+}
+
 Texture::Texture(Device* device, const TextureDescriptor* descriptor)
     : Texture(device, descriptor, 0, TextureState::OwnedInternal) {
     const OpenGLFunctions& gl = device->GetGL();
@@ -188,11 +197,6 @@ Texture::Texture(Device* device, const TextureDescriptor* descriptor)
     // The texture is not complete if it uses mipmapping and not all levels up to
     // MAX_LEVEL have been defined.
     gl.TexParameteri(mTarget, GL_TEXTURE_MAX_LEVEL, levels - 1);
-
-    if (GetDevice()->IsToggleEnabled(Toggle::NonzeroClearResourcesOnCreationForTesting)) {
-        GetDevice()->ConsumedError(
-            ClearTexture(GetAllSubresources(), TextureBase::ClearValue::NonZero));
-    }
 }
 
 void Texture::Touch() {
@@ -289,6 +293,7 @@ MaybeError Texture::ClearTexture(const SubresourceRange& range,
             for (uint32_t level = range.baseMipLevel; level < range.baseMipLevel + range.levelCount;
                  ++level) {
                 switch (GetDimension()) {
+                    case wgpu::TextureDimension::e1D:
                     case wgpu::TextureDimension::e2D:
                         if (GetArrayLayers() == 1) {
                             Aspect aspectsToClear = Aspect::None;
@@ -305,7 +310,6 @@ MaybeError Texture::ClearTexture(const SubresourceRange& range,
                             if (aspectsToClear == Aspect::None) {
                                 continue;
                             }
-
                             gl.FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, attachment, GetGLTarget(),
                                                     GetHandle(), static_cast<GLint>(level));
                             DoClear(aspectsToClear);
@@ -336,7 +340,6 @@ MaybeError Texture::ClearTexture(const SubresourceRange& range,
                         }
                         break;
 
-                    case wgpu::TextureDimension::e1D:
                     case wgpu::TextureDimension::e3D:
                         UNREACHABLE();
                 }
@@ -369,7 +372,7 @@ MaybeError Texture::ClearTexture(const SubresourceRange& range,
             constexpr std::array<GLbyte, MAX_TEXEL_SIZE> kClearColorDataBytes255 = {
                 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
-            wgpu::TextureComponentType baseType = GetFormat().GetAspectInfo(Aspect::Color).baseType;
+            TextureComponentType baseType = GetFormat().GetAspectInfo(Aspect::Color).baseType;
 
             const GLFormat& glFormat = GetGLFormat();
             for (uint32_t level = range.baseMipLevel; level < range.baseMipLevel + range.levelCount;
@@ -406,21 +409,21 @@ MaybeError Texture::ClearTexture(const SubresourceRange& range,
 
                     auto DoClear = [&]() {
                         switch (baseType) {
-                            case wgpu::TextureComponentType::Float: {
+                            case TextureComponentType::Float: {
                                 gl.ClearBufferfv(GL_COLOR, 0,
                                                  clearValue == TextureBase::ClearValue::Zero
                                                      ? kClearColorDataFloat0.data()
                                                      : kClearColorDataFloat1.data());
                                 break;
                             }
-                            case wgpu::TextureComponentType::Uint: {
+                            case TextureComponentType::Uint: {
                                 gl.ClearBufferuiv(GL_COLOR, 0,
                                                   clearValue == TextureBase::ClearValue::Zero
                                                       ? kClearColorDataUint0.data()
                                                       : kClearColorDataUint1.data());
                                 break;
                             }
-                            case wgpu::TextureComponentType::Sint: {
+                            case TextureComponentType::Sint: {
                                 gl.ClearBufferiv(GL_COLOR, 0,
                                                  reinterpret_cast<const GLint*>(
                                                      clearValue == TextureBase::ClearValue::Zero
@@ -428,16 +431,12 @@ MaybeError Texture::ClearTexture(const SubresourceRange& range,
                                                          : kClearColorDataUint1.data()));
                                 break;
                             }
-
-                            case wgpu::TextureComponentType::DepthComparison:
-                                UNREACHABLE();
                         }
                     };
 
                     if (GetArrayLayers() == 1) {
                         switch (GetDimension()) {
                             case wgpu::TextureDimension::e1D:
-                                UNREACHABLE();
                             case wgpu::TextureDimension::e2D:
                                 gl.FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, attachment,
                                                         GetGLTarget(), GetHandle(), level);
@@ -502,7 +501,7 @@ MaybeError Texture::ClearTexture(const SubresourceRange& range,
 
         // Fill the buffer with clear color
         memset(srcBuffer->GetMappedRange(0, bufferSize), clearColor, bufferSize);
-        srcBuffer->Unmap();
+        DAWN_TRY(srcBuffer->Unmap());
 
         gl.BindBuffer(GL_PIXEL_UNPACK_BUFFER, srcBuffer->GetHandle());
         for (uint32_t level = range.baseMipLevel; level < range.baseMipLevel + range.levelCount;
@@ -543,13 +542,14 @@ MaybeError Texture::ClearTexture(const SubresourceRange& range,
     return {};
 }
 
-void Texture::EnsureSubresourceContentInitialized(const SubresourceRange& range) {
+MaybeError Texture::EnsureSubresourceContentInitialized(const SubresourceRange& range) {
     if (!GetDevice()->IsToggleEnabled(Toggle::LazyClearResourceOnFirstUse)) {
-        return;
+        return {};
     }
     if (!IsSubresourceContentInitialized(range)) {
-        GetDevice()->ConsumedError(ClearTexture(range, TextureBase::ClearValue::Zero));
+        DAWN_TRY(ClearTexture(range, TextureBase::ClearValue::Zero));
     }
+    return {};
 }
 
 // TextureView

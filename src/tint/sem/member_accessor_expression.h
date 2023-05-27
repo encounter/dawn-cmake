@@ -15,24 +15,30 @@
 #ifndef SRC_TINT_SEM_MEMBER_ACCESSOR_EXPRESSION_H_
 #define SRC_TINT_SEM_MEMBER_ACCESSOR_EXPRESSION_H_
 
-#include "src/tint/sem/expression.h"
+#include "src/tint/sem/value_expression.h"
 #include "src/tint/utils/vector.h"
 
 // Forward declarations
 namespace tint::ast {
 class MemberAccessorExpression;
 }  // namespace tint::ast
-namespace tint::sem {
-class Struct;
+namespace tint::type {
 class StructMember;
-}  // namespace tint::sem
+}  // namespace tint::type
 
 namespace tint::sem {
 
 /// MemberAccessorExpression holds the semantic information for a
 /// ast::MemberAccessorExpression node.
-class MemberAccessorExpression : public Castable<MemberAccessorExpression, Expression> {
+class MemberAccessorExpression : public utils::Castable<MemberAccessorExpression, ValueExpression> {
   public:
+    /// Destructor
+    ~MemberAccessorExpression() override;
+
+    /// @returns the object that holds the member being accessed
+    const ValueExpression* Object() const { return object_; }
+
+  protected:
     /// Constructor
     /// @param declaration the AST node
     /// @param type the resolved type of the expression
@@ -41,30 +47,25 @@ class MemberAccessorExpression : public Castable<MemberAccessorExpression, Expre
     /// @param constant the constant value of the expression. May be null.
     /// @param object the object that holds the member being accessed
     /// @param has_side_effects whether this expression may have side effects
-    /// @param source_var the (optional) source variable for this expression
+    /// @param root_ident the (optional) root identifier for this expression
     MemberAccessorExpression(const ast::MemberAccessorExpression* declaration,
-                             const sem::Type* type,
+                             const type::Type* type,
                              EvaluationStage stage,
                              const Statement* statement,
-                             const Constant* constant,
-                             const Expression* object,
+                             const constant::Value* constant,
+                             const ValueExpression* object,
                              bool has_side_effects,
-                             const Variable* source_var = nullptr);
-
-    /// Destructor
-    ~MemberAccessorExpression() override;
-
-    /// @returns the object that holds the member being accessed
-    const Expression* Object() const { return object_; }
+                             const Variable* root_ident = nullptr);
 
   private:
-    Expression const* const object_;
+    ValueExpression const* const object_;
 };
 
 /// StructMemberAccess holds the semantic information for a
 /// ast::MemberAccessorExpression node that represents an access to a structure
 /// member.
-class StructMemberAccess final : public Castable<StructMemberAccess, MemberAccessorExpression> {
+class StructMemberAccess final
+    : public utils::Castable<StructMemberAccess, MemberAccessorExpression> {
   public:
     /// Constructor
     /// @param declaration the AST node
@@ -74,29 +75,29 @@ class StructMemberAccess final : public Castable<StructMemberAccess, MemberAcces
     /// @param object the object that holds the member being accessed
     /// @param member the structure member
     /// @param has_side_effects whether this expression may have side effects
-    /// @param source_var the (optional) source variable for this expression
+    /// @param root_ident the (optional) root identifier for this expression
     StructMemberAccess(const ast::MemberAccessorExpression* declaration,
-                       const sem::Type* type,
+                       const type::Type* type,
                        const Statement* statement,
-                       const Constant* constant,
-                       const Expression* object,
-                       const StructMember* member,
+                       const constant::Value* constant,
+                       const ValueExpression* object,
+                       const type::StructMember* member,
                        bool has_side_effects,
-                       const Variable* source_var = nullptr);
+                       const Variable* root_ident = nullptr);
 
     /// Destructor
     ~StructMemberAccess() override;
 
     /// @returns the structure member
-    StructMember const* Member() const { return member_; }
+    type::StructMember const* Member() const { return member_; }
 
   private:
-    StructMember const* const member_;
+    type::StructMember const* const member_;
 };
 
 /// Swizzle holds the semantic information for a ast::MemberAccessorExpression
 /// node that represents a vector swizzle.
-class Swizzle final : public Castable<Swizzle, MemberAccessorExpression> {
+class Swizzle final : public utils::Castable<Swizzle, MemberAccessorExpression> {
   public:
     /// Constructor
     /// @param declaration the AST node
@@ -106,15 +107,15 @@ class Swizzle final : public Castable<Swizzle, MemberAccessorExpression> {
     /// @param object the object that holds the member being accessed
     /// @param indices the swizzle indices
     /// @param has_side_effects whether this expression may have side effects
-    /// @param source_var the (optional) source variable for this expression
+    /// @param root_ident the (optional) root identifier for this expression
     Swizzle(const ast::MemberAccessorExpression* declaration,
-            const sem::Type* type,
+            const type::Type* type,
             const Statement* statement,
-            const Constant* constant,
-            const Expression* object,
+            const constant::Value* constant,
+            const ValueExpression* object,
             utils::VectorRef<uint32_t> indices,
             bool has_side_effects,
-            const Variable* source_var = nullptr);
+            const Variable* root_ident = nullptr);
 
     /// Destructor
     ~Swizzle() override;

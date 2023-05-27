@@ -81,7 +81,7 @@ std::string to_hex_str(Printer &p, const T i) {
 
 # used in the .cpp code
 structures_to_gen = ['VkExtent3D', 'VkExtent2D', 'VkPhysicalDeviceLimits', 'VkPhysicalDeviceFeatures', 'VkPhysicalDeviceSparseProperties',
-                     'VkSurfaceCapabilitiesKHR', 'VkSurfaceFormatKHR', 'VkLayerProperties', 'VkPhysicalDeviceToolProperties']
+                     'VkSurfaceCapabilitiesKHR', 'VkSurfaceFormatKHR', 'VkLayerProperties', 'VkPhysicalDeviceToolProperties', 'VkFormatProperties']
 enums_to_gen = ['VkResult', 'VkFormat', 'VkPresentModeKHR',
                 'VkPhysicalDeviceType', 'VkImageTiling']
 flags_to_gen = ['VkSurfaceTransformFlagsKHR', 'VkCompositeAlphaFlagsKHR', 'VkSurfaceCounterFlagsEXT', 'VkQueueFlags',
@@ -441,10 +441,12 @@ def PrintGetFlagStrings(name, bitmask):
     out += f"    std::vector<const char *> strings;\n"
     # If a bitmask contains a field whose value is zero, we want to support printing the correct bitflag
     # Otherwise, use "None" for when there are not bits set in the bitmask
-    if bitmask.options[0].value != "0":
+    if bitmask.options[0].value != 0:
         out += f'    if (value == 0) {{ strings.push_back("None"); return strings; }}\n'
     for v in bitmask.options:
-        out += f'    if ({v.name} & value) strings.push_back("{v.name[3:]}");\n'
+        # only check single-bit flags
+        if (v.value & (v.value - 1)) == 0:
+            out += f'    if ({v.name} & value) strings.push_back("{v.name[3:]}");\n'
     out += f"    return strings;\n}}\n"
     return out
 
@@ -473,8 +475,12 @@ def PrintFlags(bitmask, name):
 def PrintFlagBits(bitmask):
     return f"""void Dump{bitmask.name}(Printer &p, std::string name, {bitmask.name} value) {{
     auto strings = {bitmask.name}GetStrings(value);
-    if (strings.size() > 0)
-        p.PrintKeyString(name, strings.at(0));
+    if (strings.size() > 0) {{
+        if (p.Type() == OutputType::json)
+            p.PrintKeyString(name, std::string("VK_") + strings.at(0));
+        else
+            p.PrintKeyString(name, strings.at(0));
+    }}
 }}
 """
 
@@ -498,7 +504,7 @@ def PrintBitMaskToString(bitmask, name, gen):
     for v in bitmask.options:
         out += f"    if ({v.name} & value) {{\n"
         out += f'        if (is_first) {{ is_first = false; }} else {{ out += " | "; }}\n'
-        out += f'        out += "{str(v.name).strip("VK_").strip("_BIT")}";\n'
+        out += f'        out += "{str(v.name)[3:]}";\n'
         out += f"    }}\n"
     out += f"    return out;\n"
     out += f"}}\n"
@@ -545,11 +551,7 @@ def PrintStructure(struct, types_to_gen, structure_names, aliases):
             elif v.typeID == "uint8_t" and (v.arrayLength == '8' or v.arrayLength == '16'):  # VK_UUID_SIZE
                 if v.arrayLength == '8':
                     out += '    if (obj.deviceLUIDValid) { // special case\n'
-                out += f'''    if (p.Type() == OutputType::json) {{
-        ArrayWrapper arr(p, "{v.name}");
-        for (uint32_t i = 0; i < {v.arrayLength}; i++) p.PrintElement(static_cast<uint32_t>(obj.{v.name}[i]));
-    }} else
-        p.PrintKeyString("{v.name}", to_string_{v.arrayLength}(obj.{v.name}));\n'''
+                out += f'    p.PrintKeyValue("{v.name}", obj.{v.name});\n'
                 if v.arrayLength == '8':
                     out += '    }\n'
             elif struct.name == "VkQueueFamilyGlobalPriorityPropertiesKHR" and v.name == "priorities":
@@ -561,9 +563,8 @@ def PrintStructure(struct, types_to_gen, structure_names, aliases):
                 out += f'           p.PrintString(VkQueueGlobalPriorityKHRString(obj.priorities[i]));\n'
                 out += f"    }}\n"
             elif v.arrayLength.isdigit():
-                out += f'    {{   ArrayWrapper arr(p,"{v.name}", ' + v.arrayLength + ');\n'
-                for i in range(0, int(v.arrayLength)):
-                    out += f"        p.PrintElement(obj.{v.name}[{str(i)}]);\n"
+                out += f'    {{\n        ArrayWrapper arr(p,"{v.name}", ' + v.arrayLength + ');\n'
+                out += f'        for (uint32_t i = 0; i < {v.arrayLength}; i++) {{ p.PrintElement(obj.{v.name}[i]); }}\n'
                 out += f"    }}\n"
             else:  # dynamic array length based on other member
                 out += f'    ArrayWrapper arr(p,"{v.name}", obj.' + v.arrayLength + ');\n'
@@ -586,6 +587,8 @@ def PrintStructure(struct, types_to_gen, structure_names, aliases):
             out += f'    p.PrintKeyValue("{v.name}", obj.{v.name});\n'
         elif v.name not in names_to_ignore:
             # if it is an enum/flag/bitmask
+            if v.typeID in ['VkFormatFeatureFlags', 'VkFormatFeatureFlags2']:
+                out += '    p.SetOpenDetails();\n' # special case so that feature flags are open in html output
             out += f'    Dump{v.typeID}(p, "{v.name}", obj.{v.name});\n'
 
     if struct.name in ["VkPhysicalDeviceLimits", "VkPhysicalDeviceSparseProperties"]:
@@ -792,8 +795,13 @@ class VulkanEnum:
             self.name = name
             self.comment = comment
 
-            if value == 0 or value is None:
+            if bitpos is not None:
                 value = 1 << int(bitpos)
+            elif type(value) is str:
+                if value.lower().startswith('0x'):
+                    value = int(value, 16)
+                else:
+                    value = int(value)
 
             self.value = value
 

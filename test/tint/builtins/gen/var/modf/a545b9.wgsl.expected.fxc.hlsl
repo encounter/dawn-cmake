@@ -11,7 +11,7 @@ modf_result_vec2_f16 tint_modf(vector<float16_t, 2> param_0) {
 }
 
 void modf_a545b9() {
-  vector<float16_t, 2> arg_0 = (float16_t(0.0h)).xx;
+  vector<float16_t, 2> arg_0 = (float16_t(-1.5h)).xx;
   modf_result_vec2_f16 res = tint_modf(arg_0);
 }
 
@@ -41,6 +41,3 @@ void compute_main() {
   modf_a545b9();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001F329190D80(2,10-18): error X3000: syntax error: unexpected token 'float16_t'
-

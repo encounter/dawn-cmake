@@ -1,12 +1,12 @@
 #version 310 es
 
-vec3 tint_degrees(vec3 param_0) {
-  return param_0 * 57.295779513082322865f;
-}
-
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec3 inner;
+} prevent_dce;
 
 void degrees_2af623() {
-  vec3 res = tint_degrees(vec3(1.0f));
+  vec3 res = vec3(57.2957763671875f);
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -23,15 +23,15 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-vec3 tint_degrees(vec3 param_0) {
-  return param_0 * 57.295779513082322865f;
-}
-
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec3 inner;
+} prevent_dce;
 
 void degrees_2af623() {
-  vec3 res = tint_degrees(vec3(1.0f));
+  vec3 res = vec3(57.2957763671875f);
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -44,13 +44,13 @@ void main() {
 }
 #version 310 es
 
-vec3 tint_degrees(vec3 param_0) {
-  return param_0 * 57.295779513082322865f;
-}
-
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec3 inner;
+} prevent_dce;
 
 void degrees_2af623() {
-  vec3 res = tint_degrees(vec3(1.0f));
+  vec3 res = vec3(57.2957763671875f);
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

@@ -22,12 +22,17 @@
 #include "dawn/native/ErrorData.h"
 #include "dawn/native/Instance.h"
 #include "dawn/native/Surface.h"
+#include "dawn/native/TintUtils.h"
+
+#include "tint/tint.h"
 
 namespace dawn::native::null {
 
-// Implementation of pre-Device objects: the null adapter, null backend connection and Connect()
+// Implementation of pre-Device objects: the null physical device, null backend connection and
+// Connect()
 
-Adapter::Adapter(InstanceBase* instance) : AdapterBase(instance, wgpu::BackendType::Null) {
+PhysicalDevice::PhysicalDevice(InstanceBase* instance)
+    : PhysicalDeviceBase(instance, wgpu::BackendType::Null) {
     mVendorId = 0;
     mDeviceId = 0;
     mName = "Null backend";
@@ -36,37 +41,44 @@ Adapter::Adapter(InstanceBase* instance) : AdapterBase(instance, wgpu::BackendTy
     ASSERT(err.IsSuccess());
 }
 
-Adapter::~Adapter() = default;
+PhysicalDevice::~PhysicalDevice() = default;
 
-bool Adapter::SupportsExternalImages() const {
+bool PhysicalDevice::SupportsExternalImages() const {
     return false;
 }
 
-// Used for the tests that intend to use an adapter without all features enabled.
-void Adapter::SetSupportedFeatures(const std::vector<wgpu::FeatureName>& requiredFeatures) {
-    mSupportedFeatures = {};
-    for (wgpu::FeatureName f : requiredFeatures) {
-        mSupportedFeatures.EnableFeature(f);
+bool PhysicalDevice::SupportsFeatureLevel(FeatureLevel) const {
+    return true;
+}
+
+MaybeError PhysicalDevice::InitializeImpl() {
+    return {};
+}
+
+void PhysicalDevice::InitializeSupportedFeaturesImpl() {
+    // Enable all features by default for the convenience of tests.
+    for (uint32_t i = 0; i < static_cast<uint32_t>(Feature::EnumCount); i++) {
+        EnableFeature(static_cast<Feature>(i));
     }
 }
 
-MaybeError Adapter::InitializeImpl() {
-    return {};
-}
-
-MaybeError Adapter::InitializeSupportedFeaturesImpl() {
-    // Enable all features by default for the convenience of tests.
-    mSupportedFeatures.featuresBitSet.set();
-    return {};
-}
-
-MaybeError Adapter::InitializeSupportedLimitsImpl(CombinedLimits* limits) {
+MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits) {
     GetDefaultLimits(&limits->v1);
     return {};
 }
 
-ResultOrError<Ref<DeviceBase>> Adapter::CreateDeviceImpl(const DeviceDescriptor* descriptor) {
-    return Device::Create(this, descriptor);
+void PhysicalDevice::SetupBackendDeviceToggles(TogglesState* deviceToggles) const {}
+
+ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(AdapterBase* adapter,
+                                                                const DeviceDescriptor* descriptor,
+                                                                const TogglesState& deviceToggles) {
+    return Device::Create(adapter, descriptor, deviceToggles);
+}
+
+MaybeError PhysicalDevice::ValidateFeatureSupportedWithTogglesImpl(
+    wgpu::FeatureName feature,
+    const TogglesState& toggles) const {
+    return {};
 }
 
 class Backend : public BackendConnection {
@@ -74,13 +86,13 @@ class Backend : public BackendConnection {
     explicit Backend(InstanceBase* instance)
         : BackendConnection(instance, wgpu::BackendType::Null) {}
 
-    std::vector<Ref<AdapterBase>> DiscoverDefaultAdapters() override {
+    std::vector<Ref<PhysicalDeviceBase>> DiscoverDefaultPhysicalDevices() override {
         // There is always a single Null adapter because it is purely CPU based and doesn't
         // depend on the system.
-        std::vector<Ref<AdapterBase>> adapters;
-        Ref<Adapter> adapter = AcquireRef(new Adapter(GetInstance()));
-        adapters.push_back(std::move(adapter));
-        return adapters;
+        std::vector<Ref<PhysicalDeviceBase>> physicalDevices;
+        Ref<PhysicalDevice> physicalDevice = AcquireRef(new PhysicalDevice(GetInstance()));
+        physicalDevices.push_back(std::move(physicalDevice));
+        return physicalDevices;
     }
 };
 
@@ -93,7 +105,7 @@ struct CopyFromStagingToBufferOperation : PendingOperation {
         destination->CopyFromStaging(staging, sourceOffset, destinationOffset, size);
     }
 
-    StagingBufferBase* staging;
+    BufferBase* staging;
     Ref<Buffer> destination;
     uint64_t sourceOffset;
     uint64_t destinationOffset;
@@ -103,8 +115,10 @@ struct CopyFromStagingToBufferOperation : PendingOperation {
 // Device
 
 // static
-ResultOrError<Ref<Device>> Device::Create(Adapter* adapter, const DeviceDescriptor* descriptor) {
-    Ref<Device> device = AcquireRef(new Device(adapter, descriptor));
+ResultOrError<Ref<Device>> Device::Create(AdapterBase* adapter,
+                                          const DeviceDescriptor* descriptor,
+                                          const TogglesState& deviceToggles) {
+    Ref<Device> device = AcquireRef(new Device(adapter, descriptor, deviceToggles));
     DAWN_TRY(device->Initialize(descriptor));
     return device;
 }
@@ -162,12 +176,8 @@ ResultOrError<Ref<ShaderModuleBase>> Device::CreateShaderModuleImpl(
     return module;
 }
 ResultOrError<Ref<SwapChainBase>> Device::CreateSwapChainImpl(
-    const SwapChainDescriptor* descriptor) {
-    return AcquireRef(new OldSwapChain(this, descriptor));
-}
-ResultOrError<Ref<NewSwapChainBase>> Device::CreateSwapChainImpl(
     Surface* surface,
-    NewSwapChainBase* previousSwapChain,
+    SwapChainBase* previousSwapChain,
     const SwapChainDescriptor* descriptor) {
     return SwapChain::Create(this, surface, previousSwapChain, descriptor);
 }
@@ -180,10 +190,9 @@ ResultOrError<Ref<TextureViewBase>> Device::CreateTextureViewImpl(
     return AcquireRef(new TextureView(texture, descriptor));
 }
 
-ResultOrError<std::unique_ptr<StagingBufferBase>> Device::CreateStagingBuffer(size_t size) {
-    std::unique_ptr<StagingBufferBase> stagingBuffer = std::make_unique<StagingBuffer>(size, this);
-    DAWN_TRY(stagingBuffer->Initialize());
-    return std::move(stagingBuffer);
+ResultOrError<wgpu::TextureUsage> Device::GetSupportedSurfaceUsageImpl(
+    const Surface* surface) const {
+    return wgpu::TextureUsage::RenderAttachment;
 }
 
 void Device::DestroyImpl() {
@@ -200,11 +209,15 @@ MaybeError Device::WaitForIdleForDestruction() {
     return {};
 }
 
-MaybeError Device::CopyFromStagingToBuffer(StagingBufferBase* source,
-                                           uint64_t sourceOffset,
-                                           BufferBase* destination,
-                                           uint64_t destinationOffset,
-                                           uint64_t size) {
+bool Device::HasPendingCommands() const {
+    return false;
+}
+
+MaybeError Device::CopyFromStagingToBufferImpl(BufferBase* source,
+                                               uint64_t sourceOffset,
+                                               BufferBase* destination,
+                                               uint64_t destinationOffset,
+                                               uint64_t size) {
     if (IsToggleEnabled(Toggle::LazyClearResourceOnFirstUse)) {
         destination->SetIsDataInitialized();
     }
@@ -221,10 +234,10 @@ MaybeError Device::CopyFromStagingToBuffer(StagingBufferBase* source,
     return {};
 }
 
-MaybeError Device::CopyFromStagingToTexture(const StagingBufferBase* source,
-                                            const TextureDataLayout& src,
-                                            TextureCopy* dst,
-                                            const Extent3D& copySizePixels) {
+MaybeError Device::CopyFromStagingToTextureImpl(const BufferBase* source,
+                                                const TextureDataLayout& src,
+                                                const TextureCopy& dst,
+                                                const Extent3D& copySizePixels) {
     return {};
 }
 
@@ -308,7 +321,7 @@ MaybeError Buffer::MapAtCreationImpl() {
     return {};
 }
 
-void Buffer::CopyFromStaging(StagingBufferBase* staging,
+void Buffer::CopyFromStaging(BufferBase* staging,
                              uint64_t sourceOffset,
                              uint64_t destinationOffset,
                              uint64_t size) {
@@ -326,7 +339,7 @@ MaybeError Buffer::MapAsyncImpl(wgpu::MapMode mode, size_t offset, size_t size) 
     return {};
 }
 
-void* Buffer::GetMappedPointerImpl() {
+void* Buffer::GetMappedPointer() {
     return mBackingData.get();
 }
 
@@ -373,6 +386,38 @@ MaybeError Queue::WriteBufferImpl(BufferBase* buffer,
 
 // ComputePipeline
 MaybeError ComputePipeline::Initialize() {
+    const ProgrammableStage& computeStage = GetStage(SingleShaderStage::Compute);
+
+    tint::Program transformedProgram;
+    const tint::Program* program;
+    tint::transform::Manager transformManager;
+    tint::transform::DataMap transformInputs;
+
+    if (!computeStage.metadata->overrides.empty()) {
+        transformManager.Add<tint::ast::transform::SingleEntryPoint>();
+        transformInputs.Add<tint::ast::transform::SingleEntryPoint::Config>(
+            computeStage.entryPoint.c_str());
+
+        // This needs to run after SingleEntryPoint transform which removes unused overrides for
+        // current entry point.
+        transformManager.Add<tint::ast::transform::SubstituteOverride>();
+        transformInputs.Add<tint::ast::transform::SubstituteOverride::Config>(
+            BuildSubstituteOverridesTransformConfig(computeStage));
+    }
+
+    DAWN_TRY_ASSIGN(transformedProgram,
+                    RunTransforms(&transformManager, computeStage.module->GetTintProgram(),
+                                  transformInputs, nullptr, nullptr));
+
+    program = &transformedProgram;
+
+    // Do the workgroup size validation as it is actually backend agnostic.
+    const CombinedLimits& limits = GetDevice()->GetLimits();
+    Extent3D _;
+    DAWN_TRY_ASSIGN(
+        _, ValidateComputeStageWorkgroupSize(*program, computeStage.entryPoint.c_str(),
+                                             LimitsForCompilationRequest::Create(limits.v1)));
+
     return {};
 }
 
@@ -386,21 +431,20 @@ MaybeError RenderPipeline::Initialize() {
 // static
 ResultOrError<Ref<SwapChain>> SwapChain::Create(Device* device,
                                                 Surface* surface,
-                                                NewSwapChainBase* previousSwapChain,
+                                                SwapChainBase* previousSwapChain,
                                                 const SwapChainDescriptor* descriptor) {
     Ref<SwapChain> swapchain = AcquireRef(new SwapChain(device, surface, descriptor));
     DAWN_TRY(swapchain->Initialize(previousSwapChain));
     return swapchain;
 }
 
-MaybeError SwapChain::Initialize(NewSwapChainBase* previousSwapChain) {
+MaybeError SwapChain::Initialize(SwapChainBase* previousSwapChain) {
     if (previousSwapChain != nullptr) {
         // TODO(crbug.com/dawn/269): figure out what should happen when surfaces are used by
         // multiple backends one after the other. It probably needs to block until the backend
         // and GPU are completely finished with the previous swapchain.
-        if (previousSwapChain->GetBackendType() != wgpu::BackendType::Null) {
-            return DAWN_VALIDATION_ERROR("null::SwapChain cannot switch between APIs");
-        }
+        DAWN_INVALID_IF(previousSwapChain->GetBackendType() != wgpu::BackendType::Null,
+                        "null::SwapChain cannot switch between APIs");
     }
 
     return {};
@@ -414,11 +458,11 @@ MaybeError SwapChain::PresentImpl() {
     return {};
 }
 
-ResultOrError<Ref<TextureViewBase>> SwapChain::GetCurrentTextureViewImpl() {
+ResultOrError<Ref<TextureBase>> SwapChain::GetCurrentTextureImpl() {
     TextureDescriptor textureDesc = GetSwapChainBaseTextureDescriptor(this);
     mTexture = AcquireRef(
         new Texture(GetDevice(), &textureDesc, TextureBase::TextureState::OwnedInternal));
-    return mTexture->CreateView();
+    return mTexture;
 }
 
 void SwapChain::DetachFromSurfaceImpl() {
@@ -435,65 +479,6 @@ MaybeError ShaderModule::Initialize(ShaderModuleParseResult* parseResult,
     return InitializeBase(parseResult, compilationMessages);
 }
 
-// OldSwapChain
-
-OldSwapChain::OldSwapChain(Device* device, const SwapChainDescriptor* descriptor)
-    : OldSwapChainBase(device, descriptor) {
-    const auto& im = GetImplementation();
-    im.Init(im.userData, nullptr);
-}
-
-OldSwapChain::~OldSwapChain() {}
-
-TextureBase* OldSwapChain::GetNextTextureImpl(const TextureDescriptor* descriptor) {
-    return GetDevice()->APICreateTexture(descriptor);
-}
-
-MaybeError OldSwapChain::OnBeforePresent(TextureViewBase*) {
-    return {};
-}
-
-// NativeSwapChainImpl
-
-void NativeSwapChainImpl::Init(WSIContext* context) {}
-
-DawnSwapChainError NativeSwapChainImpl::Configure(WGPUTextureFormat format,
-                                                  WGPUTextureUsage,
-                                                  uint32_t width,
-                                                  uint32_t height) {
-    return DAWN_SWAP_CHAIN_NO_ERROR;
-}
-
-DawnSwapChainError NativeSwapChainImpl::GetNextTexture(DawnSwapChainNextTexture* nextTexture) {
-    return DAWN_SWAP_CHAIN_NO_ERROR;
-}
-
-DawnSwapChainError NativeSwapChainImpl::Present() {
-    return DAWN_SWAP_CHAIN_NO_ERROR;
-}
-
-wgpu::TextureFormat NativeSwapChainImpl::GetPreferredFormat() const {
-    return wgpu::TextureFormat::RGBA8Unorm;
-}
-
-// StagingBuffer
-
-StagingBuffer::StagingBuffer(size_t size, Device* device)
-    : StagingBufferBase(size), mDevice(device) {}
-
-StagingBuffer::~StagingBuffer() {
-    if (mBuffer) {
-        mDevice->DecrementMemoryUsage(GetSize());
-    }
-}
-
-MaybeError StagingBuffer::Initialize() {
-    DAWN_TRY(mDevice->IncrementMemoryUsage(GetSize()));
-    mBuffer = std::make_unique<uint8_t[]>(GetSize());
-    mMappedPointer = mBuffer.get();
-    return {};
-}
-
 uint32_t Device::GetOptimalBytesPerRowAlignment() const {
     return 1;
 }
@@ -505,6 +490,8 @@ uint64_t Device::GetOptimalBufferToTextureCopyOffsetAlignment() const {
 float Device::GetTimestampPeriodInNS() const {
     return 1.0f;
 }
+
+void Device::ForceEventualFlushOfCommands() {}
 
 Texture::Texture(DeviceBase* device, const TextureDescriptor* descriptor, TextureState state)
     : TextureBase(device, descriptor, state) {}

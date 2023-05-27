@@ -23,11 +23,16 @@
 #include "dawn/utils/TextureUtils.h"
 #include "dawn/webgpu_cpp.h"
 
-namespace utils {
+namespace dawn::utils {
 
 enum Expectation { Success, Failure };
 
-wgpu::ShaderModule CreateShaderModuleFromASM(const wgpu::Device& device, const char* source);
+#if TINT_BUILD_SPV_READER
+wgpu::ShaderModule CreateShaderModuleFromASM(
+    const wgpu::Device& device,
+    const char* source,
+    wgpu::DawnShaderModuleSPIRVOptionsDescriptor* spirv_options = nullptr);
+#endif
 wgpu::ShaderModule CreateShaderModule(const wgpu::Device& device, const char* source);
 
 wgpu::Buffer CreateBufferFromData(const wgpu::Device& device,
@@ -57,7 +62,7 @@ wgpu::TextureDataLayout CreateTextureDataLayout(uint64_t offset,
 
 struct ComboRenderPassDescriptor : public wgpu::RenderPassDescriptor {
   public:
-    ComboRenderPassDescriptor(std::initializer_list<wgpu::TextureView> colorAttachmentInfo,
+    ComboRenderPassDescriptor(const std::vector<wgpu::TextureView>& colorAttachmentInfo = {},
                               wgpu::TextureView depthStencil = wgpu::TextureView());
     ~ComboRenderPassDescriptor();
 
@@ -84,7 +89,7 @@ struct BasicRenderPass {
     uint32_t height;
     wgpu::Texture color;
     wgpu::TextureFormat colorFormat;
-    utils::ComboRenderPassDescriptor renderPassInfo;
+    dawn::utils::ComboRenderPassDescriptor renderPassInfo;
 };
 BasicRenderPass CreateBasicRenderPass(
     const wgpu::Device& device,
@@ -102,7 +107,7 @@ extern wgpu::ExternalTextureBindingLayout kExternalTextureBindingLayout;
 
 // Helpers to make creating bind group layouts look nicer:
 //
-//   utils::MakeBindGroupLayout(device, {
+//   dawn::utils::MakeBindGroupLayout(device, {
 //       {0, wgpu::ShaderStage::Vertex, wgpu::BufferBindingType::Uniform},
 //       {1, wgpu::ShaderStage::Fragment, wgpu::SamplerBindingType::Filtering},
 //       {3, wgpu::ShaderStage::Fragment, wgpu::TextureSampleType::Float}
@@ -143,7 +148,7 @@ wgpu::BindGroupLayout MakeBindGroupLayout(
 
 // Helpers to make creating bind groups look nicer:
 //
-//   utils::MakeBindGroup(device, layout, {
+//   dawn::utils::MakeBindGroup(device, layout, {
 //       {0, mySampler},
 //       {1, myBuffer, offset, size},
 //       {3, myTextureView}
@@ -178,6 +183,15 @@ wgpu::BindGroup MakeBindGroup(
     const wgpu::BindGroupLayout& layout,
     std::initializer_list<BindingInitializationHelper> entriesInitializer);
 
-}  // namespace utils
+struct ColorSpaceConversionInfo {
+    std::array<float, 12> yuvToRgbConversionMatrix;
+    std::array<float, 9> gamutConversionMatrix;
+    std::array<float, 7> srcTransferFunctionParameters;
+    std::array<float, 7> dstTransferFunctionParameters;
+};
+
+ColorSpaceConversionInfo GetYUVBT709ToRGBSRGBColorSpaceConversionInfo();
+
+}  // namespace dawn::utils
 
 #endif  // SRC_DAWN_UTILS_WGPUHELPERS_H_

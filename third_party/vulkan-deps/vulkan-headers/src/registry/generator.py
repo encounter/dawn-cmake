@@ -1,6 +1,6 @@
 #!/usr/bin/python3 -i
 #
-# Copyright 2013-2022 The Khronos Group Inc.
+# Copyright 2013-2023 The Khronos Group Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 """Base class for source/header/doc generators, as well as some utility functions."""
@@ -153,6 +153,7 @@ class GeneratorOptions:
                  directory='.',
                  genpath=None,
                  apiname=None,
+                 mergeApiNames=None,
                  profile=None,
                  versions='.*',
                  emitversions='.*',
@@ -176,6 +177,8 @@ class GeneratorOptions:
         - directory - directory in which to generate filename
         - genpath - path to previously generated files, such as apimap.py
         - apiname - string matching `<api>` 'apiname' attribute, e.g. 'gl'.
+        - mergeApiNames - If not None, a comma separated list of API names
+          to merge into the API specified by 'apiname'
         - profile - string specifying API profile , e.g. 'core', or None.
         - versions - regex matching API versions to process interfaces for.
         Normally `'.*'` or `'[0-9][.][0-9]'` to match all defined versions.
@@ -228,6 +231,9 @@ class GeneratorOptions:
 
         self.apiname = apiname
         "string matching `<api>` 'apiname' attribute, e.g. 'gl'."
+
+        self.mergeApiNames = mergeApiNames
+        "comma separated list of API names to merge into the API specified by 'apiname'"
 
         self.profile = profile
         "string specifying API profile , e.g. 'core', or None."
@@ -357,6 +363,9 @@ class OutputGenerator:
         # API dictionary, which may be loaded by the beginFile method of
         # derived generators.
         self.apidict = None
+
+        # File suffix for generated files, set in beginFile below.
+        self.file_suffix = ''
 
     def logMsg(self, level, *args):
         """Write a message of different categories to different
@@ -863,6 +872,7 @@ class OutputGenerator:
             raise MissingGeneratorOptionsConventionsError()
         self.should_insert_may_alias_macro = \
             self.genOpts.conventions.should_insert_may_alias_macro(self.genOpts)
+        self.file_suffix = self.genOpts.conventions.file_suffix
 
         # Try to import the API dictionary, apimap.py, if it exists. Nothing
         # in apimap.py cannot be extracted directly from the XML, and in the

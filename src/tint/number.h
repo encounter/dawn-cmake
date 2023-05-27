@@ -20,10 +20,11 @@
 #include <functional>
 #include <limits>
 #include <optional>
-#include <ostream>
 
 #include "src/tint/utils/compiler_macros.h"
 #include "src/tint/utils/result.h"
+#include "src/tint/utils/string_stream.h"
+#include "src/tint/utils/traits.h"
 
 // Forward declaration
 namespace tint {
@@ -33,6 +34,14 @@ struct Number;
 }  // namespace tint
 
 namespace tint::detail {
+/// Base template for IsNumber
+template <typename T>
+struct IsNumber : std::false_type {};
+
+/// Specialization for IsNumber
+template <typename T>
+struct IsNumber<Number<T>> : std::true_type {};
+
 /// An empty structure used as a unique template type for Number when
 /// specializing for the f16 type.
 struct NumberKindF16 {};
@@ -55,22 +64,40 @@ struct NumberUnwrapper<Number<T>> {
 
 namespace tint {
 
-/// Evaluates to true iff T is a floating-point type or is NumberKindF16.
+/// Evaluates to true iff T is a Number
 template <typename T>
-constexpr bool IsFloatingPoint =
-    std::is_floating_point_v<T> || std::is_same_v<T, detail::NumberKindF16>;
-
-/// Evaluates to true iff T is an integer type.
-template <typename T>
-constexpr bool IsInteger = std::is_integral_v<T>;
-
-/// Evaluates to true iff T is an integer type, floating-point type or is NumberKindF16.
-template <typename T>
-constexpr bool IsNumeric = IsInteger<T> || IsFloatingPoint<T>;
+constexpr bool IsNumber = detail::IsNumber<T>::value;
 
 /// Resolves to the underlying type for a Number.
 template <typename T>
 using UnwrapNumber = typename detail::NumberUnwrapper<T>::type;
+
+/// Evaluates to true iff T or Number<T> is a floating-point type or is NumberKindF16.
+template <typename T>
+constexpr bool IsFloatingPoint = std::is_floating_point_v<UnwrapNumber<T>> ||
+                                 std::is_same_v<UnwrapNumber<T>, detail::NumberKindF16>;
+
+/// Evaluates to true iff T or Number<T> is an integral type.
+template <typename T>
+constexpr bool IsIntegral = std::is_integral_v<UnwrapNumber<T>>;
+
+/// Evaluates to true iff T or Number<T> is a signed integer type.
+template <typename T>
+constexpr bool IsSignedIntegral =
+    std::is_integral_v<UnwrapNumber<T>> && std::is_signed_v<UnwrapNumber<T>>;
+
+/// Evaluates to true iff T or Number<T> is an unsigned integer type.
+template <typename T>
+constexpr bool IsUnsignedIntegral =
+    std::is_integral_v<UnwrapNumber<T>> && std::is_unsigned_v<UnwrapNumber<T>>;
+
+/// Evaluates to true iff T is an integer type, floating-point type or is NumberKindF16.
+template <typename T>
+constexpr bool IsNumeric = IsIntegral<T> || IsFloatingPoint<T>;
+
+/// Returns the bit width of T
+template <typename T>
+constexpr size_t BitWidth = sizeof(UnwrapNumber<T>) * 8;
 
 /// NumberBase is a CRTP base class for Number<T>
 template <typename NumberT>
@@ -96,6 +123,9 @@ struct Number : NumberBase<Number<T>> {
 
     /// type is the underlying type of the Number
     using type = T;
+
+    /// Number of bits in the number.
+    static constexpr size_t kNumBits = sizeof(T) * 8;
 
     /// Highest finite representable value of this type.
     static constexpr type kHighestValue = std::numeric_limits<type>::max();
@@ -145,11 +175,11 @@ struct Number : NumberBase<Number<T>> {
 };
 
 /// Writes the number to the ostream.
-/// @param out the std::ostream to write to
+/// @param out the stream to write to
 /// @param num the Number
-/// @return the std::ostream so calls can be chained
+/// @return the stream so calls can be chained
 template <typename T>
-inline std::ostream& operator<<(std::ostream& out, Number<T> num) {
+inline utils::StringStream& operator<<(utils::StringStream& out, Number<T> num) {
     return out << num.value;
 }
 
@@ -159,6 +189,9 @@ template <>
 struct Number<detail::NumberKindF16> : NumberBase<Number<detail::NumberKindF16>> {
     /// C++ does not have a native float16 type, so we use a 32-bit float instead.
     using type = float;
+
+    /// Number of bits in the number.
+    static constexpr size_t kNumBits = 16;
 
     /// Highest finite representable value of this type.
     static constexpr type kHighestValue = 65504.0f;  // 2¹⁵ × (1 + 1023/1024)
@@ -210,6 +243,11 @@ struct Number<detail::NumberKindF16> : NumberBase<Number<detail::NumberKindF16>>
     /// will be 0xfc00u.
     uint16_t BitsRepresentation() const;
 
+    /// Creates an f16 value from the uint16_t bit representation.
+    /// @param bits the bits to convert from
+    /// @returns the binary16 value based off the provided bit pattern.
+    static Number<detail::NumberKindF16> FromBits(uint16_t bits);
+
     /// @param value the input float32 value
     /// @returns the float32 value quantized to the smaller float16 value, through truncation of the
     /// mantissa bits (no rounding). If the float32 value is too large (positive or negative) to be
@@ -236,6 +274,39 @@ using f32 = Number<float>;
 /// However since C++ don't have native binary16 type, the value is stored as float.
 using f16 = Number<detail::NumberKindF16>;
 
+template <typename T, utils::traits::EnableIf<IsFloatingPoint<T>>* = nullptr>
+inline const auto kPi = T(UnwrapNumber<T>(3.14159265358979323846));
+
+/// True iff T is an abstract number type
+template <typename T>
+constexpr bool IsAbstract = std::is_same_v<T, AInt> || std::is_same_v<T, AFloat>;
+
+/// @returns the friendly name of Number type T
+template <typename T, utils::traits::EnableIf<IsNumber<T>>* = nullptr>
+const char* FriendlyName() {
+    if constexpr (std::is_same_v<T, AInt>) {
+        return "abstract-int";
+    } else if constexpr (std::is_same_v<T, AFloat>) {
+        return "abstract-float";
+    } else if constexpr (std::is_same_v<T, i32>) {
+        return "i32";
+    } else if constexpr (std::is_same_v<T, u32>) {
+        return "u32";
+    } else if constexpr (std::is_same_v<T, f32>) {
+        return "f32";
+    } else if constexpr (std::is_same_v<T, f16>) {
+        return "f16";
+    } else {
+        static_assert(!sizeof(T), "Unhandled type");
+    }
+}
+
+/// @returns the friendly name of T when T is bool
+template <typename T, utils::traits::EnableIf<std::is_same_v<T, bool>>* = nullptr>
+const char* FriendlyName() {
+    return "bool";
+}
+
 /// Enumerator of failure reasons when converting from one number to another.
 enum class ConversionFailure {
     kExceedsPositiveLimit,  // The value was too big (+'ve) to fit in the target type
@@ -243,10 +314,10 @@ enum class ConversionFailure {
 };
 
 /// Writes the conversion failure message to the ostream.
-/// @param out the std::ostream to write to
+/// @param out the stream to write to
 /// @param failure the ConversionFailure
-/// @return the std::ostream so calls can be chained
-std::ostream& operator<<(std::ostream& out, ConversionFailure failure);
+/// @return the stream so calls can be chained
+utils::StringStream& operator<<(utils::StringStream& out, ConversionFailure failure);
 
 /// Converts a number from one type to another, checking that the value fits in the target type.
 /// @returns the resulting value of the conversion, or a failure reason.
@@ -341,6 +412,9 @@ std::enable_if_t<IsNumeric<A>, bool> operator!=(A a, Number<B> b) {
 #endif
 #endif
 
+// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80635
+TINT_BEGIN_DISABLE_WARNING(MAYBE_UNINITIALIZED);
+
 /// @returns a + b, or an empty optional if the resulting value overflowed the AInt
 inline std::optional<AInt> CheckedAdd(AInt a, AInt b) {
     int64_t result;
@@ -363,13 +437,15 @@ inline std::optional<AInt> CheckedAdd(AInt a, AInt b) {
     return AInt(result);
 }
 
-/// @returns a + b, or an empty optional if the resulting value overflowed the AFloat
-inline std::optional<AFloat> CheckedAdd(AFloat a, AFloat b) {
-    auto result = a.value + b.value;
-    if (!std::isfinite(result)) {
+/// @returns a + b, or an empty optional if the resulting value overflowed the float value
+template <typename FloatingPointT,
+          typename = utils::traits::EnableIf<IsFloatingPoint<FloatingPointT>>>
+inline std::optional<FloatingPointT> CheckedAdd(FloatingPointT a, FloatingPointT b) {
+    auto result = FloatingPointT{a.value + b.value};
+    if (!std::isfinite(result.value)) {
         return {};
     }
-    return AFloat{result};
+    return result;
 }
 
 /// @returns a - b, or an empty optional if the resulting value overflowed the AInt
@@ -394,13 +470,15 @@ inline std::optional<AInt> CheckedSub(AInt a, AInt b) {
     return AInt(result);
 }
 
-/// @returns a + b, or an empty optional if the resulting value overflowed the AFloat
-inline std::optional<AFloat> CheckedSub(AFloat a, AFloat b) {
-    auto result = a.value - b.value;
-    if (!std::isfinite(result)) {
+/// @returns a + b, or an empty optional if the resulting value overflowed the float value
+template <typename FloatingPointT,
+          typename = utils::traits::EnableIf<IsFloatingPoint<FloatingPointT>>>
+inline std::optional<FloatingPointT> CheckedSub(FloatingPointT a, FloatingPointT b) {
+    auto result = FloatingPointT{a.value - b.value};
+    if (!std::isfinite(result.value)) {
         return {};
     }
-    return AFloat{result};
+    return result;
 }
 
 /// @returns a * b, or an empty optional if the resulting value overflowed the AInt
@@ -437,18 +515,110 @@ inline std::optional<AInt> CheckedMul(AInt a, AInt b) {
     return AInt(result);
 }
 
+/// @returns a * b, or an empty optional if the resulting value overflowed the float value
+template <typename FloatingPointT,
+          typename = utils::traits::EnableIf<IsFloatingPoint<FloatingPointT>>>
+inline std::optional<FloatingPointT> CheckedMul(FloatingPointT a, FloatingPointT b) {
+    auto result = FloatingPointT{a.value * b.value};
+    if (!std::isfinite(result.value)) {
+        return {};
+    }
+    return result;
+}
+
+/// @returns a / b, or an empty optional if the resulting value overflowed the AInt
+inline std::optional<AInt> CheckedDiv(AInt a, AInt b) {
+    if (b == 0) {
+        return {};
+    }
+
+    if (b == -1 && a == AInt::Lowest()) {
+        return {};
+    }
+
+    return AInt{a.value / b.value};
+}
+
+/// @returns a / b, or an empty optional if the resulting value overflowed the float value
+template <typename FloatingPointT,
+          typename = utils::traits::EnableIf<IsFloatingPoint<FloatingPointT>>>
+inline std::optional<FloatingPointT> CheckedDiv(FloatingPointT a, FloatingPointT b) {
+    if (b == FloatingPointT{0.0} || b == FloatingPointT{-0.0}) {
+        return {};
+    }
+    auto result = FloatingPointT{a.value / b.value};
+    if (!std::isfinite(result.value)) {
+        return {};
+    }
+    return result;
+}
+
+namespace detail {
+/// @returns the remainder of e1 / e2
+template <typename T>
+inline T Mod(T e1, T e2) {
+    if constexpr (IsIntegral<T>) {
+        return e1 % e2;
+
+    } else {
+        return e1 - e2 * std::trunc(e1 / e2);
+    }
+}
+}  // namespace detail
+
+/// @returns the remainder of a / b, or an empty optional if the resulting value overflowed the AInt
+inline std::optional<AInt> CheckedMod(AInt a, AInt b) {
+    if (b == 0) {
+        return {};
+    }
+
+    if (b == -1 && a == AInt::Lowest()) {
+        return {};
+    }
+
+    return AInt{detail::Mod(a.value, b.value)};
+}
+
+/// @returns the remainder of a / b, or an empty optional if the resulting value overflowed the
+/// float value
+template <typename FloatingPointT,
+          typename = utils::traits::EnableIf<IsFloatingPoint<FloatingPointT>>>
+inline std::optional<FloatingPointT> CheckedMod(FloatingPointT a, FloatingPointT b) {
+    if (b == FloatingPointT{0.0} || b == FloatingPointT{-0.0}) {
+        return {};
+    }
+    auto result = FloatingPointT{detail::Mod(a.value, b.value)};
+    if (!std::isfinite(result.value)) {
+        return {};
+    }
+    return result;
+}
+
 /// @returns a * b + c, or an empty optional if the value overflowed the AInt
 inline std::optional<AInt> CheckedMadd(AInt a, AInt b, AInt c) {
-    // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80635
-    TINT_BEGIN_DISABLE_WARNING(MAYBE_UNINITIALIZED);
-
     if (auto mul = CheckedMul(a, b)) {
         return CheckedAdd(mul.value(), c);
     }
     return {};
-
-    TINT_END_DISABLE_WARNING(MAYBE_UNINITIALIZED);
 }
+
+/// @returns the value of `base` raised to the power `exp`, or an empty optional if the operation
+/// cannot be performed.
+template <typename FloatingPointT,
+          typename = utils::traits::EnableIf<IsFloatingPoint<FloatingPointT>>>
+inline std::optional<FloatingPointT> CheckedPow(FloatingPointT base, FloatingPointT exp) {
+    static_assert(IsNumber<FloatingPointT>);
+    if ((base < 0) || (base == 0 && exp <= 0)) {
+        return {};
+    }
+    auto result = FloatingPointT{std::pow(base.value, exp.value)};
+    if (!std::isfinite(result.value)) {
+        return {};
+    }
+    return result;
+}
+
+TINT_END_DISABLE_WARNING(MAYBE_UNINITIALIZED);
 
 }  // namespace tint
 
@@ -495,5 +665,20 @@ inline f16 operator""_h(unsigned long long int value) {  // NOLINT
 }
 
 }  // namespace tint::number_suffixes
+
+namespace std {
+
+/// Custom std::hash specialization for tint::Number<T>
+template <typename T>
+class hash<tint::Number<T>> {
+  public:
+    /// @param n the Number
+    /// @return the hash value
+    inline std::size_t operator()(const tint::Number<T>& n) const {
+        return std::hash<decltype(n.value)>()(n.value);
+    }
+};
+
+}  // namespace std
 
 #endif  // SRC_TINT_NUMBER_H_

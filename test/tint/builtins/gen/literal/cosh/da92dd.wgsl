@@ -23,8 +23,10 @@
 
 // fn cosh(f32) -> f32
 fn cosh_da92dd() {
-  var res: f32 = cosh(1.f);
+  var res: f32 = cosh(0.f);
+  prevent_dce = res;
 }
+@group(2) @binding(0) var<storage, read_write> prevent_dce : f32;
 
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {

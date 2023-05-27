@@ -24,6 +24,7 @@
 #include "dawn/native/MetalBackend.h"
 #include "dawn/native/metal/BufferMTL.h"
 #include "dawn/native/metal/DeviceMTL.h"
+#include "dawn/native/metal/UtilsMetal.h"
 
 #if DAWN_PLATFORM_IS(MACOS)
 #import <IOKit/IOKitLib.h>
@@ -170,18 +171,6 @@ MaybeError GetDevicePCIInfo(id<MTLDevice> device, PCIIDs* ids) {
 #error "Unsupported Apple platform."
 #endif
 
-DAWN_NOINLINE bool IsCounterSamplingBoundarySupport(id<MTLDevice> device)
-    API_AVAILABLE(macos(11.0), ios(14.0)) {
-    bool isBlitBoundarySupported =
-        [device supportsCounterSampling:MTLCounterSamplingPointAtBlitBoundary];
-    bool isDispatchBoundarySupported =
-        [device supportsCounterSampling:MTLCounterSamplingPointAtDispatchBoundary];
-    bool isDrawBoundarySupported =
-        [device supportsCounterSampling:MTLCounterSamplingPointAtDrawBoundary];
-
-    return isBlitBoundarySupported && isDispatchBoundarySupported && isDrawBoundarySupported;
-}
-
 // This method has seen hard-to-debug crashes. See crbug.com/dawn/1102.
 // For now, it is written defensively, with many potentially unnecessary guards until
 // we narrow down the cause of the problem.
@@ -246,11 +235,13 @@ DAWN_NOINLINE bool IsGPUCounterSupported(id<MTLDevice> device,
     }
 
     if (@available(macOS 11.0, iOS 14.0, tvOS 14.0, *)) {
-        // Check whether it can read GPU counters at the specified command boundary. Apple
-        // family GPUs do not support sampling between different Metal commands, because
-        // they defer fragment processing until after the GPU processes all the primitives
-        // in the render pass.
-        if (!IsCounterSamplingBoundarySupport(device)) {
+        // Check whether it can read GPU counters at the specified command boundary or stage
+        // boundary. Apple family GPUs do not support sampling between different Metal commands,
+        // because they defer fragment processing until after the GPU processes all the primitives
+        // in the render pass. GPU counters are only available if sampling at least one of the
+        // command or stage boundaries is supported.
+        if (!SupportCounterSamplingAtCommandBoundary(device) &&
+            !SupportCounterSamplingAtStageBoundary(device)) {
             return false;
         }
     }
@@ -260,12 +251,12 @@ DAWN_NOINLINE bool IsGPUCounterSupported(id<MTLDevice> device,
 
 }  // anonymous namespace
 
-// The Metal backend's Adapter.
+// The Metal backend's PhysicalDevice.
 
-class Adapter : public AdapterBase {
+class PhysicalDevice : public PhysicalDeviceBase {
   public:
-    Adapter(InstanceBase* instance, id<MTLDevice> device)
-        : AdapterBase(instance, wgpu::BackendType::Metal), mDevice(device) {
+    PhysicalDevice(InstanceBase* instance, id<MTLDevice> device)
+        : PhysicalDeviceBase(instance, wgpu::BackendType::Metal), mDevice(device) {
         mName = std::string([[*mDevice name] UTF8String]);
 
         PCIIDs ids;
@@ -292,60 +283,234 @@ class Adapter : public AdapterBase {
         mDriverDescription = "Metal driver on " + std::string(systemName) + [osVersion UTF8String];
     }
 
-    // AdapterBase Implementation
+    // PhysicalDeviceBase Implementation
     bool SupportsExternalImages() const override {
         // Via dawn::native::metal::WrapIOSurface
         return true;
     }
 
+    bool SupportsFeatureLevel(FeatureLevel) const override { return true; }
+
   private:
-    ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(const DeviceDescriptor* descriptor) override {
-        return Device::Create(this, mDevice, descriptor);
+    ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(AdapterBase* adapter,
+                                                    const DeviceDescriptor* descriptor,
+                                                    const TogglesState& deviceToggles) override {
+        return Device::Create(adapter, mDevice, descriptor, deviceToggles);
+    }
+
+    void SetupBackendDeviceToggles(TogglesState* deviceToggles) const override {
+        {
+            bool haveStoreAndMSAAResolve = false;
+#if DAWN_PLATFORM_IS(MACOS)
+            if (@available(macOS 10.12, *)) {
+                haveStoreAndMSAAResolve =
+                    [*mDevice supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v2];
+            }
+#elif DAWN_PLATFORM_IS(IOS)
+            haveStoreAndMSAAResolve = [*mDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily3_v2];
+#endif
+            // On tvOS, we would need MTLFeatureSet_tvOS_GPUFamily2_v1.
+            deviceToggles->Default(Toggle::EmulateStoreAndMSAAResolve, !haveStoreAndMSAAResolve);
+
+            bool haveSamplerCompare = true;
+#if DAWN_PLATFORM_IS(IOS)
+            haveSamplerCompare = [*mDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily3_v1];
+#endif
+            // TODO(crbug.com/dawn/342): Investigate emulation -- possibly expensive.
+            deviceToggles->Default(Toggle::MetalDisableSamplerCompare, !haveSamplerCompare);
+
+            bool haveBaseVertexBaseInstance = true;
+#if DAWN_PLATFORM_IS(IOS)
+            haveBaseVertexBaseInstance =
+                [*mDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily3_v1];
+#endif
+            // TODO(crbug.com/dawn/343): Investigate emulation.
+            deviceToggles->Default(Toggle::DisableBaseVertex, !haveBaseVertexBaseInstance);
+            deviceToggles->Default(Toggle::DisableBaseInstance, !haveBaseVertexBaseInstance);
+        }
+
+        // Vertex buffer robustness is implemented by using programmable vertex pulling. Enable
+        // that code path if it isn't explicitly disabled.
+        if (!deviceToggles->IsEnabled(Toggle::DisableRobustness)) {
+            deviceToggles->Default(Toggle::MetalEnableVertexPulling, true);
+        }
+
+        // TODO(crbug.com/dawn/846): tighten this workaround when the driver bug is fixed.
+        deviceToggles->Default(Toggle::AlwaysResolveIntoZeroLevelAndLayer, true);
+
+        uint32_t deviceId = GetDeviceId();
+        uint32_t vendorId = GetVendorId();
+
+        // TODO(crbug.com/dawn/847): Use MTLStorageModeShared instead of MTLStorageModePrivate when
+        // creating MTLCounterSampleBuffer in QuerySet on Intel platforms, otherwise it fails to
+        // create the buffer. Change to use MTLStorageModePrivate when the bug is fixed.
+        if (@available(macOS 10.15, iOS 14.0, *)) {
+            bool useSharedMode = gpu_info::IsIntel(vendorId);
+            deviceToggles->Default(Toggle::MetalUseSharedModeForCounterSampleBuffer, useSharedMode);
+        }
+
+        // Rendering R8Unorm and RG8Unorm to small mip doesn't work properly on Intel.
+        // TODO(crbug.com/dawn/1071): Tighten the workaround when this issue is fixed.
+        if (gpu_info::IsIntel(vendorId)) {
+            deviceToggles->Default(Toggle::MetalRenderR8RG8UnormSmallMipToTempTexture, true);
+        }
+
+        // On some Intel GPUs vertex only render pipeline get wrong depth result if no fragment
+        // shader provided. Create a placeholder fragment shader module to work around this issue.
+        if (gpu_info::IsIntel(vendorId)) {
+            bool usePlaceholderFragmentShader = true;
+            if (gpu_info::IsSkylake(deviceId)) {
+                usePlaceholderFragmentShader = false;
+            }
+            deviceToggles->Default(Toggle::UsePlaceholderFragmentInVertexOnlyPipeline,
+                                   usePlaceholderFragmentShader);
+        }
+
+        // On some Intel GPUs using big integer values as clear values in render pass doesn't work
+        // correctly. Currently we have to add workaround for this issue by enabling the toggle
+        // "apply_clear_big_integer_color_value_with_draw". See https://crbug.com/dawn/1109 and
+        // https://crbug.com/dawn/1463 for more details.
+        if (gpu_info::IsIntel(vendorId)) {
+            deviceToggles->Default(Toggle::ApplyClearBigIntegerColorValueWithDraw, true);
+        }
+
+        // TODO(dawn:1473): Metal fails to store GPU counters to sampleBufferAttachments on empty
+        // encoders on macOS 11.0+, we need to add mock blit command to blit encoder when encoding
+        // writeTimestamp as workaround by enabling the toggle
+        // "metal_use_mock_blit_encoder_for_write_timestamp".
+        if (@available(macos 11.0, iOS 14.0, *)) {
+            deviceToggles->Default(Toggle::MetalUseMockBlitEncoderForWriteTimestamp, true);
+        }
+
+#if DAWN_PLATFORM_IS(MACOS)
+        if (gpu_info::IsIntel(vendorId)) {
+            deviceToggles->Default(
+                Toggle::MetalUseBothDepthAndStencilAttachmentsForCombinedDepthStencilFormats, true);
+            deviceToggles->Default(Toggle::UseBlitForBufferToStencilTextureCopy, true);
+            deviceToggles->Default(Toggle::UseBlitForBufferToDepthTextureCopy, true);
+            deviceToggles->Default(Toggle::UseBlitForDepthTextureToTextureCopyToNonzeroSubresource,
+                                   true);
+
+            if ([NSProcessInfo.processInfo
+                    isOperatingSystemAtLeastVersion:NSOperatingSystemVersion{12, 0, 0}]) {
+                deviceToggles->ForceSet(
+                    Toggle::NoWorkaroundSampleMaskBecomesZeroForAllButLastColorTarget, true);
+            }
+            if (gpu_info::IsIntelGen7(vendorId, deviceId) ||
+                gpu_info::IsIntelGen8(vendorId, deviceId)) {
+                deviceToggles->ForceSet(Toggle::NoWorkaroundIndirectBaseVertexNotApplied, true);
+            }
+        }
+        if (gpu_info::IsAMD(vendorId) || gpu_info::IsIntel(vendorId)) {
+            deviceToggles->Default(Toggle::MetalUseCombinedDepthStencilFormatForStencil8, true);
+            deviceToggles->Default(Toggle::MetalKeepMultisubresourceDepthStencilTexturesInitialized,
+                                   true);
+        }
+
+        if (gpu_info::IsApple(vendorId)) {
+            deviceToggles->Default(Toggle::MetalFillEmptyOcclusionQueriesWithZero, true);
+        }
+
+        // Local testing shows the workaround is needed on AMD Radeon HD 8870M (gcn-1) MacOS 12.1;
+        // not on AMD Radeon Pro 555 (gcn-4) MacOS 13.1.
+        // Conservatively enable the workaround on AMD unless the system is MacOS 13.1+
+        // with architecture at least AMD gcn-4.
+        bool isLessThanAMDGN4OrMac13Dot1 = false;
+        if (gpu_info::IsAMDGCN1(vendorId, deviceId) || gpu_info::IsAMDGCN2(vendorId, deviceId) ||
+            gpu_info::IsAMDGCN3(vendorId, deviceId)) {
+            isLessThanAMDGN4OrMac13Dot1 = true;
+        } else if (gpu_info::IsAMD(vendorId)) {
+            if (@available(macos 13.1, *)) {
+            } else {
+                isLessThanAMDGN4OrMac13Dot1 = true;
+            }
+        }
+        if (isLessThanAMDGN4OrMac13Dot1) {
+            deviceToggles->Default(
+                Toggle::MetalUseBothDepthAndStencilAttachmentsForCombinedDepthStencilFormats, true);
+        }
+#endif
     }
 
     MaybeError InitializeImpl() override { return {}; }
 
-    MaybeError InitializeSupportedFeaturesImpl() override {
-        // Check compressed texture format with deprecated MTLFeatureSet way.
+    void InitializeSupportedFeaturesImpl() override {
+        // Check texture formats with deprecated MTLFeatureSet way.
 #if DAWN_PLATFORM_IS(MACOS)
         if ([*mDevice supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v1]) {
-            mSupportedFeatures.EnableFeature(Feature::TextureCompressionBC);
+            EnableFeature(Feature::TextureCompressionBC);
+        }
+        if (@available(macOS 10.14, *)) {
+            if ([*mDevice supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily2_v1]) {
+                EnableFeature(Feature::Float32Filterable);
+            }
         }
 #endif
 #if DAWN_PLATFORM_IS(IOS) && !DAWN_PLATFORM_IS(TVOS)
         if ([*mDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily1_v1]) {
-            mSupportedFeatures.EnableFeature(Feature::TextureCompressionETC2);
+            EnableFeature(Feature::TextureCompressionETC2);
         }
         if ([*mDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily2_v1]) {
-            mSupportedFeatures.EnableFeature(Feature::TextureCompressionASTC);
+            EnableFeature(Feature::TextureCompressionASTC);
         }
 #endif
 
-        // Check compressed texture format with MTLGPUFamily
+        // Check texture formats with MTLGPUFamily
         if (@available(macOS 10.15, iOS 13.0, *)) {
             if ([*mDevice supportsFamily:MTLGPUFamilyMac1]) {
-                mSupportedFeatures.EnableFeature(Feature::TextureCompressionBC);
+                EnableFeature(Feature::TextureCompressionBC);
+            }
+            if ([*mDevice supportsFamily:MTLGPUFamilyMac2]) {
+                EnableFeature(Feature::Float32Filterable);
             }
             if ([*mDevice supportsFamily:MTLGPUFamilyApple2]) {
-                mSupportedFeatures.EnableFeature(Feature::TextureCompressionETC2);
+                EnableFeature(Feature::TextureCompressionETC2);
             }
             if ([*mDevice supportsFamily:MTLGPUFamilyApple3]) {
-                mSupportedFeatures.EnableFeature(Feature::TextureCompressionASTC);
+                EnableFeature(Feature::TextureCompressionASTC);
             }
         }
 
         if (@available(macOS 10.15, iOS 14.0, *)) {
+            auto ShouldLeakCounterSets = [this]() {
+                // Intentionally leak counterSets to workaround an issue where the driver
+                // over-releases the handle if it is accessed more than once. It becomes a zombie.
+                // For more information, see crbug.com/1443658.
+                // Appears to occur on Intel prior to MacOS 11, and continuing on Intel Gen 7 after
+                // that OS version.
+                uint32_t vendorId = GetVendorId();
+                uint32_t deviceId = GetDeviceId();
+                if (gpu_info::IsIntelGen7(vendorId, deviceId)) {
+                    return true;
+                }
+                if (gpu_info::IsIntelGen11(vendorId, deviceId)) {
+                    return true;
+                }
+                if (gpu_info::IsIntel(vendorId) && !IsMacOSVersionAtLeast(11)) {
+                    return true;
+                }
+                return false;
+            };
+            if (ShouldLeakCounterSets()) {
+                [[*mDevice counterSets] retain];
+            }
             if (IsGPUCounterSupported(
                     *mDevice, MTLCommonCounterSetStatistic,
                     {MTLCommonCounterVertexInvocations, MTLCommonCounterClipperInvocations,
                      MTLCommonCounterClipperPrimitivesOut, MTLCommonCounterFragmentInvocations,
                      MTLCommonCounterComputeKernelInvocations})) {
-                mSupportedFeatures.EnableFeature(Feature::PipelineStatisticsQuery);
+                EnableFeature(Feature::PipelineStatisticsQuery);
             }
 
             if (IsGPUCounterSupported(*mDevice, MTLCommonCounterSetTimestamp,
                                       {MTLCommonCounterTimestamp})) {
                 bool enableTimestampQuery = true;
+                bool enableTimestampQueryInsidePasses = true;
+
+                if (@available(macOS 11.0, iOS 14.0, *)) {
+                    enableTimestampQueryInsidePasses =
+                        SupportCounterSamplingAtCommandBoundary(*mDevice);
+                }
 
 #if DAWN_PLATFORM_IS(MACOS)
                 // Disable timestamp query on < macOS 11.0 on AMD GPU because WriteTimestamp
@@ -353,32 +518,47 @@ class Adapter : public AdapterBase {
                 // has been fixed on macOS 11.0. See crbug.com/dawn/545.
                 if (gpu_info::IsAMD(mVendorId) && !IsMacOSVersionAtLeast(11)) {
                     enableTimestampQuery = false;
+                    enableTimestampQueryInsidePasses = false;
                 }
 #endif
 
                 if (enableTimestampQuery) {
-                    mSupportedFeatures.EnableFeature(Feature::TimestampQuery);
+                    EnableFeature(Feature::TimestampQuery);
+                }
+
+                if (enableTimestampQueryInsidePasses) {
+                    EnableFeature(Feature::TimestampQueryInsidePasses);
                 }
             }
         }
 
         if (@available(macOS 10.11, iOS 11.0, *)) {
-            mSupportedFeatures.EnableFeature(Feature::DepthClipControl);
+            EnableFeature(Feature::DepthClipControl);
         }
 
         if (@available(macOS 10.11, iOS 9.0, *)) {
-            mSupportedFeatures.EnableFeature(Feature::Depth32FloatStencil8);
+            EnableFeature(Feature::Depth32FloatStencil8);
         }
 
         // Uses newTextureWithDescriptor::iosurface::plane which is available
         // on ios 11.0+ and macOS 11.0+
         if (@available(macOS 10.11, iOS 11.0, *)) {
-            mSupportedFeatures.EnableFeature(Feature::MultiPlanarFormats);
+            EnableFeature(Feature::MultiPlanarFormats);
         }
 
-        mSupportedFeatures.EnableFeature(Feature::IndirectFirstInstance);
+        if (@available(macOS 11.0, iOS 10.0, *)) {
+            // Memoryless storage mode for Metal textures is available only
+            // from the Apple2 family of GPUs on.
+            if ([*mDevice supportsFamily:MTLGPUFamilyApple2]) {
+                EnableFeature(Feature::TransientAttachments);
+            }
+        }
 
-        return {};
+        EnableFeature(Feature::IndirectFirstInstance);
+        EnableFeature(Feature::ShaderF16);
+        EnableFeature(Feature::RG11B10UfloatRenderable);
+        EnableFeature(Feature::BGRA8UnormStorage);
+        EnableFeature(Feature::SurfaceCapabilities);
     }
 
     void InitializeVendorArchitectureImpl() override {
@@ -462,7 +642,7 @@ class Adapter : public AdapterBase {
         }
 #endif
 
-#if TARGET_OS_OSX
+#if DAWN_PLATFORM_IS(MACOS)
         if (@available(macOS 10.14, *)) {
             if ([*mDevice supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily2_v1]) {
                 return MTLGPUFamily::Mac2;
@@ -471,7 +651,7 @@ class Adapter : public AdapterBase {
         if ([*mDevice supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v1]) {
             return MTLGPUFamily::Mac1;
         }
-#elif TARGET_OS_IOS
+#elif DAWN_PLATFORM_IS(IOS)
         if (@available(iOS 10.11, *)) {
             if ([*mDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily4_v1]) {
                 return MTLGPUFamily::Apple4;
@@ -591,10 +771,10 @@ class Adapter : public AdapterBase {
         //   buffers, 128 textures, and 16 samplers. Mac GPU families
         //   with tier 2 argument buffers support 500000 buffers and
         //   textures, and 1024 unique samplers
-        limits->v1.maxDynamicUniformBuffersPerPipelineLayout =
-            limits->v1.maxUniformBuffersPerShaderStage;
-        limits->v1.maxDynamicStorageBuffersPerPipelineLayout =
-            limits->v1.maxStorageBuffersPerShaderStage;
+        // Without argument buffers, we have slots [0 -> 29], inclusive, which is 30 total.
+        // 8 are used by maxVertexBuffers.
+        limits->v1.maxDynamicUniformBuffersPerPipelineLayout = 11u;
+        limits->v1.maxDynamicStorageBuffersPerPipelineLayout = 11u;
 
         // The WebGPU limit is the limit across all vertex buffers, combined.
         limits->v1.maxVertexAttributes =
@@ -612,6 +792,7 @@ class Adapter : public AdapterBase {
         limits->v1.minStorageBufferOffsetAlignment = mtlLimits.minBufferOffsetAlignment;
 
         uint64_t maxBufferSize = Buffer::QueryMaxBufferLength(*mDevice);
+        limits->v1.maxBufferSize = maxBufferSize;
 
         // Metal has no documented limit on the size of a binding. Use the maximum
         // buffer size.
@@ -629,6 +810,11 @@ class Adapter : public AdapterBase {
         return {};
     }
 
+    MaybeError ValidateFeatureSupportedWithTogglesImpl(wgpu::FeatureName feature,
+                                                       const TogglesState& toggles) const override {
+        return {};
+    }
+
     NSPRef<id<MTLDevice>> mDevice;
 };
 
@@ -642,9 +828,9 @@ Backend::Backend(InstanceBase* instance) : BackendConnection(instance, wgpu::Bac
 
 Backend::~Backend() = default;
 
-std::vector<Ref<AdapterBase>> Backend::DiscoverDefaultAdapters() {
-    AdapterDiscoveryOptions options;
-    auto result = DiscoverAdapters(&options);
+std::vector<Ref<PhysicalDeviceBase>> Backend::DiscoverDefaultPhysicalDevices() {
+    PhysicalDeviceDiscoveryOptions options;
+    auto result = DiscoverPhysicalDevices(&options);
     if (result.IsError()) {
         GetInstance()->ConsumedError(result.AcquireError());
         return {};
@@ -652,32 +838,32 @@ std::vector<Ref<AdapterBase>> Backend::DiscoverDefaultAdapters() {
     return result.AcquireSuccess();
 }
 
-ResultOrError<std::vector<Ref<AdapterBase>>> Backend::DiscoverAdapters(
-    const AdapterDiscoveryOptionsBase* optionsBase) {
+ResultOrError<std::vector<Ref<PhysicalDeviceBase>>> Backend::DiscoverPhysicalDevices(
+    const PhysicalDeviceDiscoveryOptionsBase* optionsBase) {
     ASSERT(optionsBase->backendType == WGPUBackendType_Metal);
 
-    std::vector<Ref<AdapterBase>> adapters;
+    std::vector<Ref<PhysicalDeviceBase>> physicalDevices;
 #if DAWN_PLATFORM_IS(MACOS)
     NSRef<NSArray<id<MTLDevice>>> devices = AcquireNSRef(MTLCopyAllDevices());
 
     for (id<MTLDevice> device in devices.Get()) {
-        Ref<Adapter> adapter = AcquireRef(new Adapter(GetInstance(), device));
-        if (!GetInstance()->ConsumedError(adapter->Initialize())) {
-            adapters.push_back(std::move(adapter));
+        Ref<PhysicalDevice> physicalDevice = AcquireRef(new PhysicalDevice(GetInstance(), device));
+        if (!GetInstance()->ConsumedError(physicalDevice->Initialize())) {
+            physicalDevices.push_back(std::move(physicalDevice));
         }
     }
 #endif
 
     // iOS only has a single device so MTLCopyAllDevices doesn't exist there.
 #if defined(DAWN_PLATFORM_IOS)
-    Ref<Adapter> adapter =
-        AcquireRef(new Adapter(GetInstance(), MTLCreateSystemDefaultDevice()));
-    if (!GetInstance()->ConsumedError(adapter->Initialize())) {
-        adapters.push_back(std::move(adapter));
+    Ref<PhysicalDevice> physicalDevice =
+        AcquireRef(new PhysicalDevice(GetInstance(), MTLCreateSystemDefaultDevice()));
+    if (!GetInstance()->ConsumedError(physicalDevice->Initialize())) {
+        physicalDevices.push_back(std::move(physicalDevice));
     }
 #endif
 
-    return adapters;
+    return physicalDevices;
 }
 
 BackendConnection* Connect(InstanceBase* instance) {

@@ -1,11 +1,10 @@
 SKIP: FAILED
 
-float16_t tint_radians(float16_t param_0) {
-  return param_0 * 0.017453292519943295474;
-}
+RWByteAddressBuffer prevent_dce : register(u0, space2);
 
 void radians_208fd9() {
-  float16_t res = tint_radians(float16_t(0.0h));
+  float16_t res = float16_t(0.0174407958984375h);
+  prevent_dce.Store<float16_t>(0u, res);
 }
 
 struct tint_symbol {
@@ -34,6 +33,3 @@ void compute_main() {
   radians_208fd9();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001B5647B0440(1,1-9): error X3000: unrecognized identifier 'float16_t'
-

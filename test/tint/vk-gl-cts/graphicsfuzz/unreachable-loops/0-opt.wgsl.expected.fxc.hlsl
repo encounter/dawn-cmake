@@ -1,7 +1,7 @@
 SKIP: FAILED
 
 static float4 x_GLF_color = float4(0.0f, 0.0f, 0.0f, 0.0f);
-cbuffer cbuffer_x_5 : register(b0, space0) {
+cbuffer cbuffer_x_5 : register(b0) {
   uint4 x_5[1];
 };
 
@@ -11,16 +11,13 @@ void main_1() {
   const float x_30 = asfloat(x_5[0].x);
   const float x_32 = asfloat(x_5[0].y);
   if ((x_30 > x_32)) {
-    [loop] while (true) {
+    while (true) {
       {
-        if (false) {
-        } else {
-          break;
-        }
+        if (true) { break; }
       }
     }
     m = 1;
-    [loop] while (true) {
+    while (true) {
       if (true) {
       } else {
         break;
@@ -40,8 +37,8 @@ struct tint_symbol {
 
 main_out main_inner() {
   main_1();
-  const main_out tint_symbol_2 = {x_GLF_color};
-  return tint_symbol_2;
+  const main_out tint_symbol_1 = {x_GLF_color};
+  return tint_symbol_1;
 }
 
 tint_symbol main() {

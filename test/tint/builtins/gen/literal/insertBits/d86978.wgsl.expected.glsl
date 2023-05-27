@@ -1,13 +1,12 @@
 #version 310 es
 
-ivec4 tint_insert_bits(ivec4 v, ivec4 n, uint offset, uint count) {
-  uint s = min(offset, 32u);
-  uint e = min(32u, (s + count));
-  return bitfieldInsert(v, n, int(s), int((e - s)));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  ivec4 inner;
+} prevent_dce;
 
 void insertBits_d86978() {
-  ivec4 res = tint_insert_bits(ivec4(1), ivec4(1), 1u, 1u);
+  ivec4 res = ivec4(3);
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -24,16 +23,15 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-ivec4 tint_insert_bits(ivec4 v, ivec4 n, uint offset, uint count) {
-  uint s = min(offset, 32u);
-  uint e = min(32u, (s + count));
-  return bitfieldInsert(v, n, int(s), int((e - s)));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  ivec4 inner;
+} prevent_dce;
 
 void insertBits_d86978() {
-  ivec4 res = tint_insert_bits(ivec4(1), ivec4(1), 1u, 1u);
+  ivec4 res = ivec4(3);
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -46,14 +44,13 @@ void main() {
 }
 #version 310 es
 
-ivec4 tint_insert_bits(ivec4 v, ivec4 n, uint offset, uint count) {
-  uint s = min(offset, 32u);
-  uint e = min(32u, (s + count));
-  return bitfieldInsert(v, n, int(s), int((e - s)));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  ivec4 inner;
+} prevent_dce;
 
 void insertBits_d86978() {
-  ivec4 res = tint_insert_bits(ivec4(1), ivec4(1), 1u, 1u);
+  ivec4 res = ivec4(3);
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

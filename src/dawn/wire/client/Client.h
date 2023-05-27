@@ -71,7 +71,8 @@ class Client : public ClientBase {
     MemoryTransferService* GetMemoryTransferService() const { return mMemoryTransferService; }
 
     ReservedTexture ReserveTexture(WGPUDevice device, const WGPUTextureDescriptor* descriptor);
-    ReservedSwapChain ReserveSwapChain(WGPUDevice device);
+    ReservedSwapChain ReserveSwapChain(WGPUDevice device,
+                                       const WGPUSwapChainDescriptor* descriptor);
     ReservedDevice ReserveDevice();
     ReservedInstance ReserveInstance();
 
@@ -85,11 +86,9 @@ class Client : public ClientBase {
         mSerializer.SerializeCommand(cmd, *this);
     }
 
-    template <typename Cmd, typename ExtraSizeSerializeFn>
-    void SerializeCommand(const Cmd& cmd,
-                          size_t extraSize,
-                          ExtraSizeSerializeFn&& SerializeExtraSize) {
-        mSerializer.SerializeCommand(cmd, *this, extraSize, SerializeExtraSize);
+    template <typename Cmd, typename... Extensions>
+    void SerializeCommand(const Cmd& cmd, Extensions&&... es) {
+        mSerializer.SerializeCommand(cmd, *this, std::forward<Extensions>(es)...);
     }
 
     void Disconnect();

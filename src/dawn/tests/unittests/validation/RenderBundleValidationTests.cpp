@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dawn/tests/unittests/validation/ValidationTest.h"
+#include <vector>
 
 #include "dawn/common/Constants.h"
-
+#include "dawn/tests/unittests/validation/ValidationTest.h"
 #include "dawn/utils/ComboRenderBundleEncoderDescriptor.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
+namespace dawn {
 namespace {
 
 class RenderBundleValidationTest : public ValidationTest {
@@ -33,13 +34,13 @@ class RenderBundleValidationTest : public ValidationTest {
                 }
                 @group(0) @binding(0) var<uniform> uniforms : S;
 
-                @vertex fn main(@location(0) pos : vec2<f32>) -> @builtin(position) vec4<f32> {
-                    return vec4<f32>();
+                @vertex fn main(@location(0) pos : vec2f) -> @builtin(position) vec4f {
+                    return vec4f();
                 })");
 
         fsModule = utils::CreateShaderModule(device, R"(
                 struct Uniforms {
-                    color : vec4<f32>
+                    color : vec4f
                 }
                 @group(1) @binding(0) var<uniform> uniforms : Uniforms;
 
@@ -120,8 +121,6 @@ class RenderBundleValidationTest : public ValidationTest {
     wgpu::BindGroup bg1;
     wgpu::BindGroup bg1Vertex;
 };
-
-}  // anonymous namespace
 
 // Test creating and encoding an empty render bundle.
 TEST_F(RenderBundleValidationTest, Empty) {
@@ -615,7 +614,7 @@ TEST_F(RenderBundleValidationTest, RequiresAtLeastOneTextureFormat) {
 TEST_F(RenderBundleValidationTest, ColorFormatsCountOutOfBounds) {
     std::array<wgpu::TextureFormat, kMaxColorAttachments + 1> colorFormats;
     for (uint32_t i = 0; i < colorFormats.size(); ++i) {
-        colorFormats[i] = wgpu::TextureFormat::RGBA8Unorm;
+        colorFormats[i] = wgpu::TextureFormat::R8Unorm;
     }
 
     // colorFormatsCount <= kMaxColorAttachments is valid.
@@ -1139,3 +1138,71 @@ TEST_F(RenderBundleValidationTest, TextureFormats) {
 
     // Don't test non-renerable depth/stencil formats because we don't have any.
 }
+
+// Tests validation for per-pixel accounting for render targets. The tests currently assume that the
+// default maxColorAttachmentBytesPerSample limit of 32 is used.
+TEST_F(RenderBundleValidationTest, RenderBundleColorFormatsBytesPerSample) {
+    struct TestCase {
+        std::vector<wgpu::TextureFormat> formats;
+        bool success;
+    };
+    static std::vector<TestCase> kTestCases = {
+        // Simple 1 format cases.
+
+        // R8Unorm take 1 byte and are aligned to 1 byte so we can have 8 (max).
+        {{wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::R8Unorm,
+          wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::R8Unorm,
+          wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::R8Unorm},
+         true},
+        // RGBA8Uint takes 4 bytes and are aligned to 1 byte so we can have 8 (max).
+        {{wgpu::TextureFormat::RGBA8Uint, wgpu::TextureFormat::RGBA8Uint,
+          wgpu::TextureFormat::RGBA8Uint, wgpu::TextureFormat::RGBA8Uint,
+          wgpu::TextureFormat::RGBA8Uint, wgpu::TextureFormat::RGBA8Uint,
+          wgpu::TextureFormat::RGBA8Uint, wgpu::TextureFormat::RGBA8Uint},
+         true},
+        // RGBA8Unorm takes 8 bytes (special case) and are aligned to 1 byte so only 4 allowed.
+        {{wgpu::TextureFormat::RGBA8Unorm, wgpu::TextureFormat::RGBA8Unorm,
+          wgpu::TextureFormat::RGBA8Unorm, wgpu::TextureFormat::RGBA8Unorm},
+         true},
+        {{wgpu::TextureFormat::RGBA8Unorm, wgpu::TextureFormat::RGBA8Unorm,
+          wgpu::TextureFormat::RGBA8Unorm, wgpu::TextureFormat::RGBA8Unorm,
+          wgpu::TextureFormat::RGBA8Unorm},
+         false},
+        // RGBA32Float takes 16 bytes and are aligned to 4 bytes so only 2 are allowed.
+        {{wgpu::TextureFormat::RGBA32Float, wgpu::TextureFormat::RGBA32Float}, true},
+        {{wgpu::TextureFormat::RGBA32Float, wgpu::TextureFormat::RGBA32Float,
+          wgpu::TextureFormat::RGBA32Float},
+         false},
+
+        // Different format alignment cases.
+
+        // Alignment causes the first 1 byte R8Unorm to become 4 bytes. So even though 1+4+8+16+1 <
+        // 32, the 4 byte alignment requirement of R32Float makes the first R8Unorm become 4 and
+        // 4+4+8+16+1 > 32. Re-ordering this so the R8Unorm's are at the end, however is allowed:
+        // 4+8+16+1+1 < 32.
+        {{wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::R32Float,
+          wgpu::TextureFormat::RGBA8Unorm, wgpu::TextureFormat::RGBA32Float,
+          wgpu::TextureFormat::R8Unorm},
+         false},
+        {{wgpu::TextureFormat::R32Float, wgpu::TextureFormat::RGBA8Unorm,
+          wgpu::TextureFormat::RGBA32Float, wgpu::TextureFormat::R8Unorm,
+          wgpu::TextureFormat::R8Unorm},
+         true},
+    };
+
+    for (const TestCase& testCase : kTestCases) {
+        utils::ComboRenderBundleEncoderDescriptor descriptor;
+        descriptor.colorFormatsCount = testCase.formats.size();
+        for (size_t i = 0; i < testCase.formats.size(); i++) {
+            descriptor.cColorFormats[i] = testCase.formats.at(i);
+        }
+        if (testCase.success) {
+            device.CreateRenderBundleEncoder(&descriptor);
+        } else {
+            ASSERT_DEVICE_ERROR(device.CreateRenderBundleEncoder(&descriptor));
+        }
+    }
+}
+
+}  // anonymous namespace
+}  // namespace dawn

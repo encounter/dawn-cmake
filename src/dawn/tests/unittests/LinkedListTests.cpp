@@ -10,6 +10,9 @@
 #include "dawn/common/LinkedList.h"
 #include "gtest/gtest.h"
 
+namespace dawn {
+namespace {
+
 class Node : public LinkNode<Node> {
   public:
     explicit Node(int id) : id_(id) {}
@@ -113,6 +116,41 @@ TEST(LinkedList, Append) {
     EXPECT_EQ(&n3, list.tail());
     {
         const int expected[] = {1, 2, 3};
+        ExpectListContents(list, 3, expected);
+    }
+}
+
+TEST(LinkedList, Prepend) {
+    LinkedList<Node> list;
+    ExpectListContents(list, 0, nullptr);
+
+    Node n1(1);
+    list.Prepend(&n1);
+
+    EXPECT_EQ(&n1, list.head());
+    EXPECT_EQ(&n1, list.tail());
+    {
+        const int expected[] = {1};
+        ExpectListContents(list, 1, expected);
+    }
+
+    Node n2(2);
+    list.Prepend(&n2);
+
+    EXPECT_EQ(&n2, list.head());
+    EXPECT_EQ(&n1, list.tail());
+    {
+        const int expected[] = {2, 1};
+        ExpectListContents(list, 2, expected);
+    }
+
+    Node n3(3);
+    list.Prepend(&n3);
+
+    EXPECT_EQ(&n3, list.head());
+    EXPECT_EQ(&n1, list.tail());
+    {
+        const int expected[] = {3, 2, 1};
         ExpectListContents(list, 3, expected);
     }
 }
@@ -421,3 +459,6 @@ TEST(LinkedList, RangeBasedEndIsEnd) {
     LinkedList<Node> list;
     EXPECT_EQ(list.end(), *end(list));
 }
+
+}  // anonymous namespace
+}  // namespace dawn

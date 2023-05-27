@@ -15,14 +15,20 @@
 #ifndef SRC_DAWN_NATIVE_OBJECTBASE_H_
 #define SRC_DAWN_NATIVE_OBJECTBASE_H_
 
+#include <mutex>
 #include <string>
 
 #include "dawn/common/LinkedList.h"
 #include "dawn/common/RefCounted.h"
 #include "dawn/native/Forward.h"
 
+namespace absl {
+class FormatSink;
+}
+
 namespace dawn::native {
 
+class ApiObjectBase;
 class DeviceBase;
 
 class ErrorMonad : public RefCounted {
@@ -48,6 +54,26 @@ class ObjectBase : public ErrorMonad {
     Ref<DeviceBase> mDevice;
 };
 
+// Generic object list with a mutex for tracking for destruction.
+class ApiObjectList {
+  public:
+    // Tracks an object if the list is not destroyed. If the list is destroyed, destroys the object.
+    void Track(ApiObjectBase* object);
+
+    // Returns true iff the object was removed from the list.
+    bool Untrack(ApiObjectBase* object);
+
+    // Destroys and removes all the objects tracked in the list.
+    void Destroy();
+
+  private:
+    // Boolean used to mark the list so that on subsequent calls to Untrack, we don't need to
+    // reaquire the lock, and Track on new objects immediately destroys them.
+    bool mMarkedDestroyed = false;
+    std::mutex mMutex;
+    LinkedList<ApiObjectBase> mObjects;
+};
+
 class ApiObjectBase : public ObjectBase, public LinkNode<ApiObjectBase> {
   public:
     struct LabelNotImplementedTag {};
@@ -57,11 +83,14 @@ class ApiObjectBase : public ObjectBase, public LinkNode<ApiObjectBase> {
 
     ApiObjectBase(DeviceBase* device, LabelNotImplementedTag tag);
     ApiObjectBase(DeviceBase* device, const char* label);
-    ApiObjectBase(DeviceBase* device, ErrorTag tag);
+    ApiObjectBase(DeviceBase* device, ErrorTag tag, const char* label = nullptr);
     ~ApiObjectBase() override;
 
     virtual ObjectType GetType() const = 0;
+    void SetLabel(std::string label);
     const std::string& GetLabel() const;
+
+    virtual void FormatLabel(absl::FormatSink* s) const;
 
     // The ApiObjectBase is considered alive if it is tracked in a respective linked list owned
     // by the owning device.
@@ -72,6 +101,7 @@ class ApiObjectBase : public ObjectBase, public LinkNode<ApiObjectBase> {
 
     // Dawn API
     void APISetLabel(const char* label);
+    void APIRelease();
 
   protected:
     // Overriding of the RefCounted's DeleteThis function ensures that instances of objects
@@ -85,7 +115,12 @@ class ApiObjectBase : public ObjectBase, public LinkNode<ApiObjectBase> {
     // and they should ensure that their overriding versions call this underlying version
     // somewhere.
     void DeleteThis() override;
-    void TrackInDevice();
+    void LockAndDeleteThis() override;
+
+    // Returns the list where this object may be tracked for future destruction. This can be
+    // overrided to create hierarchical object tracking ownership:
+    //   i.e. Device -[tracks]-> Texture -[tracks]-> TextureView.
+    virtual ApiObjectList* GetObjectTrackingList();
 
     // Sub-classes may override this function multiple times. Whenever overriding this function,
     // however, users should be sure to call their parent's version in the new override to make
@@ -94,6 +129,8 @@ class ApiObjectBase : public ObjectBase, public LinkNode<ApiObjectBase> {
     virtual void DestroyImpl() = 0;
 
   private:
+    friend class ApiObjectList;
+
     virtual void SetLabelImpl();
 
     std::string mLabel;

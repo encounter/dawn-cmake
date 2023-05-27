@@ -3,13 +3,13 @@ var<private> local_invocation_index_1 : u32;
 var<workgroup> arg_0 : atomic<i32>;
 
 fn atomicExchange_e114ba() {
-  var res : i32 = 0i;
-  let x_11 : i32 = atomicExchange(&(arg_0), 1i);
+  var res = 0i;
+  let x_11 = atomicExchange(&(arg_0), 1i);
   res = x_11;
   return;
 }
 
-fn compute_main_inner(local_invocation_index : u32) {
+fn compute_main_inner(local_invocation_index_2 : u32) {
   atomicStore(&(arg_0), 0i);
   workgroupBarrier();
   atomicExchange_e114ba();
@@ -17,7 +17,7 @@ fn compute_main_inner(local_invocation_index : u32) {
 }
 
 fn compute_main_1() {
-  let x_31 : u32 = local_invocation_index_1;
+  let x_31 = local_invocation_index_1;
   compute_main_inner(x_31);
   return;
 }

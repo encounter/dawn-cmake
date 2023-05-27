@@ -67,7 +67,7 @@
 #endif
 #endif  // _WIN32
 
-#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
 #include <dlfcn.h>
 #endif
 
@@ -252,7 +252,7 @@ auto GetVector(const char *func_name, F &&f, Ts &&...ts) -> std::vector<T> {
 // ----------- Instance Setup ------- //
 struct VkDll {
     VkResult Initialize() {
-#if defined(__linux__) || defined(__FreeBSD__)
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
         library = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
         if (!library) library = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
 #elif defined(_WIN32)
@@ -264,7 +264,7 @@ struct VkDll {
         return VK_SUCCESS;
     }
     void Close() {
-#if defined(__linux__) || defined(__FreeBSD__)
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
         dlclose(library);
 #elif defined(_WIN32)
         FreeLibrary(library);
@@ -425,13 +425,13 @@ struct VkDll {
   private:
     template <typename T>
     void Load(T &func_dest, const char *func_name) {
-#if defined(__linux__) || defined(__FreeBSD__)
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
         func_dest = reinterpret_cast<T>(dlsym(library, func_name));
 #elif defined(_WIN32)
         func_dest = reinterpret_cast<T>(GetProcAddress(library, func_name));
 #endif
     }
-#if defined(__linux__) || defined(__FreeBSD__)
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
     void *library;
 #elif defined(_WIN32)
     HMODULE library;
@@ -558,21 +558,23 @@ struct SurfaceExtension {
 };
 
 struct VulkanVersion {
-    uint32_t major;
-    uint32_t minor;
-    uint32_t patch;
+    uint32_t major = 1;
+    uint32_t minor = 0;
+    uint32_t patch = 0;
+    VulkanVersion() = default;
+    VulkanVersion(uint32_t version) noexcept
+        : major{VK_VERSION_MAJOR(version)}, minor{VK_VERSION_MINOR(version)}, patch{VK_VERSION_PATCH(version)} {}
+    std::string str() { return std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch); }
+    operator std::string() { return str(); }
 };
-
-VulkanVersion make_vulkan_version(uint32_t version) {
-    return {VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version)};
-}
+std::ostream &operator<<(std::ostream &out, const VulkanVersion &v) { return out << v.major << "." << v.minor << "." << v.patch; }
 
 struct AppInstance {
     VkDll dll;
 
     VkInstance instance;
     uint32_t instance_version;
-    VulkanVersion vk_version{};
+    VulkanVersion vk_version;
 
     VkDebugReportCallbackEXT debug_callback = VK_NULL_HANDLE;
 
@@ -634,7 +636,7 @@ struct AppInstance {
             if (err) THROW_VK_ERR("vkEnumerateInstanceVersion", err);
         }
 
-        vk_version = make_vulkan_version(instance_version);
+        vk_version = VulkanVersion(instance_version);
         // fallback to baked header version if loader returns 0 for the patch version
         if (VK_VERSION_PATCH(instance_version) == 0) vk_version.patch = VK_VERSION_PATCH(VK_HEADER_VERSION);
 
@@ -650,7 +652,10 @@ struct AppInstance {
         AppCompileInstanceExtensionsToEnable();
 
         std::vector<const char *> inst_exts;
-        for (const auto &ext : inst_extensions) inst_exts.push_back(ext.c_str());
+        for (const auto &ext : inst_extensions) {
+            if (ext == "VK_LUNARG_direct_driver_loading") continue;  // skip this extension since it triggers warnings in the loader
+            inst_exts.push_back(ext.c_str());
+        }
 
         const VkInstanceCreateInfo inst_info = {
             VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -690,7 +695,7 @@ struct AppInstance {
     AppInstance(const AppInstance &) = delete;
     const AppInstance &operator=(const AppInstance &) = delete;
 
-    bool CheckExtensionEnabled(std::string extension_to_check) {
+    bool CheckExtensionEnabled(std::string extension_to_check) const {
         return std::any_of(inst_extensions.begin(), inst_extensions.end(),
                            [extension_to_check](std::string str) { return str == extension_to_check; });
     }
@@ -737,9 +742,18 @@ struct AppInstance {
 
 #if defined(VK_USE_PLATFORM_XCB_KHR) || defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_WIN32_KHR) ||      \
     defined(VK_USE_PLATFORM_MACOS_MVK) || defined(VK_USE_PLATFORM_METAL_EXT) || defined(VK_USE_PLATFORM_WAYLAND_KHR) || \
-    defined(VK_USE_PLATFORM_DIRECTFB_EXT) || defined(VK_USE_PLATFORM_ANDROID_KHR) || defined(VK_USE_PLATFORM_GGP)
+    defined(VK_USE_PLATFORM_DIRECTFB_EXT) || defined(VK_USE_PLATFORM_GGP)
 #define VULKANINFO_WSI_ENABLED
 #endif
+
+//-----------------------------------------------------------
+#if defined(VULKANINFO_WSI_ENABLED)
+static void AppDestroySurface(AppInstance &inst, VkSurfaceKHR surface) {  // same for all platforms
+    inst.dll.fp_vkDestroySurfaceKHR(inst.instance, surface, nullptr);
+}
+#endif  // defined(VULKANINFO_WSI_ENABLED)
+//-----------------------------------------------------------
+
 //---------------------------Win32---------------------------
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
@@ -811,13 +825,7 @@ static void AppDestroyWin32Window(AppInstance &inst) { user32_handles->pfnDestro
 #endif  // VK_USE_PLATFORM_WIN32_KHR
 //-----------------------------------------------------------
 
-#if defined(VULKANINFO_WSI_ENABLED)
-static void AppDestroySurface(AppInstance &inst, VkSurfaceKHR surface) {  // same for all platforms
-    inst.dll.fp_vkDestroySurfaceKHR(inst.instance, surface, nullptr);
-}
-#endif  // defined(VULKANINFO_WSI_ENABLED)
 //----------------------------XCB----------------------------
-
 #ifdef VK_USE_PLATFORM_XCB_KHR
 static void AppCreateXcbWindow(AppInstance &inst) {
     //--Init Connection--
@@ -1073,10 +1081,12 @@ static VkSurfaceKHR AppCreateAndroidSurface(AppInstance &inst) {
     createInfo.flags = 0;
     createInfo.window = (struct ANativeWindow *)(inst.window);
 
-    err = inst.dll.fp_vkCreateAndroidSurfaceKHR(inst.inst, &createInfo, NULL, &inst.surface);
-    THROW_VK_ERR("vkCreateAndroidSurfaceKHR", err);
+    VkSurfaceKHR surface;
+    VkResult err = inst.dll.fp_vkCreateAndroidSurfaceKHR(inst.instance, &createInfo, NULL, &surface);
+    if (err) THROW_VK_ERR("vkCreateAndroidSurfaceKHR", err);
+    return surface;
 }
-static VkSurfaceKHR AppDestroyAndroidSurface(AppInstance &inst) {}
+static void AppDestroyAndroidWindow(AppInstance &inst) {}
 #endif
 //-----------------------------------------------------------
 //---------------------------GGP-----------------------------
@@ -1208,8 +1218,8 @@ void SetupWindowExtensions(AppInstance &inst) {
 //--ANDROID--
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
     SurfaceExtension surface_ext_android;
-    if (inst.CheckExtensionEnabled(VK_ANDROID_SURFACE_EXTENSION_NAME)) {
-        surface_ext_android.name = VK_ANDROID_SURFACE_EXTENSION_NAME;
+    if (inst.CheckExtensionEnabled(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME)) {
+        surface_ext_android.name = VK_KHR_ANDROID_SURFACE_EXTENSION_NAME;
         surface_ext_android.create_window = AppCreateAndroidWindow;
         surface_ext_android.create_surface = AppCreateAndroidSurface;
         surface_ext_android.destroy_window = AppDestroyAndroidWindow;
@@ -1251,12 +1261,10 @@ class AppSurface {
     std::unique_ptr<surface_capabilities2_chain> chain_for_surface_capabilities2;
 
     AppSurface(AppInstance &inst, VkPhysicalDevice phys_device, SurfaceExtension surface_extension)
-        : inst(inst),
-          phys_device(phys_device),
-          surface_extension(surface_extension),
-          surf_present_modes(GetVector<VkPresentModeKHR>("vkGetPhysicalDeviceSurfacePresentModesKHR",
+        : inst(inst), phys_device(phys_device), surface_extension(surface_extension) {
+        surf_present_modes = GetVector<VkPresentModeKHR>("vkGetPhysicalDeviceSurfacePresentModesKHR",
                                                          inst.ext_funcs.vkGetPhysicalDeviceSurfacePresentModesKHR, phys_device,
-                                                         surface_extension.surface)) {
+                                                         surface_extension.surface);
         const VkPhysicalDeviceSurfaceInfo2KHR surface_info2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR, nullptr,
                                                                surface_extension.surface};
 
@@ -1484,10 +1492,15 @@ struct AppGpu {
     AppInstance &inst;
     uint32_t id{};
     VkPhysicalDevice phys_device = VK_NULL_HANDLE;
-    VulkanVersion api_version{};
+    VulkanVersion api_version;
 
     VkPhysicalDeviceProperties props{};
     VkPhysicalDeviceProperties2KHR props2{};
+
+    VkPhysicalDeviceDriverProperties driver_props{};
+    VkPhysicalDeviceIDProperties device_id_props{};
+    bool found_driver_props = false;
+    bool found_device_id_props = false;
 
     std::vector<VkQueueFamilyProperties> queue_props;
     std::vector<VkQueueFamilyProperties2KHR> queue_props2;
@@ -1520,7 +1533,7 @@ struct AppGpu {
         inst.dll.fp_vkGetPhysicalDeviceProperties(phys_device, &props);
 
         // needs to find the minimum of the instance and device version, and use that to print the device info
-        api_version = make_vulkan_version(props.apiVersion);
+        api_version = VulkanVersion(props.apiVersion);
 
         inst.dll.fp_vkGetPhysicalDeviceMemoryProperties(phys_device, &memory_props);
 
@@ -1560,6 +1573,22 @@ struct AppGpu {
                 setup_queue_properties2_chain(queue_props2[i], chain_for_queue_props2[i]);
             }
             inst.ext_funcs.vkGetPhysicalDeviceQueueFamilyProperties2KHR(phys_device, &queue_prop2_count, queue_props2.data());
+
+            if (CheckPhysicalDeviceExtensionIncluded(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME) || api_version.minor >= 2) {
+                void *place = props2.pNext;
+                while (place) {
+                    VkBaseOutStructure *structure = static_cast<VkBaseOutStructure *>(place);
+                    if (structure->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES) {
+                        driver_props = *reinterpret_cast<VkPhysicalDeviceDriverProperties *>(structure);
+                        found_driver_props = true;
+
+                    } else if (structure->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES) {
+                        device_id_props = *reinterpret_cast<VkPhysicalDeviceIDProperties *>(structure);
+                        found_device_id_props = true;
+                    }
+                    place = structure->pNext;
+                }
+            }
         }
 
         // Use the queue_props2 if they exist, else fallback on vulkan 1.0 queue_props
@@ -1633,6 +1662,7 @@ struct AppGpu {
                 if (tiling == VK_IMAGE_TILING_LINEAR) {
                     if (format == color_format) {
                         image_ci_regular.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+                        image_ci_transient.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
                     } else {
                         // linear tiling is only applicable to color image types
                         continue;
@@ -1728,13 +1758,14 @@ struct AppGpu {
     AppGpu(const AppGpu &) = delete;
     const AppGpu &operator=(const AppGpu &) = delete;
 
-    bool CheckPhysicalDeviceExtensionIncluded(std::string extension_to_check) {
-        return std::any_of(device_extensions.begin(), device_extensions.end(),
-                           [extension_to_check](VkExtensionProperties &prop) { return prop.extensionName == extension_to_check; });
+    bool CheckPhysicalDeviceExtensionIncluded(std::string extension_to_check) const {
+        return std::any_of(
+            device_extensions.begin(), device_extensions.end(),
+            [extension_to_check](const VkExtensionProperties &prop) { return prop.extensionName == extension_to_check; });
     }
 
     // Helper function to determine whether a format range is currently supported.
-    bool FormatRangeSupported(FormatRange &format_range) {
+    bool FormatRangeSupported(FormatRange &format_range) const {
         // True if standard and supported by both this instance and this GPU
         if (format_range.minimum_instance_version > 0 && inst.instance_version >= format_range.minimum_instance_version &&
             props.apiVersion >= format_range.minimum_instance_version) {
@@ -1757,6 +1788,26 @@ struct AppGpu {
             return props;
         }
     }
+
+    // Vendor specific driverVersion mapping scheme
+    // If one isn't present, fall back to the standard Vulkan scheme
+    std::string GetDriverVersionString() {
+        uint32_t v = props.driverVersion;
+        if ((found_driver_props && driver_props.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY) ||
+            (!found_driver_props && props.deviceID == 4318)) {
+            return std::to_string((v >> 22) & 0x3ff) + "." + std::to_string((v >> 14) & 0x0ff) + "." +
+                   std::to_string((v >> 6) & 0x0ff) + "." + std::to_string(v & 0x003f);
+        } else if ((found_driver_props && driver_props.driverID == VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS)
+#if defined(WIN32)
+                   || (!found_driver_props && props.deviceID == 0x8086)  // only do the fallback check if running in windows
+#endif
+        ) {
+            return std::to_string(v >> 14) + "." + std::to_string(v & 0x3fff);
+        } else {
+            // AMD uses the standard vulkan scheme
+            return VulkanVersion(v).str();
+        }
+    }
 };
 
 std::vector<VkPhysicalDeviceToolPropertiesEXT> GetToolingInfo(AppGpu &gpu) {
@@ -1766,23 +1817,60 @@ std::vector<VkPhysicalDeviceToolPropertiesEXT> GetToolingInfo(AppGpu &gpu) {
 }
 
 // --------- Format Properties ----------//
+// can't use autogen because that is put in a header that we can't include because that header depends on stuff defined here
+bool operator==(const VkFormatProperties &a, const VkFormatProperties b) {
+    return a.linearTilingFeatures == b.linearTilingFeatures && a.optimalTilingFeatures == b.optimalTilingFeatures &&
+           a.bufferFeatures == b.bufferFeatures;
+}
+bool operator==(const VkFormatProperties3 &a, const VkFormatProperties3 b) {
+    return a.linearTilingFeatures == b.linearTilingFeatures && a.optimalTilingFeatures == b.optimalTilingFeatures &&
+           a.bufferFeatures == b.bufferFeatures;
+}
 
 struct PropFlags {
-    uint32_t linear;
-    uint32_t optimal;
-    uint32_t buffer;
+    VkFormatProperties props;
+    VkFormatProperties3 props3;
 
-    bool operator==(const PropFlags &other) const {
-        return (linear == other.linear && optimal == other.optimal && buffer == other.buffer);
-    }
+    bool operator==(const PropFlags &other) const { return props == other.props && props3 == other.props3; }
 };
+
+PropFlags get_format_properties(const AppGpu &gpu, VkFormat fmt) {
+    VkFormatProperties props;
+    gpu.inst.dll.fp_vkGetPhysicalDeviceFormatProperties(gpu.phys_device, fmt, &props);
+
+    VkFormatProperties3 props3{};
+    props3.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3;
+
+    if (gpu.inst.CheckExtensionEnabled(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) &&
+        gpu.CheckPhysicalDeviceExtensionIncluded(VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME)) {
+        VkFormatProperties2 props2{};
+        props2.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+        props2.formatProperties = props;
+        props2.pNext = static_cast<void *>(&props3);
+        gpu.inst.ext_funcs.vkGetPhysicalDeviceFormatProperties2KHR(gpu.phys_device, fmt, &props2);
+    }
+    return {props, props3};
+}
 
 namespace std {
 template <>
+struct hash<VkFormatProperties> {
+    std::size_t operator()(const VkFormatProperties &k) const {
+        return ((std::hash<uint32_t>()(k.linearTilingFeatures) ^ (std::hash<uint32_t>()(k.optimalTilingFeatures) << 1)) >> 1) ^
+               (std::hash<uint32_t>()(k.bufferFeatures) << 1);
+    }
+};
+template <>
+struct hash<VkFormatProperties3> {
+    std::size_t operator()(const VkFormatProperties3 &k) const {
+        return ((std::hash<uint64_t>()(k.linearTilingFeatures) ^ (std::hash<uint64_t>()(k.optimalTilingFeatures) << 1)) >> 1) ^
+               (std::hash<uint64_t>()(k.bufferFeatures) << 1);
+    }
+};
+template <>
 struct hash<PropFlags> {
     std::size_t operator()(const PropFlags &k) const {
-        return ((std::hash<uint32_t>()(k.linear) ^ (std::hash<uint32_t>()(k.optimal) << 1)) >> 1) ^
-               (std::hash<uint32_t>()(k.buffer) << 1);
+        return (std::hash<VkFormatProperties>()(k.props) ^ std::hash<VkFormatProperties3>()(k.props3)) >> 1;
     }
 };
 }  // namespace std
@@ -1792,11 +1880,7 @@ std::unordered_map<PropFlags, std::vector<VkFormat>> FormatPropMap(AppGpu &gpu) 
     std::unordered_map<PropFlags, std::vector<VkFormat>> map;
     for (auto fmtRange : gpu.supported_format_ranges) {
         for (int32_t fmt = fmtRange.first_format; fmt <= fmtRange.last_format; ++fmt) {
-            VkFormatProperties props;
-            gpu.inst.dll.fp_vkGetPhysicalDeviceFormatProperties(gpu.phys_device, static_cast<VkFormat>(fmt), &props);
-
-            PropFlags pf = {props.linearTilingFeatures, props.optimalTilingFeatures, props.bufferFeatures};
-
+            PropFlags pf = get_format_properties(gpu, static_cast<VkFormat>(fmt));
             map[pf].push_back(static_cast<VkFormat>(fmt));
         }
     }

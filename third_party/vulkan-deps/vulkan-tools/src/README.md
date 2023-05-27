@@ -1,25 +1,18 @@
-# Vulkan Ecosystem Components
+# KhronosGroup/Vulkan-Tools
 
-This project provides Khronos official Vulkan Tools and Utilities for Windows, Linux, Android, and MacOS.
+This project provides Vulkan tools and utilities that can assist development by enabling developers to verify their applications correct use of the Vulkan API.
 
-## CI Build Status
-[![Build Status](https://github.com/KhronosGroup/Vulkan-Tools/workflows/CI%20Build/badge.svg?branch=master)](https://github.com/KhronosGroup/Vulkan-Tools/actions)
-
-
-## Introduction
-
-This project provides Vulkan tools and utilities that can assist development by enabling developers to
-verify their applications correct use of the Vulkan API.
+## Intro
 
 The following components are available in this repository:
+
 - [*Mock ICD*](icd/)
 - [*Vkcube and Vkcube++ Demo*](cube/)
 - [*VulkanInfo*](vulkaninfo/)
 - [*Windows Runtime*](windows-runtime-installer/)
 
 ## Contact Information
-* [Tobin Ehlis](mailto:tobine@google.com)
-* [Mark Lobodzinski](mailto:mark@lunarg.com)
+* [Charles Giessen](mailto:charles@lunarg.com)
 
 ## Information for Developing or Contributing:
 
@@ -28,8 +21,7 @@ Please see the [GOVERNANCE.md](GOVERNANCE.md) file in this repository for reposi
 
 ## How to Build and Run
 
-[BUILD.md](BUILD.md)
-Includes directions for building all components as well as running the vkcube demo applications.
+[BUILD.md](BUILD.md) includes directions for building all components as well as running the vkcube demo applications.
 
 ## Version Tagging Scheme
 
@@ -42,7 +34,7 @@ This scheme was adopted following the 1.1.96 Vulkan specification release.
 ## License
 This work is released as open source under a Apache-style license from Khronos including a Khronos copyright.
 
-See COPYRIGHT.txt for a full list of licenses used in this repository.
+See LICENSE.txt for a full list of licenses used in this repository.
 
 ## Acknowledgements
 While this project has been developed primarily by LunarG, Inc., there are many other

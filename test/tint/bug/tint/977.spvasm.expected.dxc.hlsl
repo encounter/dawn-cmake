@@ -1,8 +1,8 @@
 static uint3 gl_GlobalInvocationID = uint3(0u, 0u, 0u);
-RWByteAddressBuffer resultMatrix : register(u2, space0);
-ByteAddressBuffer firstMatrix : register(t0, space0);
-ByteAddressBuffer secondMatrix : register(t1, space0);
-cbuffer cbuffer_x_46 : register(b3, space0) {
+RWByteAddressBuffer resultMatrix : register(u2);
+ByteAddressBuffer firstMatrix : register(t0);
+ByteAddressBuffer secondMatrix : register(t1);
+cbuffer cbuffer_x_46 : register(b3) {
   uint4 x_46[1];
 };
 
@@ -21,9 +21,10 @@ float binaryOperation_f1_f1_(inout float a, inout float b) {
     const float x_34 = a;
     const float x_36 = a;
     const float x_38 = b;
-    x_26 = (sign(x_34) * pow(abs(x_36), x_38));
+    x_26 = (float(sign(x_34)) * pow(abs(x_36), x_38));
   }
-  return x_26;
+  const float x_41 = x_26;
+  return x_41;
 }
 
 void main_1() {

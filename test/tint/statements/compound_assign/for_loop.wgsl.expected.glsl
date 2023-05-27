@@ -6,15 +6,17 @@ void unused_entry_point() {
 }
 struct S {
   int a;
+  uint pad;
+  uint pad_1;
+  uint pad_2;
   vec4 b;
   mat2 c;
 };
 
-layout(binding = 0, std430) buffer S_1 {
-  int a;
-  vec4 b;
-  mat2 c;
+layout(binding = 0, std430) buffer v_block_ssbo {
+  S inner;
 } v;
+
 uint i = 0u;
 int idx1() {
   i = (i + 1u);
@@ -33,9 +35,9 @@ int idx3() {
 
 void foo() {
   float a[4] = float[4](0.0f, 0.0f, 0.0f, 0.0f);
-  int tint_symbol_2 = idx1();
-  int tint_symbol_save = tint_symbol_2;
   {
+    int tint_symbol_2 = idx1();
+    int tint_symbol_save = tint_symbol_2;
     a[tint_symbol_save] = (a[tint_symbol_save] * 2.0f);
     while (true) {
       int tint_symbol_3 = idx2();

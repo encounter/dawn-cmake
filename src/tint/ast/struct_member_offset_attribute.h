@@ -18,6 +18,7 @@
 #include <string>
 
 #include "src/tint/ast/attribute.h"
+#include "src/tint/ast/expression.h"
 
 namespace tint::ast {
 
@@ -31,14 +32,18 @@ namespace tint::ast {
 /// trivial for the Resolver to handle `@offset(n)` or `@size(n)` /
 /// `@align(n)` attributes, so this is what we do, keeping all the layout
 /// logic in one place.
-class StructMemberOffsetAttribute final : public Castable<StructMemberOffsetAttribute, Attribute> {
+class StructMemberOffsetAttribute final
+    : public utils::Castable<StructMemberOffsetAttribute, Attribute> {
   public:
     /// constructor
     /// @param pid the identifier of the program that owns this node
     /// @param nid the unique node identifier
     /// @param src the source of this node
-    /// @param offset the offset value
-    StructMemberOffsetAttribute(ProgramID pid, NodeID nid, const Source& src, uint32_t offset);
+    /// @param expr the offset expression
+    StructMemberOffsetAttribute(ProgramID pid,
+                                NodeID nid,
+                                const Source& src,
+                                const Expression* expr);
     ~StructMemberOffsetAttribute() override;
 
     /// @returns the WGSL name for the attribute
@@ -50,8 +55,8 @@ class StructMemberOffsetAttribute final : public Castable<StructMemberOffsetAttr
     /// @return the newly cloned node
     const StructMemberOffsetAttribute* Clone(CloneContext* ctx) const override;
 
-    /// The offset value
-    const uint32_t offset;
+    /// The offset expression
+    const Expression* const expr;
 };
 
 }  // namespace tint::ast

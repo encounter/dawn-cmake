@@ -19,7 +19,9 @@
 
 #include <functional>
 
+#include "src/tint/reflection.h"
 #include "src/tint/utils/hash.h"
+#include "src/tint/utils/string_stream.h"
 
 namespace tint::sem {
 
@@ -29,6 +31,9 @@ struct BindingPoint {
     uint32_t group = 0;
     /// The `@binding` part of the binding point
     uint32_t binding = 0;
+
+    /// Reflect the fields of this class so that it can be used by tint::ForeachField()
+    TINT_REFLECT(group, binding);
 
     /// Equality operator
     /// @param rhs the BindingPoint to compare against
@@ -42,6 +47,14 @@ struct BindingPoint {
     /// @returns true if this BindingPoint is not equal to `rhs`
     inline bool operator!=(const BindingPoint& rhs) const { return !(*this == rhs); }
 };
+
+/// Prints the BindingPoint @p bp to @p o
+/// @param o the stream to write to
+/// @param bp the BindingPoint
+/// @return the stream so calls can be chained
+inline utils::StringStream& operator<<(utils::StringStream& o, const BindingPoint& bp) {
+    return o << "[group: " << bp.group << ", binding: " << bp.binding << "]";
+}
 
 }  // namespace tint::sem
 

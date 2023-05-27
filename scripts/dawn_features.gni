@@ -32,11 +32,17 @@ if (build_with_chromium) {
 dawn_is_winuwp = is_win && target_os == "winuwp"
 
 declare_args() {
-  dawn_use_angle = true
+  # TODO(dawn:1545): Re-enable dawn_use_angle on Android. In non-component
+  # builds, this is adding a dependency on ANGLE's libEGL.so and
+  # libGLESv2.so, apparently without regard for the use_static_angle=true
+  # GN variable. Chromium's linker on Android disallows production of more
+  # than one shared object per target (?).
+  dawn_use_angle = !is_android
 
   # Enables SwiftShader as the fallback adapter. Requires dawn_swiftshader_dir
   # to be set to take effect.
-  dawn_use_swiftshader = true
+  # TODO(dawn:1536): Enable SwiftShader for Android.
+  dawn_use_swiftshader = !is_android
 }
 
 declare_args() {
@@ -47,6 +53,9 @@ declare_args() {
   # treating them as source sets. This is useful for people using Dawn
   # standalone to produce static libraries to use in their projects.
   dawn_complete_static_libs = false
+
+  # Enables the compilation of Dawn's D3D11 backend
+  dawn_enable_d3d11 = is_win
 
   # Enables the compilation of Dawn's D3D12 backend
   dawn_enable_d3d12 = is_win
@@ -90,6 +99,10 @@ declare_args() {
   # assume to have one present at the system level.
   dawn_enable_vulkan_loader =
       dawn_enable_vulkan && (is_mac || (is_linux && !is_android))
+
+  # Disable SPIR-V validation on Android because it adds a significant amount
+  # to the binary size, and Tint's output should be well-formed.
+  dawn_enable_spirv_validation = dawn_enable_vulkan && !is_android
 }
 
 # UWP only supports CoreWindow for windowing

@@ -1,7 +1,7 @@
-ByteAddressBuffer firstMatrix : register(t0, space0);
-ByteAddressBuffer secondMatrix : register(t1, space0);
-RWByteAddressBuffer resultMatrix : register(u2, space0);
-cbuffer cbuffer_uniforms : register(b3, space0) {
+ByteAddressBuffer firstMatrix : register(t0);
+ByteAddressBuffer secondMatrix : register(t1);
+RWByteAddressBuffer resultMatrix : register(u2);
+cbuffer cbuffer_uniforms : register(b3) {
   uint4 uniforms[2];
 };
 
@@ -15,7 +15,7 @@ void main_inner(uint3 global_id) {
   const uint dimOutter = uniforms[1].y;
   uint result = 0u;
   {
-    [loop] for(uint i = 0u; (i < dimInner); i = (i + 1u)) {
+    for(uint i = 0u; (i < dimInner); i = (i + 1u)) {
       const uint a = (i + (resultCell.x * dimInner));
       const uint b = (resultCell.y + (i * dimOutter));
       result = (result + (firstMatrix.Load((4u * a)) * secondMatrix.Load((4u * b))));

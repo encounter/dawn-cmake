@@ -3,7 +3,7 @@ struct strided_arr {
   el : i32,
 }
 
-type Arr = array<strided_arr, 20u>;
+alias Arr = array<strided_arr, 20u>;
 
 struct buf0 {
   x_GLF_uniform_int_values : Arr,
@@ -144,10 +144,7 @@ fn main_1() {
       continuing {
         let x_189 : i32 = x_6.x_GLF_uniform_int_values[2].el;
         let x_191 : i32 = x_6.x_GLF_uniform_int_values[3].el;
-        if ((x_189 == x_191)) {
-        } else {
-          break;
-        }
+        break if !(x_189 == x_191);
       }
     }
 

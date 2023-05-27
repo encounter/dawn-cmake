@@ -18,6 +18,9 @@
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
+namespace dawn {
+namespace {
+
 using ::testing::HasSubstr;
 
 constexpr uint32_t kRTSize = 4;
@@ -32,13 +35,13 @@ class DestroyTest : public DawnTest {
 
         wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
               @vertex
-              fn main(@location(0) pos : vec4<f32>) -> @builtin(position) vec4<f32> {
+              fn main(@location(0) pos : vec4f) -> @builtin(position) vec4f {
                   return pos;
               })");
 
         wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
-              @fragment fn main() -> @location(0) vec4<f32> {
-                  return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+              @fragment fn main() -> @location(0) vec4f {
+                  return vec4f(0.0, 1.0, 0.0, 1.0);
               })");
 
         utils::ComboRenderPipelineDescriptor descriptor;
@@ -156,7 +159,7 @@ TEST_P(DestroyTest, TextureSubmitDestroySubmit) {
 }
 
 // Attempting to set an object label after it has been destroyed should not cause an error.
-TEST_P(DestroyTest, DestroyThenSetLabel) {
+TEST_P(DestroyTest, DestroyObjectThenSetLabel) {
     DAWN_TEST_UNSUPPORTED_IF(UsesWire());
     std::string label = "test";
     wgpu::BufferDescriptor descriptor;
@@ -165,6 +168,14 @@ TEST_P(DestroyTest, DestroyThenSetLabel) {
     wgpu::Buffer buffer = device.CreateBuffer(&descriptor);
     buffer.Destroy();
     buffer.SetLabel(label.c_str());
+}
+
+// Attempting to set a device label after it has been destroyed should not cause an error.
+TEST_P(DestroyTest, DestroyDeviceThenSetLabel) {
+    DAWN_TEST_UNSUPPORTED_IF(UsesWire());
+    std::string label = "test";
+    device.Destroy();
+    device.SetLabel(label.c_str());
 }
 
 // Device destroy before buffer submit will result in error.
@@ -205,8 +216,12 @@ TEST_P(DestroyTest, GetQueueAfterDeviceDestroy) {
 }
 
 DAWN_INSTANTIATE_TEST(DestroyTest,
+                      D3D11Backend(),
                       D3D12Backend(),
                       MetalBackend(),
                       OpenGLBackend(),
                       OpenGLESBackend(),
                       VulkanBackend());
+
+}  // anonymous namespace
+}  // namespace dawn

@@ -18,14 +18,14 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <algorithm>
-#include <array>
 #include <iterator>
+#include <new>
 #include <utility>
 #include <vector>
 
-#include "src/tint/castable.h"
-#include "src/tint/traits.h"
 #include "src/tint/utils/bitcast.h"
+#include "src/tint/utils/compiler_macros.h"
+#include "src/tint/utils/slice.h"
 
 namespace tint::utils {
 
@@ -38,128 +38,6 @@ class VectorRef;
 }  // namespace tint::utils
 
 namespace tint::utils {
-
-/// A type used to indicate an empty array.
-struct EmptyType {};
-
-/// An instance of the EmptyType.
-static constexpr EmptyType Empty;
-
-/// A slice represents a contigious array of elements of type T.
-template <typename T>
-struct Slice {
-    /// The pointer to the first element in the slice
-    T* data = nullptr;
-
-    /// The total number of elements in the slice
-    size_t len = 0;
-
-    /// The total capacity of the backing store for the slice
-    size_t cap = 0;
-
-    /// Index operator
-    /// @param i the element index. Must be less than `len`.
-    /// @returns a reference to the i'th element.
-    T& operator[](size_t i) { return data[i]; }
-
-    /// Index operator
-    /// @param i the element index. Must be less than `len`.
-    /// @returns a reference to the i'th element.
-    const T& operator[](size_t i) const { return data[i]; }
-
-    /// @returns a reference to the first element in the vector
-    T& Front() { return data[0]; }
-
-    /// @returns a reference to the first element in the vector
-    const T& Front() const { return data[0]; }
-
-    /// @returns a reference to the last element in the vector
-    T& Back() { return data[len - 1]; }
-
-    /// @returns a reference to the last element in the vector
-    const T& Back() const { return data[len - 1]; }
-
-    /// @returns a pointer to the first element in the vector
-    T* begin() { return data; }
-
-    /// @returns a pointer to the first element in the vector
-    const T* begin() const { return data; }
-
-    /// @returns a pointer to one past the last element in the vector
-    T* end() { return data + len; }
-
-    /// @returns a pointer to one past the last element in the vector
-    const T* end() const { return data + len; }
-
-    /// @returns a reverse iterator starting with the last element in the vector
-    auto rbegin() { return std::reverse_iterator<T*>(end()); }
-
-    /// @returns a reverse iterator starting with the last element in the vector
-    auto rbegin() const { return std::reverse_iterator<const T*>(end()); }
-
-    /// @returns the end for a reverse iterator
-    auto rend() { return std::reverse_iterator<T*>(begin()); }
-
-    /// @returns the end for a reverse iterator
-    auto rend() const { return std::reverse_iterator<const T*>(begin()); }
-};
-
-namespace detail {
-
-/// Private implementation of tint::utils::CanReinterpretSlice.
-/// Specialized for the case of TO equal to FROM, which is the common case, and avoids inspection of
-/// the base classes, which can be troublesome if the slice is of an incomplete type.
-template <typename TO, typename FROM>
-struct CanReinterpretSlice {
-    /// True if a slice of FROM can be reinterpreted as a slice of TO
-    static constexpr bool value =
-        // Both TO and FROM are pointers
-        (std::is_pointer_v<TO> && std::is_pointer_v<FROM>)&&  //
-        // const can only be applied, not removed
-        (std::is_const_v<std::remove_pointer_t<TO>> ||
-         !std::is_const_v<std::remove_pointer_t<FROM>>)&&  //
-        // TO and FROM are both Castable
-        IsCastable<std::remove_pointer_t<FROM>, std::remove_pointer_t<TO>> &&  //
-        // FROM is of, or derives from TO
-        traits::IsTypeOrDerived<std::remove_pointer_t<FROM>, std::remove_pointer_t<TO>>;
-};
-
-/// Specialization of 'CanReinterpretSlice' for when TO and FROM are equal types.
-template <typename T>
-struct CanReinterpretSlice<T, T> {
-    /// Always `true` as TO and FROM are the same type.
-    static constexpr bool value = true;
-};
-
-}  // namespace detail
-
-/// Evaluates whether a `vector<FROM>` and be reinterpreted as a `vector<TO>`.
-/// Vectors can be reinterpreted if both `FROM` and `TO` are pointers to a type that derives from
-/// CastableBase, and the pointee type of `TO` is of the same type as, or is an ancestor of the
-/// pointee type of `FROM`. Vectors of non-`const` Castable pointers can be converted to a vector of
-/// `const` Castable pointers.
-template <typename TO, typename FROM>
-static constexpr bool CanReinterpretSlice = detail::CanReinterpretSlice<TO, FROM>::value;
-
-/// Reinterprets `const Slice<FROM>*` as `const Slice<TO>*`
-/// @param slice a pointer to the slice to reinterpret
-/// @returns the reinterpreted slice
-/// @see CanReinterpretSlice
-template <typename TO, typename FROM>
-const Slice<TO>* ReinterpretSlice(const Slice<FROM>* slice) {
-    static_assert(CanReinterpretSlice<TO, FROM>);
-    return Bitcast<const Slice<TO>*>(slice);
-}
-
-/// Reinterprets `Slice<FROM>*` as `Slice<TO>*`
-/// @param slice a pointer to the slice to reinterpret
-/// @returns the reinterpreted slice
-/// @see CanReinterpretSlice
-template <typename TO, typename FROM>
-Slice<TO>* ReinterpretSlice(Slice<FROM>* slice) {
-    static_assert(CanReinterpretSlice<TO, FROM>);
-    return Bitcast<Slice<TO>*>(slice);
-}
 
 /// Vector is a small-object-optimized, dynamically-sized vector of contigious elements of type T.
 ///
@@ -228,26 +106,32 @@ class Vector {
     /// Copy constructor with covariance / const conversion
     /// @param other the vector to copy
     /// @see CanReinterpretSlice for rules about conversion
-    template <typename U, size_t N2, typename = std::enable_if_t<CanReinterpretSlice<T, U>>>
+    template <typename U,
+              size_t N2,
+              ReinterpretMode MODE,
+              typename = std::enable_if_t<CanReinterpretSlice<MODE, T, U>>>
     Vector(const Vector<U, N2>& other) {  // NOLINT(runtime/explicit)
-        Copy(*ReinterpretSlice<T>(&other.impl_.slice));
+        Copy(other.impl_.slice.template Reinterpret<T, MODE>);
     }
 
     /// Move constructor with covariance / const conversion
     /// @param other the vector to move
     /// @see CanReinterpretSlice for rules about conversion
-    template <typename U, size_t N2, typename = std::enable_if_t<CanReinterpretSlice<T, U>>>
+    template <typename U,
+              size_t N2,
+              ReinterpretMode MODE,
+              typename = std::enable_if_t<CanReinterpretSlice<MODE, T, U>>>
     Vector(Vector<U, N2>&& other) {  // NOLINT(runtime/explicit)
         MoveOrCopy(VectorRef<T>(std::move(other)));
     }
 
     /// Move constructor from a mutable vector reference
     /// @param other the vector reference to move
-    explicit Vector(VectorRef<T>&& other) { MoveOrCopy(std::move(other)); }
+    Vector(VectorRef<T>&& other) { MoveOrCopy(std::move(other)); }  // NOLINT(runtime/explicit)
 
     /// Copy constructor from an immutable vector reference
     /// @param other the vector reference to copy
-    explicit Vector(const VectorRef<T>& other) { Copy(other.slice_); }
+    Vector(const VectorRef<T>& other) { Copy(other.slice_); }  // NOLINT(runtime/explicit)
 
     /// Destructor
     ~Vector() { ClearAndFree(); }
@@ -378,10 +262,12 @@ class Vector {
 
     /// Clears all elements from the vector, keeping the capacity the same.
     void Clear() {
+        TINT_BEGIN_DISABLE_WARNING(MAYBE_UNINITIALIZED);
         for (size_t i = 0; i < impl_.slice.len; i++) {
             impl_.slice.data[i].~T();
         }
         impl_.slice.len = 0;
+        TINT_END_DISABLE_WARNING(MAYBE_UNINITIALIZED);
     }
 
     /// Appends a new element to the vector.
@@ -419,6 +305,33 @@ class Vector {
         auto val = std::move(el);
         el.~T();
         return val;
+    }
+
+    /// Sort sorts the vector in-place using the predicate function @p pred
+    /// @param pred a function that has the signature `bool(const T& a, const T& b)` which returns
+    /// true if `a` is ordered before `b`.
+    template <typename PREDICATE>
+    void Sort(PREDICATE&& pred) {
+        std::sort(begin(), end(), std::forward<PREDICATE>(pred));
+    }
+
+    /// Sort sorts the vector in-place using `T::operator<()`
+    void Sort() {
+        Sort([](auto& a, auto& b) { return a < b; });
+    }
+
+    /// @returns true if the predicate function returns true for any of the elements of the vector
+    /// @param pred a function-like with the signature `bool(T)`
+    template <typename PREDICATE>
+    bool Any(PREDICATE&& pred) const {
+        return std::any_of(begin(), end(), std::forward<PREDICATE>(pred));
+    }
+
+    /// @returns false if the predicate function returns false for any of the elements of the vector
+    /// @param pred a function-like with the signature `bool(T)`
+    template <typename PREDICATE>
+    bool All(PREDICATE&& pred) const {
+        return std::all_of(begin(), end(), std::forward<PREDICATE>(pred));
     }
 
     /// @returns true if the vector is empty.
@@ -463,17 +376,31 @@ class Vector {
     /// Equality operator
     /// @param other the other vector
     /// @returns true if this vector is the same length as `other`, and all elements are equal.
-    bool operator==(const Vector& other) const {
+    template <typename T2, size_t N2>
+    bool operator==(const Vector<T2, N2>& other) const {
         const size_t len = Length();
-        if (len == other.Length()) {
-            for (size_t i = 0; i < len; i++) {
-                if ((*this)[i] != other[i]) {
-                    return false;
-                }
+        if (len != other.Length()) {
+            return false;
+        }
+        for (size_t i = 0; i < len; i++) {
+            if ((*this)[i] != other[i]) {
+                return false;
             }
         }
         return true;
     }
+
+    /// Inequality operator
+    /// @param other the other vector
+    /// @returns true if this vector is not the same length as `other`, or all elements are not
+    ///          equal.
+    template <typename T2, size_t N2>
+    bool operator!=(const Vector<T2, N2>& other) const {
+        return !(*this == other);
+    }
+
+    /// @returns the internal slice of the vector
+    utils::Slice<T> Slice() { return impl_.slice; }
 
   private:
     /// Friend class (differing specializations of this class)
@@ -487,9 +414,6 @@ class Vector {
     /// Friend class
     template <typename>
     friend class VectorRef;
-
-    /// The slice type used by this vector
-    using Slice = utils::Slice<T>;
 
     template <typename... Ts>
     void AppendVariadic(Ts&&... args) {
@@ -512,7 +436,7 @@ class Vector {
 
     /// Copies all the elements from `other` to this vector, replacing the content of this vector.
     /// @param other the
-    void Copy(const Slice& other) {
+    void Copy(const utils::Slice<T>& other) {
         if (impl_.slice.cap < other.len) {
             ClearAndFree();
             impl_.Allocate(other.len);
@@ -548,8 +472,8 @@ class Vector {
 
     /// The internal structure for the vector with a small array.
     struct ImplWithSmallArray {
-        std::array<TStorage, N> small_arr;
-        Slice slice = {small_arr[0].Get(), 0, N};
+        TStorage small_arr[N];
+        utils::Slice<T> slice = {small_arr[0].Get(), 0, N};
 
         /// Allocates a new vector of `T` either from #small_arr, or from the heap, then assigns the
         /// pointer it to #slice.data, and updates #slice.cap.
@@ -577,7 +501,7 @@ class Vector {
 
     /// The internal structure for the vector without a small array.
     struct ImplWithoutSmallArray {
-        Slice slice = {nullptr, 0, 0};
+        utils::Slice<T> slice = Empty;
 
         /// Allocates a new vector of `T` and assigns it to #slice.data, and updates #slice.cap.
         void Allocate(size_t new_cap) {
@@ -639,11 +563,11 @@ template <typename... Ts>
 Vector(Ts...) -> Vector<VectorCommonType<Ts...>, sizeof...(Ts)>;
 
 /// VectorRef is a weak reference to a Vector, used to pass vectors as parameters, avoiding copies
-/// between the caller and the callee. VectorRef can accept a Vector of any 'N' value, decoupling
-/// the caller's vector internal size from the callee's vector size. A VectorRef tracks the usage of
-/// moves either side of the call. If at the call site, a Vector argument is moved to a VectorRef
-/// parameter, and within the callee, the VectorRef parameter is moved to a Vector, then the Vector
-/// heap allocation will be moved. For example:
+/// between the caller and the callee, or as an non-static sized accessor on a vector. VectorRef can
+/// accept a Vector of any 'N' value, decoupling the caller's vector internal size from the callee's
+/// vector size. A VectorRef tracks the usage of moves either side of the call. If at the call site,
+/// a Vector argument is moved to a VectorRef parameter, and within the callee, the VectorRef
+/// parameter is moved to a Vector, then the Vector heap allocation will be moved. For example:
 ///
 /// ```
 ///     void func_a() {
@@ -657,23 +581,30 @@ Vector(Ts...) -> Vector<VectorCommonType<Ts...>, sizeof...(Ts)>;
 ///        Vector<std::string, 2> vec(std::move(vec_ref));
 ///     }
 /// ```
+///
+/// Aside from this move pattern, a VectorRef provides an immutable reference to the Vector.
 template <typename T>
 class VectorRef {
-    /// The slice type used by this vector reference
-    using Slice = utils::Slice<T>;
-
     /// @returns an empty slice.
-    static Slice& EmptySlice() {
-        static Slice empty;
+    static utils::Slice<T>& EmptySlice() {
+        static utils::Slice<T> empty;
         return empty;
     }
 
   public:
+    /// Type of `T`.
+    using value_type = T;
+
     /// Constructor - empty reference
     VectorRef() : slice_(EmptySlice()) {}
 
     /// Constructor
     VectorRef(EmptyType) : slice_(EmptySlice()) {}  // NOLINT(runtime/explicit)
+
+    /// Constructor from a Slice
+    /// @param slice the slice
+    VectorRef(utils::Slice<T>& slice)  // NOLINT(runtime/explicit)
+        : slice_(slice) {}
 
     /// Constructor from a Vector
     /// @param vector the vector to create a reference of
@@ -685,7 +616,7 @@ class VectorRef {
     /// @param vector the vector to create a reference of
     template <size_t N>
     VectorRef(const Vector<T, N>& vector)  // NOLINT(runtime/explicit)
-        : slice_(const_cast<Slice&>(vector.impl_.slice)) {}
+        : slice_(const_cast<utils::Slice<T>&>(vector.impl_.slice)) {}
 
     /// Constructor from a moved Vector
     /// @param vector the vector being moved
@@ -703,29 +634,35 @@ class VectorRef {
 
     /// Copy constructor with covariance / const conversion
     /// @param other the other vector reference
-    template <typename U, typename = std::enable_if_t<CanReinterpretSlice<T, U>>>
+    template <typename U,
+              typename = std::enable_if_t<CanReinterpretSlice<ReinterpretMode::kSafe, T, U>>>
     VectorRef(const VectorRef<U>& other)  // NOLINT(runtime/explicit)
-        : slice_(*ReinterpretSlice<T>(&other.slice_)) {}
+        : slice_(other.slice_.template Reinterpret<T>()) {}
 
     /// Move constructor with covariance / const conversion
     /// @param other the vector reference
-    template <typename U, typename = std::enable_if_t<CanReinterpretSlice<T, U>>>
+    template <typename U,
+              typename = std::enable_if_t<CanReinterpretSlice<ReinterpretMode::kSafe, T, U>>>
     VectorRef(VectorRef<U>&& other)  // NOLINT(runtime/explicit)
-        : slice_(*ReinterpretSlice<T>(&other.slice_)), can_move_(other.can_move_) {}
+        : slice_(other.slice_.template Reinterpret<T>()), can_move_(other.can_move_) {}
 
     /// Constructor from a Vector with covariance / const conversion
     /// @param vector the vector to create a reference of
     /// @see CanReinterpretSlice for rules about conversion
-    template <typename U, size_t N, typename = std::enable_if_t<CanReinterpretSlice<T, U>>>
+    template <typename U,
+              size_t N,
+              typename = std::enable_if_t<CanReinterpretSlice<ReinterpretMode::kSafe, T, U>>>
     VectorRef(Vector<U, N>& vector)  // NOLINT(runtime/explicit)
-        : slice_(*ReinterpretSlice<T>(&vector.impl_.slice)) {}
+        : slice_(vector.impl_.slice.template Reinterpret<T>()) {}
 
     /// Constructor from a moved Vector with covariance / const conversion
     /// @param vector the vector to create a reference of
     /// @see CanReinterpretSlice for rules about conversion
-    template <typename U, size_t N, typename = std::enable_if_t<CanReinterpretSlice<T, U>>>
+    template <typename U,
+              size_t N,
+              typename = std::enable_if_t<CanReinterpretSlice<ReinterpretMode::kSafe, T, U>>>
     VectorRef(Vector<U, N>&& vector)  // NOLINT(runtime/explicit)
-        : slice_(*ReinterpretSlice<T>(&vector.impl_.slice)), can_move_(vector.impl_.CanMove()) {}
+        : slice_(vector.impl_.slice.template Reinterpret<T>()), can_move_(vector.impl_.CanMove()) {}
 
     /// Index operator
     /// @param i the element index. Must be less than `len`.
@@ -739,41 +676,34 @@ class VectorRef {
     /// be made
     size_t Capacity() const { return slice_.cap; }
 
+    /// @return a reinterpretation of this VectorRef as elements of type U.
+    /// @note this is doing a reinterpret_cast of elements. It is up to the caller to ensure that
+    /// this is a safe operation.
+    template <typename U>
+    VectorRef<U> ReinterpretCast() const {
+        return {slice_.template Reinterpret<U, ReinterpretMode::kUnsafe>()};
+    }
+
+    /// @returns the internal slice of the vector
+    utils::Slice<T> Slice() { return slice_; }
+
     /// @returns true if the vector is empty.
     bool IsEmpty() const { return slice_.len == 0; }
-
-    /// @returns a reference to the first element in the vector
-    T& Front() { return slice_.Front(); }
 
     /// @returns a reference to the first element in the vector
     const T& Front() const { return slice_.Front(); }
 
     /// @returns a reference to the last element in the vector
-    T& Back() { return slice_.Back(); }
-
-    /// @returns a reference to the last element in the vector
     const T& Back() const { return slice_.Back(); }
-
-    /// @returns a pointer to the first element in the vector
-    T* begin() { return slice_.begin(); }
 
     /// @returns a pointer to the first element in the vector
     const T* begin() const { return slice_.begin(); }
 
     /// @returns a pointer to one past the last element in the vector
-    T* end() { return slice_.end(); }
-
-    /// @returns a pointer to one past the last element in the vector
     const T* end() const { return slice_.end(); }
 
     /// @returns a reverse iterator starting with the last element in the vector
-    auto rbegin() { return slice_.rbegin(); }
-
-    /// @returns a reverse iterator starting with the last element in the vector
     auto rbegin() const { return slice_.rbegin(); }
-
-    /// @returns the end for a reverse iterator
-    auto rend() { return slice_.rend(); }
 
     /// @returns the end for a reverse iterator
     auto rend() const { return slice_.rend(); }
@@ -792,7 +722,7 @@ class VectorRef {
     friend class VectorRef;
 
     /// The slice of the vector being referenced.
-    Slice& slice_;
+    utils::Slice<T>& slice_;
     /// Whether the slice data is passed by r-value reference, and can be moved.
     bool can_move_ = false;
 };

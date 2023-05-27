@@ -1,9 +1,8 @@
-float2 tint_degrees(float2 param_0) {
-  return param_0 * 57.295779513082322865;
-}
+RWByteAddressBuffer prevent_dce : register(u0, space2);
 
 void degrees_1ad5df() {
-  float2 res = tint_degrees((1.0f).xx);
+  float2 res = (57.2957763671875f).xx;
+  prevent_dce.Store2(0u, asuint(res));
 }
 
 struct tint_symbol {

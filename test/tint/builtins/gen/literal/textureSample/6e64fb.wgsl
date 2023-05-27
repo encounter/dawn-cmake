@@ -1,4 +1,4 @@
-// Copyright 2021 The Tint Authors.
+// Copyright 2022 The Tint Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,9 @@
 // fn textureSample(texture: texture_1d<f32>, sampler: sampler, coords: f32) -> vec4<f32>
 fn textureSample_6e64fb() {
   var res: vec4<f32> = textureSample(arg_0, arg_1, 1.f);
+  prevent_dce = res;
 }
+@group(2) @binding(0) var<storage, read_write> prevent_dce : vec4<f32>;
 
 @fragment
 fn fragment_main() {

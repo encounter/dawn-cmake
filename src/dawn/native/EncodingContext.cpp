@@ -44,7 +44,7 @@ void EncodingContext::Destroy() {
     // If we weren't already finished, then we want to handle an error here so that any calls
     // to Finish after Destroy will return a meaningful error.
     if (!IsFinished()) {
-        HandleError(DAWN_FORMAT_VALIDATION_ERROR("Destroyed encoder cannot be finished."));
+        HandleError(DAWN_VALIDATION_ERROR("Destroyed encoder cannot be finished."));
     }
     mDestroyed = true;
     mCurrentEncoder = nullptr;
@@ -87,7 +87,10 @@ void EncodingContext::HandleError(std::unique_ptr<ErrorData> error) {
             mError = std::move(error);
         }
     } else {
-        mDevice->HandleError(error->GetType(), error->GetFormattedMessage().c_str());
+        // EncodingContext is unprotected from multiple threads by default, but this code will
+        // modify Device's internal states so we need to lock the device now.
+        auto deviceLock(mDevice->GetScopedLock());
+        mDevice->HandleError(std::move(error));
     }
 }
 
@@ -127,9 +130,23 @@ MaybeError EncodingContext::ExitRenderPass(const ApiObjectBase* passEncoder,
         // mPendingCommands contains only the commands from BeginRenderPassCmd to
         // EndRenderPassCmd, inclusive. Now we swap out this allocator with a fresh one to give
         // the validation encoder a chance to insert its commands first.
+        // Note: If encoding validation commands fails, no commands should be in mPendingCommands,
+        //       so swap back the renderCommands to ensure that they are not leaked.
         CommandAllocator renderCommands = std::move(mPendingCommands);
-        DAWN_TRY(EncodeIndirectDrawValidationCommands(mDevice, commandEncoder, &usageTracker,
-                                                      &indirectDrawMetadata));
+
+        // The below function might create new resources. Device must already be locked via
+        // renderpassEncoder's APIEnd().
+        // TODO(crbug.com/dawn/1618): In future, all temp resources should be created at
+        // Command Submit time, so the locking would be removed from here at that point.
+        {
+            ASSERT(mDevice->IsLockedByCurrentThreadIfNeeded());
+
+            DAWN_TRY_WITH_CLEANUP(
+                EncodeIndirectDrawValidationCommands(mDevice, commandEncoder, &usageTracker,
+                                                     &indirectDrawMetadata),
+                { mPendingCommands = std::move(renderCommands); });
+        }
+
         CommitCommands(std::move(mPendingCommands));
         CommitCommands(std::move(renderCommands));
     }
@@ -151,8 +168,8 @@ void EncodingContext::EnsurePassExited(const ApiObjectBase* passEncoder) {
     if (mCurrentEncoder != mTopLevelEncoder && mCurrentEncoder == passEncoder) {
         // The current pass encoder is being deleted. Implicitly end the pass with an error.
         mCurrentEncoder = mTopLevelEncoder;
-        HandleError(DAWN_FORMAT_VALIDATION_ERROR(
-            "Command buffer recording ended before %s was ended.", passEncoder));
+        HandleError(DAWN_VALIDATION_ERROR("Command buffer recording ended before %s was ended.",
+                                          passEncoder));
     }
 }
 

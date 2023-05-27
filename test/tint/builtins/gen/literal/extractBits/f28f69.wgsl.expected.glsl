@@ -1,13 +1,12 @@
 #version 310 es
 
-uvec2 tint_extract_bits(uvec2 v, uint offset, uint count) {
-  uint s = min(offset, 32u);
-  uint e = min(32u, (s + count));
-  return bitfieldExtract(v, int(s), int((e - s)));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uvec2 inner;
+} prevent_dce;
 
 void extractBits_f28f69() {
-  uvec2 res = tint_extract_bits(uvec2(1u), 1u, 1u);
+  uvec2 res = uvec2(0u);
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -24,16 +23,15 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-uvec2 tint_extract_bits(uvec2 v, uint offset, uint count) {
-  uint s = min(offset, 32u);
-  uint e = min(32u, (s + count));
-  return bitfieldExtract(v, int(s), int((e - s)));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uvec2 inner;
+} prevent_dce;
 
 void extractBits_f28f69() {
-  uvec2 res = tint_extract_bits(uvec2(1u), 1u, 1u);
+  uvec2 res = uvec2(0u);
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -46,14 +44,13 @@ void main() {
 }
 #version 310 es
 
-uvec2 tint_extract_bits(uvec2 v, uint offset, uint count) {
-  uint s = min(offset, 32u);
-  uint e = min(32u, (s + count));
-  return bitfieldExtract(v, int(s), int((e - s)));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uvec2 inner;
+} prevent_dce;
 
 void extractBits_f28f69() {
-  uvec2 res = tint_extract_bits(uvec2(1u), 1u, 1u);
+  uvec2 res = uvec2(0u);
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

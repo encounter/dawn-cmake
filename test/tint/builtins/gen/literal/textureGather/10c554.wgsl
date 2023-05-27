@@ -1,4 +1,4 @@
-// Copyright 2021 The Tint Authors.
+// Copyright 2022 The Tint Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,8 +25,10 @@
 
 // fn textureGather(texture: texture_depth_cube, sampler: sampler, coords: vec3<f32>) -> vec4<f32>
 fn textureGather_10c554() {
-  var res: vec4<f32> = textureGather(arg_0, arg_1, vec3<f32>());
+  var res: vec4<f32> = textureGather(arg_0, arg_1, vec3<f32>(1.f));
+  prevent_dce = res;
 }
+@group(2) @binding(0) var<storage, read_write> prevent_dce : vec4<f32>;
 
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {

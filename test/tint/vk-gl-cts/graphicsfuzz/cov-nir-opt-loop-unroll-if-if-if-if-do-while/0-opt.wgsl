@@ -3,7 +3,7 @@ struct strided_arr {
   el : f32,
 }
 
-type Arr = array<strided_arr, 2u>;
+alias Arr = array<strided_arr, 2u>;
 
 struct buf0 {
   x_GLF_uniform_float_values : Arr,
@@ -14,7 +14,7 @@ struct strided_arr_1 {
   el : i32,
 }
 
-type Arr_1 = array<strided_arr_1, 2u>;
+alias Arr_1 = array<strided_arr_1, 2u>;
 
 struct buf1 {
   x_GLF_uniform_int_values : Arr_1,
@@ -58,10 +58,7 @@ fn main_1() {
 
     continuing {
       let x_72 : f32 = a;
-      if (!((x_72 == 0.0))) {
-      } else {
-        break;
-      }
+      break if !((x_72 == 0.0));
     }
   }
   let x_75 : i32 = x_8.x_GLF_uniform_int_values[1].el;

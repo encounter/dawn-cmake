@@ -4,9 +4,12 @@ vector<float16_t, 2> tint_atanh(vector<float16_t, 2> x) {
   return (log(((float16_t(1.0h) + x) / (float16_t(1.0h) - x))) * float16_t(0.5h));
 }
 
+RWByteAddressBuffer prevent_dce : register(u0, space2);
+
 void atanh_5bf88d() {
-  vector<float16_t, 2> arg_0 = (float16_t(0.0h)).xx;
+  vector<float16_t, 2> arg_0 = (float16_t(0.5h)).xx;
   vector<float16_t, 2> res = tint_atanh(arg_0);
+  prevent_dce.Store<vector<float16_t, 2> >(0u, res);
 }
 
 struct tint_symbol {
@@ -35,6 +38,3 @@ void compute_main() {
   atanh_5bf88d();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x00000223A4C149E0(1,8-16): error X3000: syntax error: unexpected token 'float16_t'
-

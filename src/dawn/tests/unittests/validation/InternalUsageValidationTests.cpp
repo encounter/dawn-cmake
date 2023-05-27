@@ -16,6 +16,9 @@
 
 #include "dawn/utils/WGPUHelpers.h"
 
+namespace dawn {
+namespace {
+
 class InternalUsageValidationDisabledTest : public ValidationTest {};
 
 // Test that using DawnTextureInternalUsageDescriptor is an error if DawnInternalUsages is not
@@ -64,8 +67,8 @@ TEST_F(InternalUsageValidationDisabledTest, CommandEncoderDescriptorRequiresFeat
 }
 
 class TextureInternalUsageValidationTest : public ValidationTest {
-    WGPUDevice CreateTestDevice(dawn::native::Adapter dawnAdapter) override {
-        wgpu::DeviceDescriptor descriptor;
+    WGPUDevice CreateTestDevice(native::Adapter dawnAdapter,
+                                wgpu::DeviceDescriptor descriptor) override {
         wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::DawnInternalUsages};
         descriptor.requiredFeatures = requiredFeatures;
         descriptor.requiredFeaturesCount = 1;
@@ -219,7 +222,6 @@ TEST_F(TextureInternalUsageValidationTest, InternalUsagesAreNotReflected) {
     ASSERT_EQ(texture.GetUsage(), wgpu::TextureUsage::CopySrc);
 }
 
-
 // Test the validation of internal usages against command encoders with and without
 // useInternalUsages.
 TEST_F(TextureInternalUsageValidationTest, CommandValidation) {
@@ -314,3 +316,6 @@ TEST_F(TextureInternalUsageValidationTest, CommandValidation) {
         encoder.Finish();
     }
 }
+
+}  // anonymous namespace
+}  // namespace dawn

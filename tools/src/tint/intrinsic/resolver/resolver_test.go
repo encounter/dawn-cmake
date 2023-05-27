@@ -86,13 +86,6 @@ fn f<T: m>(P<T>) -> T`,
 			success,
 		}, {
 			`
-type f32
-type P<T>
-match m: f32
-fn f(P<m>)`,
-			success,
-		}, {
-			`
 enum e { a }
 match m: e.a
 fn f(m)`,
@@ -183,6 +176,11 @@ conv f32(i32)`,
 type f32
 type T<x>
 conv f32(T<f32>)`,
+			success,
+		}, {
+			`
+type f32
+@must_use fn f() -> f32`,
 			success,
 		}, {
 			`enum E {A A}`,
@@ -511,6 +509,24 @@ enum E { a b }
 match m: E.a | E.b
 conv F<M: m>(P<M>)`,
 			`file.txt:4:16 cannot use template enum 'E' as template number`,
+		}, {
+			`
+type f32
+type P<T>
+match m: f32
+fn f(m)`,
+			`file.txt:4:6 type matcher cannot be used directly here. Use a matcher constrained template argument`,
+		}, {
+			`
+type f32
+type P<T>
+match m: f32
+fn f(P<m>)`,
+			`file.txt:4:8 type matcher cannot be used directly here. Use a matcher constrained template argument`,
+		}, {
+			`
+@must_use fn f()`,
+			`file.txt:1:2 @must_use can only be used on a function with a return type`,
 		},
 	} {
 

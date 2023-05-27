@@ -1,5 +1,5 @@
 #version 310 es
-precision mediump float;
+precision highp float;
 
 void tint_symbol() {
   while (true) {
@@ -8,10 +8,7 @@ void tint_symbol() {
       break;
     }
     {
-      if (true) {
-      } else {
-        break;
-      }
+      if (false) { break; }
     }
   }
 }

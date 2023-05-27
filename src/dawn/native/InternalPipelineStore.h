@@ -35,8 +35,10 @@ struct InternalPipelineStore {
     ~InternalPipelineStore();
 
     std::unordered_map<wgpu::TextureFormat, Ref<RenderPipelineBase>> copyTextureForBrowserPipelines;
+    std::unordered_map<wgpu::TextureFormat, Ref<RenderPipelineBase>>
+        copyExternalTextureForBrowserPipelines;
 
-    Ref<ShaderModuleBase> copyTextureForBrowser;
+    Ref<ShaderModuleBase> copyForBrowser;
 
     Ref<ComputePipelineBase> timestampComputePipeline;
     Ref<ShaderModuleBase> timestampCS;
@@ -55,6 +57,20 @@ struct InternalPipelineStore {
     Ref<ComputePipelineBase> renderValidationPipeline;
     Ref<ShaderModuleBase> renderValidationShader;
     Ref<ComputePipelineBase> dispatchIndirectValidationPipeline;
+
+    Ref<RenderPipelineBase> blitRG8ToDepth16UnormPipeline;
+
+    Ref<ComputePipelineBase> blitDepth16UnormToBufferComputePipeline;
+    Ref<ComputePipelineBase> blitDepth32FloatToBufferComputePipeline;
+    Ref<ComputePipelineBase> blitStencil8ToBufferComputePipeline;
+
+    struct BlitR8ToStencilPipelines {
+        Ref<RenderPipelineBase> clearPipeline;
+        std::array<Ref<RenderPipelineBase>, 8> setStencilPipelines;
+    };
+    std::unordered_map<wgpu::TextureFormat, BlitR8ToStencilPipelines> blitR8ToStencilPipelines;
+
+    std::unordered_map<wgpu::TextureFormat, Ref<RenderPipelineBase>> depthBlitPipelines;
 };
 
 }  // namespace dawn::native

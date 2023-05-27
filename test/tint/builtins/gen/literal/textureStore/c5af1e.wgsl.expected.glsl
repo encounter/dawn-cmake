@@ -2,7 +2,7 @@
 
 layout(rgba16f) uniform highp writeonly image3D arg_0;
 void textureStore_c5af1e() {
-  imageStore(arg_0, ivec3(0), vec4(0.0f));
+  imageStore(arg_0, ivec3(1), vec4(1.0f));
 }
 
 vec4 vertex_main() {
@@ -19,11 +19,11 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
 layout(rgba16f) uniform highp writeonly image3D arg_0;
 void textureStore_c5af1e() {
-  imageStore(arg_0, ivec3(0), vec4(0.0f));
+  imageStore(arg_0, ivec3(1), vec4(1.0f));
 }
 
 void fragment_main() {
@@ -38,7 +38,7 @@ void main() {
 
 layout(rgba16f) uniform highp writeonly image3D arg_0;
 void textureStore_c5af1e() {
-  imageStore(arg_0, ivec3(0), vec4(0.0f));
+  imageStore(arg_0, ivec3(1), vec4(1.0f));
 }
 
 void compute_main() {

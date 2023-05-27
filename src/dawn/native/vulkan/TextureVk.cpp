@@ -22,14 +22,13 @@
 #include "dawn/native/EnumMaskIterator.h"
 #include "dawn/native/Error.h"
 #include "dawn/native/VulkanBackend.h"
-#include "dawn/native/vulkan/AdapterVk.h"
 #include "dawn/native/vulkan/BufferVk.h"
 #include "dawn/native/vulkan/CommandRecordingContext.h"
 #include "dawn/native/vulkan/DeviceVk.h"
 #include "dawn/native/vulkan/FencedDeleter.h"
+#include "dawn/native/vulkan/PhysicalDeviceVk.h"
 #include "dawn/native/vulkan/ResourceHeapVk.h"
 #include "dawn/native/vulkan/ResourceMemoryAllocatorVk.h"
-#include "dawn/native/vulkan/StagingBufferVk.h"
 #include "dawn/native/vulkan/UtilsVulkan.h"
 #include "dawn/native/vulkan/VulkanError.h"
 
@@ -214,6 +213,31 @@ void FillVulkanCreateInfoSizesAndType(const Texture& texture, VkImageCreateInfo*
             info->arrayLayers = 1;
             break;
     }
+}
+
+Aspect ComputeCombinedAspect(Device* device, const Format& format) {
+    // In early Vulkan versions it is not possible to transition depth and stencil separetely so
+    // textures with Depth|Stencil will be promoted to a single CombinedDepthStencil aspect
+    // internally.
+    if (format.aspects == (Aspect::Depth | Aspect::Stencil)) {
+        return Aspect::CombinedDepthStencil;
+    }
+    // Same thing for Stencil8 if it is emulated with a depth-stencil format and not directly S8.
+    if (format.format == wgpu::TextureFormat::Stencil8 &&
+        !device->IsToggleEnabled(Toggle::VulkanUseS8)) {
+        return Aspect::CombinedDepthStencil;
+    }
+
+    // Some multiplanar images cannot have planes transitioned separately and instead Vulkan
+    // requires that the "Color" aspect be used for barriers, so Plane0|Plane1 is promoted to just
+    // Color. The Vulkan spec requires: "If image has a single-plane color format or is not
+    // disjoint, then the aspectMask member of subresourceRange must be VK_IMAGE_ASPECT_COLOR_BIT.".
+    if (format.aspects == (Aspect::Plane0 | Aspect::Plane1)) {
+        return Aspect::Color;
+    }
+
+    // No need to combine aspects.
+    return Aspect::None;
 }
 
 }  // namespace
@@ -471,9 +495,10 @@ VkImageUsageFlags VulkanImageUsage(wgpu::TextureUsage usage, const Format& forma
             flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         }
     }
-    if (usage & kReadOnlyRenderAttachment) {
-        flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    }
+
+    // Choosing Vulkan image usages should not know about kReadOnlyRenderAttachment because that's
+    // a property of when the image is used, not of the creation.
+    ASSERT(!(usage & kReadOnlyRenderAttachment));
 
     return flags;
 }
@@ -550,6 +575,13 @@ VkImageLayout VulkanImageLayout(const Texture* texture, wgpu::TextureUsage usage
         case kPresentTextureUsage:
             return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
+        case wgpu::TextureUsage::TransientAttachment:
+            // Will be covered by RenderAttachment above, as specification of
+            // TransientAttachment requires that RenderAttachment also be
+            // specified.
+            UNREACHABLE();
+            break;
+
         case wgpu::TextureUsage::None:
             break;
     }
@@ -587,10 +619,11 @@ bool IsSampleCountSupported(const dawn::native::vulkan::Device* device,
                             const VkImageCreateInfo& imageCreateInfo) {
     ASSERT(device);
 
-    VkPhysicalDevice physicalDevice = ToBackend(device->GetAdapter())->GetPhysicalDevice();
+    VkPhysicalDevice vkPhysicalDevice =
+        ToBackend(device->GetPhysicalDevice())->GetVkPhysicalDevice();
     VkImageFormatProperties properties;
     if (device->fn.GetPhysicalDeviceImageFormatProperties(
-            physicalDevice, imageCreateInfo.format, imageCreateInfo.imageType,
+            vkPhysicalDevice, imageCreateInfo.format, imageCreateInfo.imageType,
             imageCreateInfo.tiling, imageCreateInfo.usage, imageCreateInfo.flags,
             &properties) != VK_SUCCESS) {
         UNREACHABLE();
@@ -631,14 +664,14 @@ Ref<Texture> Texture::CreateForSwapChain(Device* device,
 
 Texture::Texture(Device* device, const TextureDescriptor* descriptor, TextureState state)
     : TextureBase(device, descriptor, state),
+      mCombinedAspect(ComputeCombinedAspect(device, GetFormat())),
       // A usage of none will make sure the texture is transitioned before its first use as
       // required by the Vulkan spec.
-      mSubresourceLastUsages(std::make_unique<SubresourceStorage<wgpu::TextureUsage>>(
-          (ShouldCombineDepthStencilBarriers() ? Aspect::CombinedDepthStencil
-                                               : GetFormat().aspects),
+      mSubresourceLastUsages(
+          mCombinedAspect != Aspect::None ? mCombinedAspect : GetFormat().aspects,
           GetArrayLayers(),
           GetNumMipLevels(),
-          wgpu::TextureUsage::None)) {}
+          wgpu::TextureUsage::None) {}
 
 MaybeError Texture::InitializeAsInternalTexture(VkImageUsageFlags extraUsages) {
     Device* device = ToBackend(GetDevice());
@@ -660,7 +693,17 @@ MaybeError Texture::InitializeAsInternalTexture(VkImageUsageFlags extraUsages) {
 
     VkImageFormatListCreateInfo imageFormatListInfo = {};
     std::vector<VkFormat> viewFormats;
-    if (GetViewFormats().any()) {
+    bool requiresCreateMutableFormatBit = GetViewFormats().any();
+    // As current SPIR-V SPEC doesn't support 'bgra8' as a valid image format, to support the
+    // STORAGE usage of BGRA8Unorm we have to create an RGBA8Unorm image view on the BGRA8Unorm
+    // storage texture and polyfill it as RGBA8Unorm in Tint. See http://crbug.com/dawn/1641 for
+    // more details.
+    if (createInfo.format == VK_FORMAT_B8G8R8A8_UNORM &&
+        createInfo.usage & VK_IMAGE_USAGE_STORAGE_BIT) {
+        viewFormats.push_back(VK_FORMAT_R8G8B8A8_UNORM);
+        requiresCreateMutableFormatBit = true;
+    }
+    if (requiresCreateMutableFormatBit) {
         createInfo.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
         if (device->GetDeviceInfo().HasExt(DeviceExt::ImageFormatList)) {
             createInfoChain.Add(&imageFormatListInfo,
@@ -695,14 +738,42 @@ MaybeError Texture::InitializeAsInternalTexture(VkImageUsageFlags extraUsages) {
     VkMemoryRequirements requirements;
     device->fn.GetImageMemoryRequirements(device->GetVkDevice(), mHandle, &requirements);
 
+    bool forceDisableSubAllocation =
+        (device->IsToggleEnabled(
+            Toggle::DisableSubAllocationFor2DTextureWithCopyDstOrRenderAttachment)) &&
+        GetDimension() == wgpu::TextureDimension::e2D &&
+        (GetInternalUsage() & (wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::RenderAttachment));
+    auto memoryKind = (GetInternalUsage() & wgpu::TextureUsage::TransientAttachment)
+                          ? MemoryKind::LazilyAllocated
+                          : MemoryKind::Opaque;
     DAWN_TRY_ASSIGN(mMemoryAllocation, device->GetResourceMemoryAllocator()->Allocate(
-                                           requirements, MemoryKind::Opaque));
+                                           requirements, memoryKind, forceDisableSubAllocation));
 
     DAWN_TRY(CheckVkSuccess(
         device->fn.BindImageMemory(device->GetVkDevice(), mHandle,
                                    ToBackend(mMemoryAllocation.GetResourceHeap())->GetMemory(),
                                    mMemoryAllocation.GetOffset()),
         "BindImageMemory"));
+
+    // crbug.com/1361662
+    // This works around an Intel Gen12 mesa bug due to CCS ambiguates stomping on each other.
+    // https://gitlab.freedesktop.org/mesa/mesa/-/issues/7301#note_1826367
+    if (device->IsToggleEnabled(Toggle::VulkanClearGen12TextureWithCCSAmbiguateOnCreation)) {
+        auto format = GetFormat().format;
+        bool textureIsBuggy =
+            format == wgpu::TextureFormat::R8Unorm || format == wgpu::TextureFormat::R8Snorm ||
+            format == wgpu::TextureFormat::R8Uint || format == wgpu::TextureFormat::R8Sint ||
+            // These are flaky.
+            format == wgpu::TextureFormat::RG16Sint || format == wgpu::TextureFormat::RGBA16Sint ||
+            format == wgpu::TextureFormat::RGBA32Float;
+        textureIsBuggy &= GetNumMipLevels() > 1;
+        textureIsBuggy &= GetDimension() == wgpu::TextureDimension::e2D;
+        textureIsBuggy &= IsPowerOfTwo(GetWidth()) && IsPowerOfTwo(GetHeight());
+        if (textureIsBuggy) {
+            DAWN_TRY(ClearTexture(ToBackend(GetDevice())->GetPendingRecordingContext(),
+                                  GetAllSubresources(), TextureBase::ClearValue::Zero));
+        }
+    }
 
     if (device->IsToggleEnabled(Toggle::NonzeroClearResourcesOnCreationForTesting)) {
         DAWN_TRY(ClearTexture(ToBackend(GetDevice())->GetPendingRecordingContext(),
@@ -720,18 +791,20 @@ MaybeError Texture::InitializeFromExternal(const ExternalImageDescriptorVk* desc
     Device* device = ToBackend(GetDevice());
     VkFormat format = VulkanImageFormat(device, GetFormat().format);
     VkImageUsageFlags usage = VulkanImageUsage(GetInternalUsage(), GetFormat());
-    DAWN_INVALID_IF(!externalMemoryService->SupportsCreateImage(descriptor, format, usage,
-                                                                &mSupportsDisjointVkImage),
-                    "Creating an image from external memory is not supported.");
-    // mSubresourceLastUsages was initialized with Plane0/Plane1 in the constructor for
-    // multiplanar formats, so we need to correct it to Color here.
-    if (ShouldCombineMultiPlaneBarriers()) {
-        mSubresourceLastUsages = std::make_unique<SubresourceStorage<wgpu::TextureUsage>>(
-            ComputeAspectsForSubresourceStorage(), GetArrayLayers(), GetNumMipLevels(),
-            wgpu::TextureUsage::None);
-    }
+
+    bool supportsDisjoint;
+    DAWN_INVALID_IF(
+        !externalMemoryService->SupportsCreateImage(descriptor, format, usage, &supportsDisjoint),
+        "Creating an image from external memory is not supported.");
+    // The creation of mSubresourceLastUsage assumes that multi-planar are always disjoint and sets
+    // the combined aspect without checking for disjoint support.
+    // TODO(dawn:1548): Support multi-planar images with the DISJOINT feature and potentially allow
+    // acting on planes individually? Always using Color is valid even for disjoint images.
+    DAWN_UNUSED(supportsDisjoint);
+    ASSERT(!GetFormat().IsMultiPlanar() || mCombinedAspect == Aspect::Color);
 
     mExternalState = ExternalState::PendingAcquire;
+    mExportQueueFamilyIndex = externalMemoryService->GetQueueFamilyIndex(descriptor->GetType());
 
     mPendingAcquireOldLayout = descriptor->releasedOldLayout;
     mPendingAcquireNewLayout = descriptor->releasedNewLayout;
@@ -804,11 +877,11 @@ MaybeError Texture::BindExternalMemory(const ExternalImageDescriptorVk* descript
 void Texture::TransitionEagerlyForExport(CommandRecordingContext* recordingContext) {
     mExternalState = ExternalState::EagerlyTransitioned;
 
-    Aspect aspects = ComputeAspectsForSubresourceStorage();
+    // Get any usage, ideally the last one to do nothing
     ASSERT(GetNumMipLevels() == 1 && GetArrayLayers() == 1);
-    SubresourceRange range = {aspects, {0, 1}, {0, 1}};
+    SubresourceRange range = {GetDisjointVulkanAspects(), {0, 1}, {0, 1}};
 
-    wgpu::TextureUsage usage = mSubresourceLastUsages->Get(aspects, 0, 0);
+    wgpu::TextureUsage usage = mSubresourceLastUsages.Get(range.aspects, 0, 0);
 
     std::vector<VkImageMemoryBarrier> barriers;
     VkPipelineStageFlags srcStages = 0;
@@ -829,7 +902,7 @@ void Texture::TransitionEagerlyForExport(CommandRecordingContext* recordingConte
 
     Device* device = ToBackend(GetDevice());
     barrier.srcQueueFamilyIndex = device->GetGraphicsQueueFamily();
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL_KHR;
+    barrier.dstQueueFamilyIndex = mExportQueueFamilyIndex;
 
     // We don't know when the importing queue will need the texture, so pass
     // VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT to ensure the barrier happens-before any usage in the
@@ -838,6 +911,10 @@ void Texture::TransitionEagerlyForExport(CommandRecordingContext* recordingConte
 
     device->fn.CmdPipelineBarrier(recordingContext->commandBuffer, srcStages, dstStages, 0, 0,
                                   nullptr, 0, nullptr, 1, &barrier);
+}
+
+std::vector<VkSemaphore> Texture::AcquireWaitRequirements() {
+    return std::move(mWaitRequirements);
 }
 
 MaybeError Texture::ExportExternalTexture(VkImageLayout desiredLayout,
@@ -851,33 +928,45 @@ MaybeError Texture::ExportExternalTexture(VkImageLayout desiredLayout,
                     "Can't export a signal semaphore from destroyed or non-external texture %s.",
                     this);
 
+    DAWN_INVALID_IF(desiredLayout != VK_IMAGE_LAYOUT_UNDEFINED,
+                    "desiredLayout (%d) was not VK_IMAGE_LAYOUT_UNDEFINED", desiredLayout);
+
     // Release the texture
     mExternalState = ExternalState::Released;
 
-    Aspect aspects = ComputeAspectsForSubresourceStorage();
     ASSERT(GetNumMipLevels() == 1 && GetArrayLayers() == 1);
-    wgpu::TextureUsage usage = mSubresourceLastUsages->Get(aspects, 0, 0);
+    wgpu::TextureUsage usage = mSubresourceLastUsages.Get(GetDisjointVulkanAspects(), 0, 0);
 
-    VkImageLayout layout = VulkanImageLayout(this, usage);
+    // Compute the layouts for the queue transition for export. desiredLayout == UNDEFINED is a tag
+    // value used to export with whatever the current layout is. However queue transitioning to the
+    // UNDEFINED layout is disallowed so we handle the case where currentLayout is UNDEFINED by
+    // promoting to GENERAL.
+    VkImageLayout currentLayout = VulkanImageLayout(this, usage);
+    VkImageLayout targetLayout;
+    if (currentLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
+        targetLayout = currentLayout;
+    } else {
+        targetLayout = VK_IMAGE_LAYOUT_GENERAL;
+    }
 
-    // Write out the layouts and signal semaphore
-    *releasedOldLayout = layout;
-    *releasedNewLayout = (desiredLayout == VK_IMAGE_LAYOUT_UNDEFINED ? layout : desiredLayout);
-
-    mDesiredExportLayout = desiredLayout;
-
-    // We have to manually trigger a transition if the texture hasn't been actually used, or the
-    // desired layout is not VK_IMAGE_LAYOUT_UNDEFINED.
+    // We have to manually trigger a transition if the texture hasn't been actually used or if we
+    // need a layout transition.
     // TODO(dawn:1509): Avoid the empty submit.
-    if (mExternalSemaphoreHandle == kNullExternalSemaphoreHandle ||
-        desiredLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
+    if (mExternalSemaphoreHandle == kNullExternalSemaphoreHandle || targetLayout != currentLayout) {
+        mDesiredExportLayout = targetLayout;
+
         Device* device = ToBackend(GetDevice());
         CommandRecordingContext* recordingContext = device->GetPendingRecordingContext();
         recordingContext->externalTexturesForEagerTransition.insert(this);
         DAWN_TRY(device->SubmitPendingCommands());
+
+        currentLayout = targetLayout;
     }
     ASSERT(mExternalSemaphoreHandle != kNullExternalSemaphoreHandle);
 
+    // Write out the layouts and signal semaphore
+    *releasedOldLayout = currentLayout;
+    *releasedNewLayout = targetLayout;
     *handle = mExternalSemaphoreHandle;
     mExternalSemaphoreHandle = kNullExternalSemaphoreHandle;
 
@@ -886,7 +975,14 @@ MaybeError Texture::ExportExternalTexture(VkImageLayout desiredLayout,
     return {};
 }
 
-Texture::~Texture() {}
+Texture::~Texture() {
+    if (mExternalSemaphoreHandle != kNullExternalSemaphoreHandle) {
+        ToBackend(GetDevice())
+            ->GetExternalSemaphoreService()
+            ->CloseHandle(mExternalSemaphoreHandle);
+    }
+    mExternalSemaphoreHandle = kNullExternalSemaphoreHandle;
+}
 
 void Texture::SetLabelHelper(const char* prefix) {
     SetDebugName(ToBackend(GetDevice()), mHandle, prefix, GetLabel());
@@ -914,11 +1010,6 @@ void Texture::DestroyImpl() {
 
         mHandle = VK_NULL_HANDLE;
         mExternalAllocation = VK_NULL_HANDLE;
-
-        if (mExternalSemaphoreHandle != kNullExternalSemaphoreHandle) {
-            device->GetExternalSemaphoreService()->CloseHandle(mExternalSemaphoreHandle);
-        }
-        mExternalSemaphoreHandle = kNullExternalSemaphoreHandle;
     }
     // For Vulkan, we currently run the base destruction code after the internal changes because
     // of the dependency on the texture state which the base code overwrites too early.
@@ -945,12 +1036,12 @@ void Texture::TweakTransitionForExternalUsage(CommandRecordingContext* recording
         if (barriers->size() == transitionBarrierStart) {
             barriers->push_back(BuildMemoryBarrier(
                 this, wgpu::TextureUsage::None, wgpu::TextureUsage::None,
-                SubresourceRange::SingleMipAndLayer(0, 0, ComputeAspectsForSubresourceStorage())));
+                SubresourceRange::SingleMipAndLayer(0, 0, GetDisjointVulkanAspects())));
         }
 
         VkImageMemoryBarrier* barrier = &(*barriers)[transitionBarrierStart];
         // Transfer texture from external queue to graphics queue
-        barrier->srcQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL_KHR;
+        barrier->srcQueueFamilyIndex = mExportQueueFamilyIndex;
         barrier->dstQueueFamilyIndex = ToBackend(GetDevice())->GetGraphicsQueueFamily();
 
         // srcAccessMask means nothing when importing. Queue transfers require a barrier on
@@ -1013,10 +1104,6 @@ void Texture::TweakTransitionForExternalUsage(CommandRecordingContext* recording
     }
 
     mLastExternalState = mExternalState;
-
-    recordingContext->waitSemaphores.insert(recordingContext->waitSemaphores.end(),
-                                            mWaitRequirements.begin(), mWaitRequirements.end());
-    mWaitRequirements.clear();
 }
 
 bool Texture::CanReuseWithoutBarrier(wgpu::TextureUsage lastUsage, wgpu::TextureUsage usage) {
@@ -1028,53 +1115,17 @@ bool Texture::CanReuseWithoutBarrier(wgpu::TextureUsage lastUsage, wgpu::Texture
     return false;
 }
 
-// Base Vulkan doesn't support transitioning depth and stencil separately. We work around
-// this limitation by combining the usages in the two planes of `textureUsages` into a
-// single plane in a new SubresourceStorage<TextureUsage>. The barriers will be produced
-// for DEPTH | STENCIL since the SubresourceRange uses Aspect::CombinedDepthStencil.
-bool Texture::ShouldCombineDepthStencilBarriers() const {
-    // If the Stencil8 format is being emulated then memory barriers also need to include
-    // the depth aspect. (See: crbug.com/dawn/1331)
-    if (GetFormat().format == wgpu::TextureFormat::Stencil8 &&
-        !GetDevice()->IsToggleEnabled(Toggle::VulkanUseS8)) {
-        return true;
-    }
-    return GetFormat().aspects == (Aspect::Depth | Aspect::Stencil);
-}
-
-// The Vulkan spec requires:
-// "If image has a single-plane color format or is not disjoint, then the aspectMask member of
-// subresourceRange must be VK_IMAGE_ASPECT_COLOR_BIT.".
-// For multi-planar formats, we currently only support import them in non-disjoint way.
-bool Texture::ShouldCombineMultiPlaneBarriers() const {
-    // TODO(chromium:1258986): Figure out how to support disjoint vkImage.
-    ASSERT(!mSupportsDisjointVkImage);
-    return GetFormat().aspects == (Aspect::Plane0 | Aspect::Plane1);
-}
-
-Aspect Texture::ComputeAspectsForSubresourceStorage() const {
-    if (ShouldCombineDepthStencilBarriers()) {
-        return Aspect::CombinedDepthStencil;
-    }
-    // Force to use Aspect::Color for Aspect::Plane0/1.
-    if (ShouldCombineMultiPlaneBarriers()) {
-        return Aspect::Color;
-    }
-    return GetFormat().aspects;
-}
-
 void Texture::TransitionUsageForPass(CommandRecordingContext* recordingContext,
                                      const TextureSubresourceUsage& textureUsages,
                                      std::vector<VkImageMemoryBarrier>* imageBarriers,
                                      VkPipelineStageFlags* srcStages,
                                      VkPipelineStageFlags* dstStages) {
-    if (ShouldCombineBarriers()) {
-        Aspect combinedAspect = ComputeAspectsForSubresourceStorage();
-        SubresourceStorage<wgpu::TextureUsage> combinedUsages(combinedAspect, GetArrayLayers(),
+    if (UseCombinedAspects()) {
+        SubresourceStorage<wgpu::TextureUsage> combinedUsages(mCombinedAspect, GetArrayLayers(),
                                                               GetNumMipLevels());
         textureUsages.Iterate([&](const SubresourceRange& range, wgpu::TextureUsage usage) {
             SubresourceRange updateRange = range;
-            updateRange.aspects = combinedAspect;
+            updateRange.aspects = mCombinedAspect;
 
             combinedUsages.Update(updateRange,
                                   [&](const SubresourceRange&, wgpu::TextureUsage* combinedUsage) {
@@ -1102,9 +1153,9 @@ void Texture::TransitionUsageForPassImpl(
     wgpu::TextureUsage allUsages = wgpu::TextureUsage::None;
     wgpu::TextureUsage allLastUsages = wgpu::TextureUsage::None;
 
-    mSubresourceLastUsages->Merge(subresourceUsages, [&](const SubresourceRange& range,
-                                                         wgpu::TextureUsage* lastUsage,
-                                                         const wgpu::TextureUsage& newUsage) {
+    mSubresourceLastUsages.Merge(subresourceUsages, [&](const SubresourceRange& range,
+                                                        wgpu::TextureUsage* lastUsage,
+                                                        const wgpu::TextureUsage& newUsage) {
         if (newUsage == wgpu::TextureUsage::None || CanReuseWithoutBarrier(*lastUsage, newUsage)) {
             return;
         }
@@ -1152,9 +1203,9 @@ void Texture::TransitionUsageAndGetResourceBarrier(wgpu::TextureUsage usage,
                                                    std::vector<VkImageMemoryBarrier>* imageBarriers,
                                                    VkPipelineStageFlags* srcStages,
                                                    VkPipelineStageFlags* dstStages) {
-    if (ShouldCombineBarriers()) {
+    if (UseCombinedAspects()) {
         SubresourceRange updatedRange = range;
-        updatedRange.aspects = ComputeAspectsForSubresourceStorage();
+        updatedRange.aspects = mCombinedAspect;
         TransitionUsageAndGetResourceBarrierImpl(usage, updatedRange, imageBarriers, srcStages,
                                                  dstStages);
     } else {
@@ -1172,7 +1223,7 @@ void Texture::TransitionUsageAndGetResourceBarrierImpl(
     const Format& format = GetFormat();
 
     wgpu::TextureUsage allLastUsages = wgpu::TextureUsage::None;
-    mSubresourceLastUsages->Update(
+    mSubresourceLastUsages.Update(
         range, [&](const SubresourceRange& range, wgpu::TextureUsage* lastUsage) {
             if (CanReuseWithoutBarrier(*lastUsage, usage)) {
                 return;
@@ -1252,10 +1303,9 @@ MaybeError Texture::ClearTexture(CommandRecordingContext* recordingContext,
                 regions.push_back(ComputeBufferImageCopyRegion(dataLayout, textureCopy, copySize));
             }
         }
-        device->fn.CmdCopyBufferToImage(recordingContext->commandBuffer,
-                                        ToBackend(uploadHandle.stagingBuffer)->GetBufferHandle(),
-                                        GetHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                        regions.size(), regions.data());
+        device->fn.CmdCopyBufferToImage(
+            recordingContext->commandBuffer, ToBackend(uploadHandle.stagingBuffer)->GetHandle(),
+            GetHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions.size(), regions.data());
     } else {
         for (uint32_t level = range.baseMipLevel; level < range.baseMipLevel + range.levelCount;
              ++level) {
@@ -1292,26 +1342,24 @@ MaybeError Texture::ClearTexture(CommandRecordingContext* recordingContext,
                     ASSERT(aspects == Aspect::Color);
                     VkClearColorValue clearColorValue;
                     switch (GetFormat().GetAspectInfo(Aspect::Color).baseType) {
-                        case wgpu::TextureComponentType::Float:
+                        case TextureComponentType::Float:
                             clearColorValue.float32[0] = fClearColor;
                             clearColorValue.float32[1] = fClearColor;
                             clearColorValue.float32[2] = fClearColor;
                             clearColorValue.float32[3] = fClearColor;
                             break;
-                        case wgpu::TextureComponentType::Sint:
+                        case TextureComponentType::Sint:
                             clearColorValue.int32[0] = sClearColor;
                             clearColorValue.int32[1] = sClearColor;
                             clearColorValue.int32[2] = sClearColor;
                             clearColorValue.int32[3] = sClearColor;
                             break;
-                        case wgpu::TextureComponentType::Uint:
+                        case TextureComponentType::Uint:
                             clearColorValue.uint32[0] = uClearColor;
                             clearColorValue.uint32[1] = uClearColor;
                             clearColorValue.uint32[2] = uClearColor;
                             clearColorValue.uint32[3] = uClearColor;
                             break;
-                        case wgpu::TextureComponentType::DepthComparison:
-                            UNREACHABLE();
                     }
                     device->fn.CmdClearColorImage(recordingContext->commandBuffer, GetHandle(),
                                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -1328,30 +1376,42 @@ MaybeError Texture::ClearTexture(CommandRecordingContext* recordingContext,
     return {};
 }
 
-void Texture::EnsureSubresourceContentInitialized(CommandRecordingContext* recordingContext,
-                                                  const SubresourceRange& range) {
+MaybeError Texture::EnsureSubresourceContentInitialized(CommandRecordingContext* recordingContext,
+                                                        const SubresourceRange& range) {
     if (!GetDevice()->IsToggleEnabled(Toggle::LazyClearResourceOnFirstUse)) {
-        return;
+        return {};
     }
     if (!IsSubresourceContentInitialized(range)) {
         // If subresource has not been initialized, clear it to black as it could contain dirty
         // bits from recycled memory
-        GetDevice()->ConsumedError(
-            ClearTexture(recordingContext, range, TextureBase::ClearValue::Zero));
+        DAWN_TRY(ClearTexture(recordingContext, range, TextureBase::ClearValue::Zero));
     }
+    return {};
 }
 
 void Texture::UpdateExternalSemaphoreHandle(ExternalSemaphoreHandle handle) {
     if (mExternalSemaphoreHandle != kNullExternalSemaphoreHandle) {
-        Device* device = ToBackend(GetDevice());
-        device->GetExternalSemaphoreService()->CloseHandle(mExternalSemaphoreHandle);
+        ToBackend(GetDevice())
+            ->GetExternalSemaphoreService()
+            ->CloseHandle(mExternalSemaphoreHandle);
     }
     mExternalSemaphoreHandle = handle;
 }
 
 VkImageLayout Texture::GetCurrentLayoutForSwapChain() const {
     ASSERT(GetFormat().aspects == Aspect::Color);
-    return VulkanImageLayout(this, mSubresourceLastUsages->Get(Aspect::Color, 0, 0));
+    return VulkanImageLayout(this, mSubresourceLastUsages.Get(Aspect::Color, 0, 0));
+}
+
+bool Texture::UseCombinedAspects() const {
+    return mCombinedAspect != Aspect::None;
+}
+
+Aspect Texture::GetDisjointVulkanAspects() const {
+    if (UseCombinedAspects()) {
+        return mCombinedAspect;
+    }
+    return GetFormat().aspects;
 }
 
 // static
@@ -1412,6 +1472,16 @@ MaybeError TextureView::Initialize(const TextureViewDescriptor* descriptor) {
         device->fn.CreateImageView(device->GetVkDevice(), &createInfo, nullptr, &*mHandle),
         "CreateImageView"));
 
+    // We should create an image view with format RGBA8Unorm on the BGRA8Unorm texture when the
+    // texture is used as storage texture. See http://crbug.com/dawn/1641 for more details.
+    if (createInfo.format == VK_FORMAT_B8G8R8A8_UNORM &&
+        (GetTexture()->GetInternalUsage() & wgpu::TextureUsage::StorageBinding)) {
+        createInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+        DAWN_TRY(CheckVkSuccess(device->fn.CreateImageView(device->GetVkDevice(), &createInfo,
+                                                           nullptr, &*mHandleForBGRA8UnormStorage),
+                                "CreateImageView for BGRA8Unorm storage"));
+    }
+
     SetLabelImpl();
 
     return {};
@@ -1426,10 +1496,19 @@ void TextureView::DestroyImpl() {
         device->GetFencedDeleter()->DeleteWhenUnused(mHandle);
         mHandle = VK_NULL_HANDLE;
     }
+
+    if (mHandleForBGRA8UnormStorage != VK_NULL_HANDLE) {
+        device->GetFencedDeleter()->DeleteWhenUnused(mHandleForBGRA8UnormStorage);
+        mHandleForBGRA8UnormStorage = VK_NULL_HANDLE;
+    }
 }
 
 VkImageView TextureView::GetHandle() const {
     return mHandle;
+}
+
+VkImageView TextureView::GetHandleForBGRA8UnormStorage() const {
+    return mHandleForBGRA8UnormStorage;
 }
 
 void TextureView::SetLabelImpl() {

@@ -1,22 +1,12 @@
 #version 310 es
 
-ivec2 tint_first_leading_bit(ivec2 v) {
-  uvec2 x = mix(uvec2(v), uvec2(~(v)), lessThan(v, ivec2(0)));
-  uvec2 b16 = mix(uvec2(0u), uvec2(16u), bvec2((x & uvec2(4294901760u))));
-  x = (x >> b16);
-  uvec2 b8 = mix(uvec2(0u), uvec2(8u), bvec2((x & uvec2(65280u))));
-  x = (x >> b8);
-  uvec2 b4 = mix(uvec2(0u), uvec2(4u), bvec2((x & uvec2(240u))));
-  x = (x >> b4);
-  uvec2 b2 = mix(uvec2(0u), uvec2(2u), bvec2((x & uvec2(12u))));
-  x = (x >> b2);
-  uvec2 b1 = mix(uvec2(0u), uvec2(1u), bvec2((x & uvec2(2u))));
-  uvec2 is_zero = mix(uvec2(0u), uvec2(4294967295u), equal(x, uvec2(0u)));
-  return ivec2((((((b16 | b8) | b4) | b2) | b1) | is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  ivec2 inner;
+} prevent_dce;
 
 void firstLeadingBit_a622c2() {
-  ivec2 res = tint_first_leading_bit(ivec2(1));
+  ivec2 res = ivec2(0);
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -33,25 +23,15 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-ivec2 tint_first_leading_bit(ivec2 v) {
-  uvec2 x = mix(uvec2(v), uvec2(~(v)), lessThan(v, ivec2(0)));
-  uvec2 b16 = mix(uvec2(0u), uvec2(16u), bvec2((x & uvec2(4294901760u))));
-  x = (x >> b16);
-  uvec2 b8 = mix(uvec2(0u), uvec2(8u), bvec2((x & uvec2(65280u))));
-  x = (x >> b8);
-  uvec2 b4 = mix(uvec2(0u), uvec2(4u), bvec2((x & uvec2(240u))));
-  x = (x >> b4);
-  uvec2 b2 = mix(uvec2(0u), uvec2(2u), bvec2((x & uvec2(12u))));
-  x = (x >> b2);
-  uvec2 b1 = mix(uvec2(0u), uvec2(1u), bvec2((x & uvec2(2u))));
-  uvec2 is_zero = mix(uvec2(0u), uvec2(4294967295u), equal(x, uvec2(0u)));
-  return ivec2((((((b16 | b8) | b4) | b2) | b1) | is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  ivec2 inner;
+} prevent_dce;
 
 void firstLeadingBit_a622c2() {
-  ivec2 res = tint_first_leading_bit(ivec2(1));
+  ivec2 res = ivec2(0);
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -64,23 +44,13 @@ void main() {
 }
 #version 310 es
 
-ivec2 tint_first_leading_bit(ivec2 v) {
-  uvec2 x = mix(uvec2(v), uvec2(~(v)), lessThan(v, ivec2(0)));
-  uvec2 b16 = mix(uvec2(0u), uvec2(16u), bvec2((x & uvec2(4294901760u))));
-  x = (x >> b16);
-  uvec2 b8 = mix(uvec2(0u), uvec2(8u), bvec2((x & uvec2(65280u))));
-  x = (x >> b8);
-  uvec2 b4 = mix(uvec2(0u), uvec2(4u), bvec2((x & uvec2(240u))));
-  x = (x >> b4);
-  uvec2 b2 = mix(uvec2(0u), uvec2(2u), bvec2((x & uvec2(12u))));
-  x = (x >> b2);
-  uvec2 b1 = mix(uvec2(0u), uvec2(1u), bvec2((x & uvec2(2u))));
-  uvec2 is_zero = mix(uvec2(0u), uvec2(4294967295u), equal(x, uvec2(0u)));
-  return ivec2((((((b16 | b8) | b4) | b2) | b1) | is_zero));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  ivec2 inner;
+} prevent_dce;
 
 void firstLeadingBit_a622c2() {
-  ivec2 res = tint_first_leading_bit(ivec2(1));
+  ivec2 res = ivec2(0);
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

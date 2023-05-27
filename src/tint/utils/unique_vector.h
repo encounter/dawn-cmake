@@ -30,6 +30,9 @@ namespace tint::utils {
 /// Attempting to add a duplicate is a no-op.
 template <typename T, size_t N, typename HASH = std::hash<T>, typename EQUAL = std::equal_to<T>>
 struct UniqueVector {
+    /// STL-friendly alias to T. Used by gmock.
+    using value_type = T;
+
     /// Constructor
     UniqueVector() = default;
 
@@ -87,8 +90,8 @@ struct UniqueVector {
     /// @returns an iterator to the end of the reversed vector
     auto rend() const { return vector.rend(); }
 
-    /// @returns a const reference to the internal vector
-    operator const Vector<T, N>&() const { return vector; }
+    /// @returns a reference to the internal vector
+    operator VectorRef<T>() const { return vector; }
 
     /// @returns the std::move()'d vector.
     /// @note The UniqueVector must not be used after calling this method

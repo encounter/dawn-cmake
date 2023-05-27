@@ -74,7 +74,8 @@ MaybeError ValidateSurfaceDescriptor(const InstanceBase* instance,
         wgpu::SType::SurfaceDescriptorFromMetalLayer, wgpu::SType::SurfaceDescriptorFromWindowsHWND,
         wgpu::SType::SurfaceDescriptorFromWindowsCoreWindow,
         wgpu::SType::SurfaceDescriptorFromWindowsSwapChainPanel,
-        wgpu::SType::SurfaceDescriptorFromXlibWindow));
+        wgpu::SType::SurfaceDescriptorFromXlibWindow,
+        wgpu::SType::SurfaceDescriptorFromWaylandSurface));
 
 #if defined(DAWN_ENABLE_BACKEND_METAL)
     const SurfaceDescriptorFromMetalLayer* metalDesc = nullptr;
@@ -162,7 +163,7 @@ MaybeError ValidateSurfaceDescriptor(const InstanceBase* instance,
     }
 #endif  // defined(DAWN_USE_X11)
 
-    return DAWN_FORMAT_VALIDATION_ERROR("Unsupported sType (%s)", descriptor->nextInChain->sType);
+    return DAWN_VALIDATION_ERROR("Unsupported sType (%s)", descriptor->nextInChain->sType);
 }
 
 // static
@@ -188,6 +189,7 @@ Surface::Surface(InstanceBase* instance, const SurfaceDescriptor* descriptor)
     FindInChain(descriptor->nextInChain, &coreWindowDesc);
     FindInChain(descriptor->nextInChain, &swapChainPanelDesc);
     FindInChain(descriptor->nextInChain, &xDesc);
+    FindInChain(descriptor->nextInChain, &waylandDesc);
     if (metalDesc) {
         mType = Type::MetalLayer;
         mMetalLayer = metalDesc->layer;
@@ -228,12 +230,12 @@ Surface::~Surface() {
     }
 }
 
-NewSwapChainBase* Surface::GetAttachedSwapChain() {
+SwapChainBase* Surface::GetAttachedSwapChain() {
     ASSERT(!IsError());
     return mSwapChain.Get();
 }
 
-void Surface::SetAttachedSwapChain(NewSwapChainBase* swapChain) {
+void Surface::SetAttachedSwapChain(SwapChainBase* swapChain) {
     ASSERT(!IsError());
     mSwapChain = swapChain;
 }

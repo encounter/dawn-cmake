@@ -14,14 +14,21 @@ struct S {
 
 uint local_invocation_index_1 = 0u;
 shared S_atomic wg;
-void compute_main_inner(uint local_invocation_index) {
+void compute_main_inner(uint local_invocation_index_2) {
   uint idx = 0u;
   wg.x = 0;
   wg.y = 0u;
-  idx = local_invocation_index;
-  {
-    for(; !(!((idx < 10u))); idx = (idx + 1u)) {
-      atomicExchange(wg.a[idx], 0u);
+  idx = local_invocation_index_2;
+  while (true) {
+    uint x_30 = idx;
+    if (!((x_30 < 10u))) {
+      break;
+    }
+    uint x_35 = idx;
+    atomicExchange(wg.a[x_35], 0u);
+    {
+      uint x_41 = idx;
+      idx = (x_41 + 1u);
     }
   }
   barrier();
@@ -30,7 +37,8 @@ void compute_main_inner(uint local_invocation_index) {
 }
 
 void compute_main_1() {
-  compute_main_inner(local_invocation_index_1);
+  uint x_53 = local_invocation_index_1;
+  compute_main_inner(x_53);
   return;
 }
 

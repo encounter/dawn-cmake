@@ -14,6 +14,8 @@
 
 #include "src/tint/writer/wgsl/test_helper.h"
 
+#include "gmock/gmock.h"
+
 using namespace tint::number_suffixes;  // NOLINT
 
 namespace tint::writer::wgsl {
@@ -22,16 +24,13 @@ namespace {
 using WgslGeneratorImplTest = TestHelper;
 
 TEST_F(WgslGeneratorImplTest, Emit_Switch) {
-    GlobalVar("cond", ty.i32(), ast::StorageClass::kPrivate);
+    GlobalVar("cond", ty.i32(), builtin::AddressSpace::kPrivate);
 
     auto* def_body = Block(create<ast::BreakStatement>());
-    auto* def = create<ast::CaseStatement>(utils::Empty, def_body);
-
-    utils::Vector case_val{Expr(5_i)};
+    auto* def = Case(DefaultCaseSelector(), def_body);
 
     auto* case_body = Block(create<ast::BreakStatement>());
-
-    auto* case_stmt = create<ast::CaseStatement>(case_val, case_body);
+    auto* case_stmt = Case(utils::Vector{CaseSelector(5_i)}, case_body);
 
     utils::Vector body{
         case_stmt,
@@ -39,19 +38,43 @@ TEST_F(WgslGeneratorImplTest, Emit_Switch) {
     };
 
     auto* cond = Expr("cond");
-    auto* s = create<ast::SwitchStatement>(cond, body);
+    auto* s = Switch(cond, body);
     WrapInFunction(s);
 
     GeneratorImpl& gen = Build();
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(s)) << gen.error();
+    gen.EmitStatement(s);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  switch(cond) {
     case 5i: {
       break;
     }
     default: {
+      break;
+    }
+  }
+)");
+}
+
+TEST_F(WgslGeneratorImplTest, Emit_Switch_MixedDefault) {
+    GlobalVar("cond", ty.i32(), builtin::AddressSpace::kPrivate);
+
+    auto* def_body = Block(create<ast::BreakStatement>());
+    auto* def = Case(utils::Vector{CaseSelector(5_i), DefaultCaseSelector()}, def_body);
+
+    auto* cond = Expr("cond");
+    auto* s = Switch(cond, utils::Vector{def});
+    WrapInFunction(s);
+
+    GeneratorImpl& gen = Build();
+
+    gen.increment_indent();
+    gen.EmitStatement(s);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
+    EXPECT_EQ(gen.result(), R"(  switch(cond) {
+    case 5i, default: {
       break;
     }
   }

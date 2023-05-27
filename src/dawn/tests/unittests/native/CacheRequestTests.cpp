@@ -22,7 +22,6 @@
 #include "dawn/tests/mocks/platform/CachingInterfaceMock.h"
 
 namespace dawn::native {
-
 namespace {
 
 using ::testing::_;
@@ -37,18 +36,6 @@ class CacheRequestTests : public DawnNativeTest {
   protected:
     std::unique_ptr<dawn::platform::Platform> CreateTestPlatform() override {
         return std::make_unique<DawnCachingMockPlatform>(&mMockCache);
-    }
-
-    WGPUDevice CreateTestDevice() override {
-        wgpu::DeviceDescriptor deviceDescriptor = {};
-        wgpu::DawnTogglesDeviceDescriptor togglesDesc = {};
-        deviceDescriptor.nextInChain = &togglesDesc;
-
-        const char* toggle = "enable_blob_cache";
-        togglesDesc.forceEnabledToggles = &toggle;
-        togglesDesc.forceEnabledTogglesCount = 1;
-
-        return adapter.CreateDevice(&deviceDescriptor);
     }
 
     DeviceBase* GetDevice() { return dawn::native::FromAPI(device.Get()); }
@@ -316,6 +303,5 @@ TEST_F(CacheRequestTests, CacheHitError) {
     EXPECT_FALSE(result.IsCached());
 }
 
-}  // namespace
-
+}  // anonymous namespace
 }  // namespace dawn::native

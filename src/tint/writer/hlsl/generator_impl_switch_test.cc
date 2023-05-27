@@ -22,10 +22,10 @@ namespace {
 using HlslGeneratorImplTest_Switch = TestHelper;
 
 TEST_F(HlslGeneratorImplTest_Switch, Emit_Switch) {
-    GlobalVar("cond", ty.i32(), ast::StorageClass::kPrivate);
-    auto* s = Switch(                     //
-        Expr("cond"),                     //
-        Case(Expr(5_i), Block(Break())),  //
+    GlobalVar("cond", ty.i32(), builtin::AddressSpace::kPrivate);
+    auto* s = Switch(                             //
+        Expr("cond"),                             //
+        Case(CaseSelector(5_i), Block(Break())),  //
         DefaultCase());
     WrapInFunction(s);
 
@@ -33,7 +33,7 @@ TEST_F(HlslGeneratorImplTest_Switch, Emit_Switch) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(s)) << gen.error();
+    ASSERT_TRUE(gen.EmitStatement(s)) << gen.Diagnostics();
     EXPECT_EQ(gen.result(), R"(  switch(cond) {
     case 5: {
       break;
@@ -45,9 +45,39 @@ TEST_F(HlslGeneratorImplTest_Switch, Emit_Switch) {
 )");
 }
 
-TEST_F(HlslGeneratorImplTest_Switch, Emit_Switch_OnlyDefaultCase) {
-    GlobalVar("cond", ty.i32(), ast::StorageClass::kPrivate);
-    GlobalVar("a", ty.i32(), ast::StorageClass::kPrivate);
+TEST_F(HlslGeneratorImplTest_Switch, Emit_Switch_MixedDefault) {
+    GlobalVar("cond", ty.i32(), builtin::AddressSpace::kPrivate);
+    auto* s = Switch(  //
+        Expr("cond"),  //
+        Case(utils::Vector{CaseSelector(5_i), DefaultCaseSelector()}, Block(Break())));
+    WrapInFunction(s);
+
+    GeneratorImpl& gen = Build();
+
+    gen.increment_indent();
+
+    ASSERT_TRUE(gen.EmitStatement(s)) << gen.Diagnostics();
+    EXPECT_EQ(gen.result(), R"(  switch(cond) {
+    case 5:
+    default: {
+      break;
+    }
+  }
+)");
+}
+
+TEST_F(HlslGeneratorImplTest_Switch, Emit_Switch_OnlyDefaultCase_NoSideEffectsCondition) {
+    // var<private> cond : i32;
+    // var<private> a : i32;
+    // fn test() {
+    //   switch(cond) {
+    //     default: {
+    //       a = 42;
+    //     }
+    //   }
+    // }
+    GlobalVar("cond", ty.i32(), builtin::AddressSpace::kPrivate);
+    GlobalVar("a", ty.i32(), builtin::AddressSpace::kPrivate);
     auto* s = Switch(  //
         Expr("cond"),  //
         DefaultCase(Block(Assign(Expr("a"), Expr(42_i)))));
@@ -57,8 +87,46 @@ TEST_F(HlslGeneratorImplTest_Switch, Emit_Switch_OnlyDefaultCase) {
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(s)) << gen.error();
-    EXPECT_EQ(gen.result(), R"(  cond;
+    ASSERT_TRUE(gen.EmitStatement(s)) << gen.Diagnostics();
+    EXPECT_EQ(gen.result(), R"(  do {
+    a = 42;
+  } while (false);
+)");
+}
+
+TEST_F(HlslGeneratorImplTest_Switch, Emit_Switch_OnlyDefaultCase_SideEffectsCondition) {
+    // var<private> global : i32;
+    // fn bar() -> i32 {
+    //   global = 84;
+    //   return global;
+    // }
+    //
+    // var<private> a : i32;
+    // fn test() {
+    //   switch(bar()) {
+    //     default: {
+    //       a = 42;
+    //     }
+    //   }
+    // }
+    GlobalVar("global", ty.i32(), builtin::AddressSpace::kPrivate);
+    Func("bar", {}, ty.i32(),
+         utils::Vector{                               //
+                       Assign("global", Expr(84_i)),  //
+                       Return("global")});
+
+    GlobalVar("a", ty.i32(), builtin::AddressSpace::kPrivate);
+    auto* s = Switch(  //
+        Call("bar"),   //
+        DefaultCase(Block(Assign(Expr("a"), Expr(42_i)))));
+    WrapInFunction(s);
+
+    GeneratorImpl& gen = Build();
+
+    gen.increment_indent();
+
+    ASSERT_TRUE(gen.EmitStatement(s)) << gen.Diagnostics();
+    EXPECT_EQ(gen.result(), R"(  bar();
   do {
     a = 42;
   } while (false);

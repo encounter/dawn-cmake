@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "gtest/gtest.h"
+#include "gmock/gmock.h"
+
 #include "src/tint/ast/call_statement.h"
 #include "src/tint/ast/disable_validation_attribute.h"
 #include "src/tint/ast/id_attribute.h"
@@ -21,11 +22,12 @@
 #include "src/tint/inspector/test_inspector_builder.h"
 #include "src/tint/inspector/test_inspector_runner.h"
 #include "src/tint/program_builder.h"
-#include "src/tint/sem/depth_texture.h"
-#include "src/tint/sem/external_texture.h"
-#include "src/tint/sem/multisampled_texture.h"
-#include "src/tint/sem/sampled_texture.h"
 #include "src/tint/sem/variable.h"
+#include "src/tint/type/depth_texture.h"
+#include "src/tint/type/external_texture.h"
+#include "src/tint/type/multisampled_texture.h"
+#include "src/tint/type/sampled_texture.h"
+#include "src/tint/type/texture_dimension.h"
 #include "tint/tint.h"
 
 using namespace tint::number_suffixes;  // NOLINT
@@ -33,16 +35,13 @@ using namespace tint::number_suffixes;  // NOLINT
 namespace tint::inspector {
 namespace {
 
-// All the tests that descend from InspectorBuilder are expected to define their
-// test state via building up the AST through InspectorBuilder and then generate
-// the program with ::Build.
-// The returned Inspector from ::Build can then be used to test expecations.
+// All the tests that descend from InspectorBuilder are expected to define their test state via
+// building up the AST through InspectorBuilder and then generate the program with ::Build. The
+// returned Inspector from ::Build can then be used to test expectations.
 //
-// All the tests that descend from InspectorRunner are expected to define their
-// test state via a WGSL shader, which will be parsed to generate a Program and
-// Inspector in ::Initialize.
-// The returned Inspector from ::Initialize can then be used to test
-// expecations.
+// All the tests that descend from InspectorRunner are expected to define their test state via a
+// WGSL shader, which will be parsed to generate a Program and Inspector in ::Initialize. The
+// returned Inspector from ::Initialize can then be used to test expectations.
 
 class InspectorGetEntryPointTest : public InspectorBuilder, public testing::Test {};
 
@@ -52,8 +51,8 @@ class InspectorGetEntryPointComponentAndCompositionTest
     : public InspectorBuilder,
       public testing::TestWithParam<InspectorGetEntryPointComponentAndCompositionTestParams> {};
 struct InspectorGetEntryPointInterpolateTestParams {
-    ast::InterpolationType in_type;
-    ast::InterpolationSampling in_sampling;
+    builtin::InterpolationType in_type;
+    builtin::InterpolationSampling in_sampling;
     inspector::InterpolationType out_type;
     inspector::InterpolationSampling out_sampling;
 };
@@ -78,7 +77,7 @@ class InspectorGetSampledTextureResourceBindingsTest : public InspectorBuilder,
 class InspectorGetSampledArrayTextureResourceBindingsTest : public InspectorBuilder,
                                                             public testing::Test {};
 struct GetSampledTextureTestParams {
-    ast::TextureDimension type_dim;
+    type::TextureDimension type_dim;
     inspector::ResourceBinding::TextureDimension inspector_dim;
     inspector::ResourceBinding::SampledKind sampled_kind;
 };
@@ -102,7 +101,7 @@ class InspectorGetMultisampledTextureResourceBindingsTestWithParam
 class InspectorGetStorageTextureResourceBindingsTest : public InspectorBuilder,
                                                        public testing::Test {};
 struct GetDepthTextureTestParams {
-    ast::TextureDimension type_dim;
+    type::TextureDimension type_dim;
     inspector::ResourceBinding::TextureDimension inspector_dim;
 };
 class InspectorGetDepthTextureResourceBindingsTestWithParam
@@ -112,8 +111,8 @@ class InspectorGetDepthTextureResourceBindingsTestWithParam
 class InspectorGetDepthMultisampledTextureResourceBindingsTest : public InspectorBuilder,
                                                                  public testing::Test {};
 
-typedef std::tuple<ast::TextureDimension, ResourceBinding::TextureDimension> DimensionParams;
-typedef std::tuple<ast::TexelFormat, ResourceBinding::TexelFormat, ResourceBinding::SampledKind>
+typedef std::tuple<type::TextureDimension, ResourceBinding::TextureDimension> DimensionParams;
+typedef std::tuple<builtin::TexelFormat, ResourceBinding::TexelFormat, ResourceBinding::SampledKind>
     TexelFormatParams;
 typedef std::tuple<DimensionParams, TexelFormatParams> GetStorageTextureTestParams;
 class InspectorGetStorageTextureResourceBindingsTestWithParam
@@ -287,11 +286,15 @@ TEST_P(InspectorGetEntryPointComponentAndCompositionTest, Test) {
     ComponentType component;
     CompositionType composition;
     std::tie(component, composition) = GetParam();
-    std::function<const ast::Type*()> tint_type = GetTypeFunction(component, composition);
+    std::function<ast::Type()> tint_type = GetTypeFunction(component, composition);
+
+    if (component == ComponentType::kF16) {
+        Enable(builtin::Extension::kF16);
+    }
 
     auto* in_var = Param("in_var", tint_type(),
                          utils::Vector{
-                             Location(0u),
+                             Location(0_u),
                              Flat(),
                          });
     Func("foo", utils::Vector{in_var}, tint_type(),
@@ -302,7 +305,7 @@ TEST_P(InspectorGetEntryPointComponentAndCompositionTest, Test) {
              Stage(ast::PipelineStage::kFragment),
          },
          utils::Vector{
-             Location(0u),
+             Location(0_u),
          });
     Inspector& inspector = Build();
 
@@ -325,9 +328,10 @@ TEST_P(InspectorGetEntryPointComponentAndCompositionTest, Test) {
 }
 INSTANTIATE_TEST_SUITE_P(InspectorGetEntryPointTest,
                          InspectorGetEntryPointComponentAndCompositionTest,
-                         testing::Combine(testing::Values(ComponentType::kFloat,
-                                                          ComponentType::kSInt,
-                                                          ComponentType::kUInt),
+                         testing::Combine(testing::Values(ComponentType::kF32,
+                                                          ComponentType::kI32,
+                                                          ComponentType::kU32,
+                                                          ComponentType::kF16),
                                           testing::Values(CompositionType::kScalar,
                                                           CompositionType::kVec2,
                                                           CompositionType::kVec3,
@@ -336,17 +340,17 @@ INSTANTIATE_TEST_SUITE_P(InspectorGetEntryPointTest,
 TEST_F(InspectorGetEntryPointTest, MultipleInOutVariables) {
     auto* in_var0 = Param("in_var0", ty.u32(),
                           utils::Vector{
-                              Location(0u),
+                              Location(0_u),
                               Flat(),
                           });
     auto* in_var1 = Param("in_var1", ty.u32(),
                           utils::Vector{
-                              Location(1u),
+                              Location(1_u),
                               Flat(),
                           });
     auto* in_var4 = Param("in_var4", ty.u32(),
                           utils::Vector{
-                              Location(4u),
+                              Location(4_u),
                               Flat(),
                           });
     Func("foo", utils::Vector{in_var0, in_var1, in_var4}, ty.u32(),
@@ -357,7 +361,7 @@ TEST_F(InspectorGetEntryPointTest, MultipleInOutVariables) {
              Stage(ast::PipelineStage::kFragment),
          },
          utils::Vector{
-             Location(0u),
+             Location(0_u),
          });
     Inspector& inspector = Build();
 
@@ -371,29 +375,29 @@ TEST_F(InspectorGetEntryPointTest, MultipleInOutVariables) {
     EXPECT_TRUE(result[0].input_variables[0].has_location_attribute);
     EXPECT_EQ(0u, result[0].input_variables[0].location_attribute);
     EXPECT_EQ(InterpolationType::kFlat, result[0].input_variables[0].interpolation_type);
-    EXPECT_EQ(ComponentType::kUInt, result[0].input_variables[0].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].input_variables[0].component_type);
     EXPECT_EQ("in_var1", result[0].input_variables[1].name);
     EXPECT_TRUE(result[0].input_variables[1].has_location_attribute);
     EXPECT_EQ(1u, result[0].input_variables[1].location_attribute);
     EXPECT_EQ(InterpolationType::kFlat, result[0].input_variables[1].interpolation_type);
-    EXPECT_EQ(ComponentType::kUInt, result[0].input_variables[1].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].input_variables[1].component_type);
     EXPECT_EQ("in_var4", result[0].input_variables[2].name);
     EXPECT_TRUE(result[0].input_variables[2].has_location_attribute);
     EXPECT_EQ(4u, result[0].input_variables[2].location_attribute);
     EXPECT_EQ(InterpolationType::kFlat, result[0].input_variables[2].interpolation_type);
-    EXPECT_EQ(ComponentType::kUInt, result[0].input_variables[2].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].input_variables[2].component_type);
 
     ASSERT_EQ(1u, result[0].output_variables.size());
     EXPECT_EQ("<retval>", result[0].output_variables[0].name);
     EXPECT_TRUE(result[0].output_variables[0].has_location_attribute);
     EXPECT_EQ(0u, result[0].output_variables[0].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[0].output_variables[0].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].output_variables[0].component_type);
 }
 
 TEST_F(InspectorGetEntryPointTest, MultipleEntryPointsInOutVariables) {
     auto* in_var_foo = Param("in_var_foo", ty.u32(),
                              utils::Vector{
-                                 Location(0u),
+                                 Location(0_u),
                                  Flat(),
                              });
     Func("foo", utils::Vector{in_var_foo}, ty.u32(),
@@ -404,12 +408,12 @@ TEST_F(InspectorGetEntryPointTest, MultipleEntryPointsInOutVariables) {
              Stage(ast::PipelineStage::kFragment),
          },
          utils::Vector{
-             Location(0u),
+             Location(0_u),
          });
 
     auto* in_var_bar = Param("in_var_bar", ty.u32(),
                              utils::Vector{
-                                 Location(0u),
+                                 Location(0_u),
                                  Flat(),
                              });
     Func("bar", utils::Vector{in_var_bar}, ty.u32(),
@@ -420,7 +424,7 @@ TEST_F(InspectorGetEntryPointTest, MultipleEntryPointsInOutVariables) {
              Stage(ast::PipelineStage::kFragment),
          },
          utils::Vector{
-             Location(1u),
+             Location(1_u),
          });
 
     Inspector& inspector = Build();
@@ -435,36 +439,36 @@ TEST_F(InspectorGetEntryPointTest, MultipleEntryPointsInOutVariables) {
     EXPECT_TRUE(result[0].input_variables[0].has_location_attribute);
     EXPECT_EQ(0u, result[0].input_variables[0].location_attribute);
     EXPECT_EQ(InterpolationType::kFlat, result[0].input_variables[0].interpolation_type);
-    EXPECT_EQ(ComponentType::kUInt, result[0].input_variables[0].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].input_variables[0].component_type);
 
     ASSERT_EQ(1u, result[0].output_variables.size());
     EXPECT_EQ("<retval>", result[0].output_variables[0].name);
     EXPECT_TRUE(result[0].output_variables[0].has_location_attribute);
     EXPECT_EQ(0u, result[0].output_variables[0].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[0].output_variables[0].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].output_variables[0].component_type);
 
     ASSERT_EQ(1u, result[1].input_variables.size());
     EXPECT_EQ("in_var_bar", result[1].input_variables[0].name);
     EXPECT_TRUE(result[1].input_variables[0].has_location_attribute);
     EXPECT_EQ(0u, result[1].input_variables[0].location_attribute);
     EXPECT_EQ(InterpolationType::kFlat, result[1].input_variables[0].interpolation_type);
-    EXPECT_EQ(ComponentType::kUInt, result[1].input_variables[0].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[1].input_variables[0].component_type);
 
     ASSERT_EQ(1u, result[1].output_variables.size());
     EXPECT_EQ("<retval>", result[1].output_variables[0].name);
     EXPECT_TRUE(result[1].output_variables[0].has_location_attribute);
     EXPECT_EQ(1u, result[1].output_variables[0].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[1].output_variables[0].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[1].output_variables[0].component_type);
 }
 
 TEST_F(InspectorGetEntryPointTest, BuiltInsNotStageVariables) {
     auto* in_var0 = Param("in_var0", ty.u32(),
                           utils::Vector{
-                              Builtin(ast::BuiltinValue::kSampleIndex),
+                              Builtin(builtin::BuiltinValue::kSampleIndex),
                           });
     auto* in_var1 = Param("in_var1", ty.f32(),
                           utils::Vector{
-                              Location(0u),
+                              Location(0_u),
                           });
     Func("foo", utils::Vector{in_var0, in_var1}, ty.f32(),
          utils::Vector{
@@ -474,7 +478,7 @@ TEST_F(InspectorGetEntryPointTest, BuiltInsNotStageVariables) {
              Stage(ast::PipelineStage::kFragment),
          },
          utils::Vector{
-             Builtin(ast::BuiltinValue::kFragDepth),
+             Builtin(builtin::BuiltinValue::kFragDepth),
          });
     Inspector& inspector = Build();
 
@@ -487,7 +491,7 @@ TEST_F(InspectorGetEntryPointTest, BuiltInsNotStageVariables) {
     EXPECT_EQ("in_var1", result[0].input_variables[0].name);
     EXPECT_TRUE(result[0].input_variables[0].has_location_attribute);
     EXPECT_EQ(0u, result[0].input_variables[0].location_attribute);
-    EXPECT_EQ(ComponentType::kFloat, result[0].input_variables[0].component_type);
+    EXPECT_EQ(ComponentType::kF32, result[0].input_variables[0].component_type);
 
     ASSERT_EQ(0u, result[0].output_variables.size());
 }
@@ -519,21 +523,21 @@ TEST_F(InspectorGetEntryPointTest, InOutStruct) {
     EXPECT_EQ("param.a", result[0].input_variables[0].name);
     EXPECT_TRUE(result[0].input_variables[0].has_location_attribute);
     EXPECT_EQ(0u, result[0].input_variables[0].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[0].input_variables[0].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].input_variables[0].component_type);
     EXPECT_EQ("param.b", result[0].input_variables[1].name);
     EXPECT_TRUE(result[0].input_variables[1].has_location_attribute);
     EXPECT_EQ(1u, result[0].input_variables[1].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[0].input_variables[1].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].input_variables[1].component_type);
 
     ASSERT_EQ(2u, result[0].output_variables.size());
     EXPECT_EQ("<retval>.a", result[0].output_variables[0].name);
     EXPECT_TRUE(result[0].output_variables[0].has_location_attribute);
     EXPECT_EQ(0u, result[0].output_variables[0].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[0].output_variables[0].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].output_variables[0].component_type);
     EXPECT_EQ("<retval>.b", result[0].output_variables[1].name);
     EXPECT_TRUE(result[0].output_variables[1].has_location_attribute);
     EXPECT_EQ(1u, result[0].output_variables[1].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[0].output_variables[1].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].output_variables[1].component_type);
 }
 
 TEST_F(InspectorGetEntryPointTest, MultipleEntryPointsInOutSharedStruct) {
@@ -543,7 +547,7 @@ TEST_F(InspectorGetEntryPointTest, MultipleEntryPointsInOutSharedStruct) {
                                                    });
     Func("foo", utils::Empty, ty.Of(interface),
          utils::Vector{
-             Return(Construct(ty.Of(interface))),
+             Return(Call(ty.Of(interface))),
          },
          utils::Vector{
              Stage(ast::PipelineStage::kFragment),
@@ -565,21 +569,21 @@ TEST_F(InspectorGetEntryPointTest, MultipleEntryPointsInOutSharedStruct) {
     EXPECT_EQ("<retval>.a", result[0].output_variables[0].name);
     EXPECT_TRUE(result[0].output_variables[0].has_location_attribute);
     EXPECT_EQ(0u, result[0].output_variables[0].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[0].output_variables[0].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].output_variables[0].component_type);
     EXPECT_EQ("<retval>.b", result[0].output_variables[1].name);
     EXPECT_TRUE(result[0].output_variables[1].has_location_attribute);
     EXPECT_EQ(1u, result[0].output_variables[1].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[0].output_variables[1].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].output_variables[1].component_type);
 
     ASSERT_EQ(2u, result[1].input_variables.size());
     EXPECT_EQ("param.a", result[1].input_variables[0].name);
     EXPECT_TRUE(result[1].input_variables[0].has_location_attribute);
     EXPECT_EQ(0u, result[1].input_variables[0].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[1].input_variables[0].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[1].input_variables[0].component_type);
     EXPECT_EQ("param.b", result[1].input_variables[1].name);
     EXPECT_TRUE(result[1].input_variables[1].has_location_attribute);
     EXPECT_EQ(1u, result[1].input_variables[1].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[1].input_variables[1].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[1].input_variables[1].component_type);
 
     ASSERT_EQ(0u, result[1].output_variables.size());
 }
@@ -596,8 +600,8 @@ TEST_F(InspectorGetEntryPointTest, MixInOutVariablesAndStruct) {
          utils::Vector{
              Param("param_a", ty.Of(struct_a)),
              Param("param_b", ty.Of(struct_b)),
-             Param("param_c", ty.f32(), utils::Vector{Location(3u)}),
-             Param("param_d", ty.f32(), utils::Vector{Location(4u)}),
+             Param("param_c", ty.f32(), utils::Vector{Location(3_u)}),
+             Param("param_d", ty.f32(), utils::Vector{Location(4_u)}),
          },
          ty.Of(struct_a),
          utils::Vector{
@@ -617,33 +621,33 @@ TEST_F(InspectorGetEntryPointTest, MixInOutVariablesAndStruct) {
     EXPECT_EQ("param_a.a", result[0].input_variables[0].name);
     EXPECT_TRUE(result[0].input_variables[0].has_location_attribute);
     EXPECT_EQ(0u, result[0].input_variables[0].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[0].input_variables[0].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].input_variables[0].component_type);
     EXPECT_EQ("param_a.b", result[0].input_variables[1].name);
     EXPECT_TRUE(result[0].input_variables[1].has_location_attribute);
     EXPECT_EQ(1u, result[0].input_variables[1].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[0].input_variables[1].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].input_variables[1].component_type);
     EXPECT_EQ("param_b.a", result[0].input_variables[2].name);
     EXPECT_TRUE(result[0].input_variables[2].has_location_attribute);
     EXPECT_EQ(2u, result[0].input_variables[2].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[0].input_variables[2].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].input_variables[2].component_type);
     EXPECT_EQ("param_c", result[0].input_variables[3].name);
     EXPECT_TRUE(result[0].input_variables[3].has_location_attribute);
     EXPECT_EQ(3u, result[0].input_variables[3].location_attribute);
-    EXPECT_EQ(ComponentType::kFloat, result[0].input_variables[3].component_type);
+    EXPECT_EQ(ComponentType::kF32, result[0].input_variables[3].component_type);
     EXPECT_EQ("param_d", result[0].input_variables[4].name);
     EXPECT_TRUE(result[0].input_variables[4].has_location_attribute);
     EXPECT_EQ(4u, result[0].input_variables[4].location_attribute);
-    EXPECT_EQ(ComponentType::kFloat, result[0].input_variables[4].component_type);
+    EXPECT_EQ(ComponentType::kF32, result[0].input_variables[4].component_type);
 
     ASSERT_EQ(2u, result[0].output_variables.size());
     EXPECT_EQ("<retval>.a", result[0].output_variables[0].name);
     EXPECT_TRUE(result[0].output_variables[0].has_location_attribute);
     EXPECT_EQ(0u, result[0].output_variables[0].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[0].output_variables[0].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].output_variables[0].component_type);
     EXPECT_EQ("<retval>.b", result[0].output_variables[1].name);
     EXPECT_TRUE(result[0].output_variables[1].has_location_attribute);
     EXPECT_EQ(1u, result[0].output_variables[1].location_attribute);
-    EXPECT_EQ(ComponentType::kUInt, result[0].output_variables[1].component_type);
+    EXPECT_EQ(ComponentType::kU32, result[0].output_variables[1].component_type);
 }
 
 TEST_F(InspectorGetEntryPointTest, OverrideUnreferenced) {
@@ -697,8 +701,8 @@ TEST_F(InspectorGetEntryPointTest, OverrideReferencedByCallee) {
 }
 
 TEST_F(InspectorGetEntryPointTest, OverrideSomeReferenced) {
-    Override("foo", ty.f32(), Id(1));
-    Override("bar", ty.f32(), Id(2));
+    Override("foo", ty.f32(), Id(1_a));
+    Override("bar", ty.f32(), Id(2_a));
     MakePlainGlobalReferenceBodyFunction("callee_func", "foo", ty.f32(), utils::Empty);
     MakeCallerBodyFunction("ep_func", utils::Vector{std::string("callee_func")},
                            utils::Vector{
@@ -716,19 +720,211 @@ TEST_F(InspectorGetEntryPointTest, OverrideSomeReferenced) {
     EXPECT_EQ(1, result[0].overrides[0].id.value);
 }
 
+TEST_F(InspectorGetEntryPointTest, OverrideReferencedIndirectly) {
+    Override("foo", ty.f32());
+    Override("bar", ty.f32(), Mul(2_a, "foo"));
+    MakePlainGlobalReferenceBodyFunction("ep_func", "bar", ty.f32(),
+                                         utils::Vector{
+                                             Stage(ast::PipelineStage::kCompute),
+                                             WorkgroupSize(1_i),
+                                         });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+
+    ASSERT_EQ(1u, result.size());
+    ASSERT_EQ(2u, result[0].overrides.size());
+    EXPECT_EQ("bar", result[0].overrides[0].name);
+    EXPECT_TRUE(result[0].overrides[0].is_initialized);
+    EXPECT_EQ("foo", result[0].overrides[1].name);
+    EXPECT_FALSE(result[0].overrides[1].is_initialized);
+}
+
+TEST_F(InspectorGetEntryPointTest, OverrideReferencedIndirectly_ViaPrivateInitializer) {
+    Override("foo", ty.f32());
+    GlobalVar("bar", builtin::AddressSpace::kPrivate, ty.f32(), Mul(2_a, "foo"));
+    MakePlainGlobalReferenceBodyFunction("ep_func", "bar", ty.f32(),
+                                         utils::Vector{
+                                             Stage(ast::PipelineStage::kCompute),
+                                             WorkgroupSize(1_i),
+                                         });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+
+    ASSERT_EQ(1u, result.size());
+    ASSERT_EQ(1u, result[0].overrides.size());
+    EXPECT_EQ("foo", result[0].overrides[0].name);
+    EXPECT_FALSE(result[0].overrides[0].is_initialized);
+}
+
+TEST_F(InspectorGetEntryPointTest, OverrideReferencedIndirectly_MultipleEntryPoints) {
+    Override("foo1", ty.f32());
+    Override("bar1", ty.f32(), Mul(2_a, "foo1"));
+    MakePlainGlobalReferenceBodyFunction("ep_func1", "bar1", ty.f32(),
+                                         utils::Vector{
+                                             Stage(ast::PipelineStage::kCompute),
+                                             WorkgroupSize(1_i),
+                                         });
+    Override("foo2", ty.f32());
+    Override("bar2", ty.f32(), Mul(2_a, "foo2"));
+    MakePlainGlobalReferenceBodyFunction("ep_func2", "bar2", ty.f32(),
+                                         utils::Vector{
+                                             Stage(ast::PipelineStage::kCompute),
+                                             WorkgroupSize(1_i),
+                                         });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+
+    ASSERT_EQ(2u, result.size());
+
+    ASSERT_EQ(2u, result[0].overrides.size());
+    EXPECT_EQ("bar1", result[0].overrides[0].name);
+    EXPECT_TRUE(result[0].overrides[0].is_initialized);
+    EXPECT_EQ("foo1", result[0].overrides[1].name);
+    EXPECT_FALSE(result[0].overrides[1].is_initialized);
+
+    ASSERT_EQ(2u, result[1].overrides.size());
+    EXPECT_EQ("bar2", result[1].overrides[0].name);
+    EXPECT_TRUE(result[1].overrides[0].is_initialized);
+    EXPECT_EQ("foo2", result[1].overrides[1].name);
+    EXPECT_FALSE(result[1].overrides[1].is_initialized);
+}
+
+TEST_F(InspectorGetEntryPointTest, OverrideReferencedByAttribute) {
+    Override("wgsize", ty.u32());
+    MakeEmptyBodyFunction("ep_func", utils::Vector{
+                                         Stage(ast::PipelineStage::kCompute),
+                                         WorkgroupSize("wgsize"),
+                                     });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+
+    ASSERT_EQ(1u, result.size());
+    ASSERT_EQ(1u, result[0].overrides.size());
+    EXPECT_EQ("wgsize", result[0].overrides[0].name);
+    EXPECT_FALSE(result[0].overrides[0].is_initialized);
+}
+
+TEST_F(InspectorGetEntryPointTest, OverrideReferencedByAttributeIndirectly) {
+    Override("foo", ty.u32());
+    Override("bar", ty.u32(), Mul(2_a, "foo"));
+    MakeEmptyBodyFunction("ep_func", utils::Vector{
+                                         Stage(ast::PipelineStage::kCompute),
+                                         WorkgroupSize(Mul(2_a, Expr("bar"))),
+                                     });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+
+    ASSERT_EQ(1u, result.size());
+    ASSERT_EQ(2u, result[0].overrides.size());
+    EXPECT_EQ("bar", result[0].overrides[0].name);
+    EXPECT_TRUE(result[0].overrides[0].is_initialized);
+    EXPECT_EQ("foo", result[0].overrides[1].name);
+    EXPECT_FALSE(result[0].overrides[1].is_initialized);
+}
+
+TEST_F(InspectorGetEntryPointTest, OverrideReferencedByArraySize) {
+    Override("size", ty.u32());
+    GlobalVar("v", builtin::AddressSpace::kWorkgroup, ty.array(ty.f32(), "size"));
+    Func("ep", utils::Empty, ty.void_(),
+         utils::Vector{
+             Assign(Phony(), IndexAccessor("v", 0_a)),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kCompute),
+             WorkgroupSize(1_i),
+         });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+
+    ASSERT_EQ(1u, result.size());
+    ASSERT_EQ(1u, result[0].overrides.size());
+    EXPECT_EQ("size", result[0].overrides[0].name);
+    EXPECT_FALSE(result[0].overrides[0].is_initialized);
+}
+
+TEST_F(InspectorGetEntryPointTest, OverrideReferencedByArraySizeIndirectly) {
+    Override("foo", ty.u32());
+    Override("bar", ty.u32(), Mul(2_a, "foo"));
+    GlobalVar("v", builtin::AddressSpace::kWorkgroup, ty.array(ty.f32(), Mul(2_a, Expr("bar"))));
+    Func("ep", utils::Empty, ty.void_(),
+         utils::Vector{
+             Assign(Phony(), IndexAccessor("v", 0_a)),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kCompute),
+             WorkgroupSize(1_i),
+         });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+
+    ASSERT_EQ(1u, result.size());
+    ASSERT_EQ(2u, result[0].overrides.size());
+    EXPECT_EQ("bar", result[0].overrides[0].name);
+    EXPECT_TRUE(result[0].overrides[0].is_initialized);
+    EXPECT_EQ("foo", result[0].overrides[1].name);
+    EXPECT_FALSE(result[0].overrides[1].is_initialized);
+}
+
+TEST_F(InspectorGetEntryPointTest, OverrideReferencedByArraySizeViaAlias) {
+    Override("foo", ty.u32());
+    Override("bar", ty.u32(), Expr("foo"));
+    Alias("MyArray", ty.array(ty.f32(), Mul(2_a, Expr("bar"))));
+    Override("zoo", ty.u32());
+    Alias("MyArrayUnused", ty.array(ty.f32(), Mul(2_a, Expr("zoo"))));
+    GlobalVar("v", builtin::AddressSpace::kWorkgroup, ty("MyArray"));
+    Func("ep", utils::Empty, ty.void_(),
+         utils::Vector{
+             Assign(Phony(), IndexAccessor("v", 0_a)),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kCompute),
+             WorkgroupSize(1_i),
+         });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+
+    ASSERT_EQ(1u, result.size());
+    ASSERT_EQ(2u, result[0].overrides.size());
+    EXPECT_EQ("bar", result[0].overrides[0].name);
+    EXPECT_TRUE(result[0].overrides[0].is_initialized);
+    EXPECT_EQ("foo", result[0].overrides[1].name);
+    EXPECT_FALSE(result[0].overrides[1].is_initialized);
+}
+
 TEST_F(InspectorGetEntryPointTest, OverrideTypes) {
+    Enable(builtin::Extension::kF16);
+
     Override("bool_var", ty.bool_());
     Override("float_var", ty.f32());
     Override("u32_var", ty.u32());
     Override("i32_var", ty.i32());
+    Override("f16_var", ty.f16());
 
     MakePlainGlobalReferenceBodyFunction("bool_func", "bool_var", ty.bool_(), utils::Empty);
     MakePlainGlobalReferenceBodyFunction("float_func", "float_var", ty.f32(), utils::Empty);
     MakePlainGlobalReferenceBodyFunction("u32_func", "u32_var", ty.u32(), utils::Empty);
     MakePlainGlobalReferenceBodyFunction("i32_func", "i32_var", ty.i32(), utils::Empty);
+    MakePlainGlobalReferenceBodyFunction("f16_func", "f16_var", ty.f16(), utils::Empty);
 
     MakeCallerBodyFunction(
-        "ep_func", utils::Vector{std::string("bool_func"), "float_func", "u32_func", "i32_func"},
+        "ep_func",
+        utils::Vector{std::string("bool_func"), "float_func", "u32_func", "i32_func", "f16_func"},
         utils::Vector{
             Stage(ast::PipelineStage::kCompute),
             WorkgroupSize(1_i),
@@ -739,7 +935,7 @@ TEST_F(InspectorGetEntryPointTest, OverrideTypes) {
     auto result = inspector.GetEntryPoints();
 
     ASSERT_EQ(1u, result.size());
-    ASSERT_EQ(4u, result[0].overrides.size());
+    ASSERT_EQ(5u, result[0].overrides.size());
     EXPECT_EQ("bool_var", result[0].overrides[0].name);
     EXPECT_EQ(inspector::Override::Type::kBool, result[0].overrides[0].type);
     EXPECT_EQ("float_var", result[0].overrides[1].name);
@@ -748,6 +944,8 @@ TEST_F(InspectorGetEntryPointTest, OverrideTypes) {
     EXPECT_EQ(inspector::Override::Type::kUint32, result[0].overrides[2].type);
     EXPECT_EQ("i32_var", result[0].overrides[3].name);
     EXPECT_EQ(inspector::Override::Type::kInt32, result[0].overrides[3].type);
+    EXPECT_EQ("f16_var", result[0].overrides[4].name);
+    EXPECT_EQ(inspector::Override::Type::kFloat16, result[0].overrides[4].type);
 }
 
 TEST_F(InspectorGetEntryPointTest, OverrideInitialized) {
@@ -789,7 +987,7 @@ TEST_F(InspectorGetEntryPointTest, OverrideUninitialized) {
 
 TEST_F(InspectorGetEntryPointTest, OverrideNumericIDSpecified) {
     Override("foo_no_id", ty.f32());
-    Override("foo_id", ty.f32(), Id(1234));
+    Override("foo_id", ty.f32(), Id(1234_a));
 
     MakePlainGlobalReferenceBodyFunction("no_id_func", "foo_no_id", ty.f32(), utils::Empty);
     MakePlainGlobalReferenceBodyFunction("id_func", "foo_id", ty.f32(), utils::Empty);
@@ -852,12 +1050,13 @@ TEST_F(InspectorGetEntryPointTest, BuiltinNotReferenced) {
     EXPECT_FALSE(result[0].front_facing_used);
     EXPECT_FALSE(result[0].sample_index_used);
     EXPECT_FALSE(result[0].num_workgroups_used);
+    EXPECT_FALSE(result[0].frag_depth_used);
 }
 
 TEST_F(InspectorGetEntryPointTest, InputSampleMaskSimpleReferenced) {
     auto* in_var = Param("in_var", ty.u32(),
                          utils::Vector{
-                             Builtin(ast::BuiltinValue::kSampleMask),
+                             Builtin(builtin::BuiltinValue::kSampleMask),
                          });
     Func("ep_func", utils::Vector{in_var}, ty.void_(),
          utils::Vector{
@@ -877,14 +1076,15 @@ TEST_F(InspectorGetEntryPointTest, InputSampleMaskSimpleReferenced) {
 
 TEST_F(InspectorGetEntryPointTest, InputSampleMaskStructReferenced) {
     utils::Vector members{
-        Member("inner_position", ty.u32(), utils::Vector{Builtin(ast::BuiltinValue::kSampleMask)}),
+        Member("inner_position", ty.u32(),
+               utils::Vector{Builtin(builtin::BuiltinValue::kSampleMask)}),
     };
 
     Structure("in_struct", members);
 
     Func("ep_func",
          utils::Vector{
-             Param("in_var", ty.type_name("in_struct"), utils::Empty),
+             Param("in_var", ty("in_struct"), utils::Empty),
          },
          ty.void_(),
          utils::Vector{
@@ -905,7 +1105,7 @@ TEST_F(InspectorGetEntryPointTest, InputSampleMaskStructReferenced) {
 TEST_F(InspectorGetEntryPointTest, OutputSampleMaskSimpleReferenced) {
     Func("ep_func",
          utils::Vector{
-             Param("in_var", ty.u32(), utils::Vector{Builtin(ast::BuiltinValue::kSampleMask)}),
+             Param("in_var", ty.u32(), utils::Vector{Builtin(builtin::BuiltinValue::kSampleMask)}),
          },
          ty.u32(),
          utils::Vector{
@@ -915,7 +1115,7 @@ TEST_F(InspectorGetEntryPointTest, OutputSampleMaskSimpleReferenced) {
              Stage(ast::PipelineStage::kFragment),
          },
          utils::Vector{
-             Builtin(ast::BuiltinValue::kSampleMask),
+             Builtin(builtin::BuiltinValue::kSampleMask),
          });
 
     Inspector& inspector = Build();
@@ -929,12 +1129,12 @@ TEST_F(InspectorGetEntryPointTest, OutputSampleMaskSimpleReferenced) {
 TEST_F(InspectorGetEntryPointTest, OutputSampleMaskStructReferenced) {
     Structure("out_struct", utils::Vector{
                                 Member("inner_sample_mask", ty.u32(),
-                                       utils::Vector{Builtin(ast::BuiltinValue::kSampleMask)}),
+                                       utils::Vector{Builtin(builtin::BuiltinValue::kSampleMask)}),
                             });
 
-    Func("ep_func", utils::Empty, ty.type_name("out_struct"),
+    Func("ep_func", utils::Empty, ty("out_struct"),
          utils::Vector{
-             Decl(Var("out_var", ty.type_name("out_struct"))),
+             Decl(Var("out_var", ty("out_struct"))),
              Return("out_var"),
          },
          utils::Vector{
@@ -952,7 +1152,8 @@ TEST_F(InspectorGetEntryPointTest, OutputSampleMaskStructReferenced) {
 TEST_F(InspectorGetEntryPointTest, InputPositionSimpleReferenced) {
     Func("ep_func",
          utils::Vector{
-             Param("in_var", ty.vec4<f32>(), utils::Vector{Builtin(ast::BuiltinValue::kPosition)}),
+             Param("in_var", ty.vec4<f32>(),
+                   utils::Vector{Builtin(builtin::BuiltinValue::kPosition)}),
          },
          ty.void_(),
          utils::Vector{
@@ -973,12 +1174,12 @@ TEST_F(InspectorGetEntryPointTest, InputPositionSimpleReferenced) {
 TEST_F(InspectorGetEntryPointTest, InputPositionStructReferenced) {
     Structure("in_struct", utils::Vector{
                                Member("inner_position", ty.vec4<f32>(),
-                                      utils::Vector{Builtin(ast::BuiltinValue::kPosition)}),
+                                      utils::Vector{Builtin(builtin::BuiltinValue::kPosition)}),
                            });
 
     Func("ep_func",
          utils::Vector{
-             Param("in_var", ty.type_name("in_struct"), utils::Empty),
+             Param("in_var", ty("in_struct"), utils::Empty),
          },
          ty.void_(),
          utils::Vector{
@@ -999,7 +1200,8 @@ TEST_F(InspectorGetEntryPointTest, InputPositionStructReferenced) {
 TEST_F(InspectorGetEntryPointTest, FrontFacingSimpleReferenced) {
     Func("ep_func",
          utils::Vector{
-             Param("in_var", ty.bool_(), utils::Vector{Builtin(ast::BuiltinValue::kFrontFacing)}),
+             Param("in_var", ty.bool_(),
+                   utils::Vector{Builtin(builtin::BuiltinValue::kFrontFacing)}),
          },
          ty.void_(),
          utils::Vector{
@@ -1020,12 +1222,12 @@ TEST_F(InspectorGetEntryPointTest, FrontFacingSimpleReferenced) {
 TEST_F(InspectorGetEntryPointTest, FrontFacingStructReferenced) {
     Structure("in_struct", utils::Vector{
                                Member("inner_position", ty.bool_(),
-                                      utils::Vector{Builtin(ast::BuiltinValue::kFrontFacing)}),
+                                      utils::Vector{Builtin(builtin::BuiltinValue::kFrontFacing)}),
                            });
 
     Func("ep_func",
          utils::Vector{
-             Param("in_var", ty.type_name("in_struct"), utils::Empty),
+             Param("in_var", ty("in_struct"), utils::Empty),
          },
          ty.void_(),
          utils::Vector{
@@ -1046,7 +1248,7 @@ TEST_F(InspectorGetEntryPointTest, FrontFacingStructReferenced) {
 TEST_F(InspectorGetEntryPointTest, SampleIndexSimpleReferenced) {
     Func("ep_func",
          utils::Vector{
-             Param("in_var", ty.u32(), utils::Vector{Builtin(ast::BuiltinValue::kSampleIndex)}),
+             Param("in_var", ty.u32(), utils::Vector{Builtin(builtin::BuiltinValue::kSampleIndex)}),
          },
          ty.void_(),
          utils::Vector{
@@ -1067,12 +1269,12 @@ TEST_F(InspectorGetEntryPointTest, SampleIndexSimpleReferenced) {
 TEST_F(InspectorGetEntryPointTest, SampleIndexStructReferenced) {
     Structure("in_struct", utils::Vector{
                                Member("inner_position", ty.u32(),
-                                      utils::Vector{Builtin(ast::BuiltinValue::kSampleIndex)}),
+                                      utils::Vector{Builtin(builtin::BuiltinValue::kSampleIndex)}),
                            });
 
     Func("ep_func",
          utils::Vector{
-             Param("in_var", ty.type_name("in_struct"), utils::Empty),
+             Param("in_var", ty("in_struct"), utils::Empty),
          },
          ty.void_(),
          utils::Vector{
@@ -1094,7 +1296,7 @@ TEST_F(InspectorGetEntryPointTest, NumWorkgroupsSimpleReferenced) {
     Func("ep_func",
          utils::Vector{
              Param("in_var", ty.vec3<u32>(),
-                   utils::Vector{Builtin(ast::BuiltinValue::kNumWorkgroups)}),
+                   utils::Vector{Builtin(builtin::BuiltinValue::kNumWorkgroups)}),
          },
          ty.void_(),
          utils::Vector{
@@ -1111,14 +1313,15 @@ TEST_F(InspectorGetEntryPointTest, NumWorkgroupsSimpleReferenced) {
 }
 
 TEST_F(InspectorGetEntryPointTest, NumWorkgroupsStructReferenced) {
-    Structure("in_struct", utils::Vector{
-                               Member("inner_position", ty.vec3<u32>(),
-                                      utils::Vector{Builtin(ast::BuiltinValue::kNumWorkgroups)}),
-                           });
+    Structure("in_struct",
+              utils::Vector{
+                  Member("inner_position", ty.vec3<u32>(),
+                         utils::Vector{Builtin(builtin::BuiltinValue::kNumWorkgroups)}),
+              });
 
     Func("ep_func",
          utils::Vector{
-             Param("in_var", ty.type_name("in_struct"), utils::Empty),
+             Param("in_var", ty("in_struct"), utils::Empty),
          },
          ty.void_(),
          utils::Vector{
@@ -1134,14 +1337,57 @@ TEST_F(InspectorGetEntryPointTest, NumWorkgroupsStructReferenced) {
     EXPECT_TRUE(result[0].num_workgroups_used);
 }
 
+TEST_F(InspectorGetEntryPointTest, FragDepthSimpleReferenced) {
+    Func("ep_func", {}, ty.f32(),
+         utils::Vector{
+             Return(Expr(0_f)),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kFragment),
+         },
+         utils::Vector{
+             Builtin(builtin::BuiltinValue::kFragDepth),
+         });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+
+    ASSERT_EQ(1u, result.size());
+    EXPECT_TRUE(result[0].frag_depth_used);
+}
+
+TEST_F(InspectorGetEntryPointTest, FragDepthStructReferenced) {
+    Structure("out_struct", utils::Vector{
+                                Member("inner_frag_depth", ty.f32(),
+                                       utils::Vector{Builtin(builtin::BuiltinValue::kFragDepth)}),
+                            });
+
+    Func("ep_func", utils::Empty, ty("out_struct"),
+         utils::Vector{
+             Decl(Var("out_var", ty("out_struct"))),
+             Return("out_var"),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kFragment),
+         });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+
+    ASSERT_EQ(1u, result.size());
+    EXPECT_TRUE(result[0].frag_depth_used);
+}
+
 TEST_F(InspectorGetEntryPointTest, ImplicitInterpolate) {
     Structure("in_struct", utils::Vector{
-                               Member("struct_inner", ty.f32(), utils::Vector{Location(0)}),
+                               Member("struct_inner", ty.f32(), utils::Vector{Location(0_a)}),
                            });
 
     Func("ep_func",
          utils::Vector{
-             Param("in_var", ty.type_name("in_struct"), utils::Empty),
+             Param("in_var", ty("in_struct"), utils::Empty),
          },
          ty.void_(),
          utils::Vector{
@@ -1167,12 +1413,12 @@ TEST_P(InspectorGetEntryPointInterpolateTest, Test) {
         "in_struct",
         utils::Vector{
             Member("struct_inner", ty.f32(),
-                   utils::Vector{Interpolate(params.in_type, params.in_sampling), Location(0)}),
+                   utils::Vector{Interpolate(params.in_type, params.in_sampling), Location(0_a)}),
         });
 
     Func("ep_func",
          utils::Vector{
-             Param("in_var", ty.type_name("in_struct"), utils::Empty),
+             Param("in_var", ty("in_struct"), utils::Empty),
          },
          ty.void_(),
          utils::Vector{
@@ -1197,42 +1443,45 @@ INSTANTIATE_TEST_SUITE_P(
     InspectorGetEntryPointInterpolateTest,
     testing::Values(
         InspectorGetEntryPointInterpolateTestParams{
-            ast::InterpolationType::kPerspective, ast::InterpolationSampling::kCenter,
+            builtin::InterpolationType::kPerspective, builtin::InterpolationSampling::kCenter,
             InterpolationType::kPerspective, InterpolationSampling::kCenter},
         InspectorGetEntryPointInterpolateTestParams{
-            ast::InterpolationType::kPerspective, ast::InterpolationSampling::kCentroid,
+            builtin::InterpolationType::kPerspective, builtin::InterpolationSampling::kCentroid,
             InterpolationType::kPerspective, InterpolationSampling::kCentroid},
         InspectorGetEntryPointInterpolateTestParams{
-            ast::InterpolationType::kPerspective, ast::InterpolationSampling::kSample,
+            builtin::InterpolationType::kPerspective, builtin::InterpolationSampling::kSample,
             InterpolationType::kPerspective, InterpolationSampling::kSample},
         InspectorGetEntryPointInterpolateTestParams{
-            ast::InterpolationType::kPerspective, ast::InterpolationSampling::kNone,
+            builtin::InterpolationType::kPerspective, builtin::InterpolationSampling::kUndefined,
             InterpolationType::kPerspective, InterpolationSampling::kCenter},
         InspectorGetEntryPointInterpolateTestParams{
-            ast::InterpolationType::kLinear, ast::InterpolationSampling::kCenter,
+            builtin::InterpolationType::kLinear, builtin::InterpolationSampling::kCenter,
             InterpolationType::kLinear, InterpolationSampling::kCenter},
         InspectorGetEntryPointInterpolateTestParams{
-            ast::InterpolationType::kLinear, ast::InterpolationSampling::kCentroid,
+            builtin::InterpolationType::kLinear, builtin::InterpolationSampling::kCentroid,
             InterpolationType::kLinear, InterpolationSampling::kCentroid},
         InspectorGetEntryPointInterpolateTestParams{
-            ast::InterpolationType::kLinear, ast::InterpolationSampling::kSample,
+            builtin::InterpolationType::kLinear, builtin::InterpolationSampling::kSample,
             InterpolationType::kLinear, InterpolationSampling::kSample},
         InspectorGetEntryPointInterpolateTestParams{
-            ast::InterpolationType::kLinear, ast::InterpolationSampling::kNone,
+            builtin::InterpolationType::kLinear, builtin::InterpolationSampling::kUndefined,
             InterpolationType::kLinear, InterpolationSampling::kCenter},
         InspectorGetEntryPointInterpolateTestParams{
-            ast::InterpolationType::kFlat, ast::InterpolationSampling::kNone,
+            builtin::InterpolationType::kFlat, builtin::InterpolationSampling::kUndefined,
             InterpolationType::kFlat, InterpolationSampling::kNone}));
 
 TEST_F(InspectorGetOverrideDefaultValuesTest, Bool) {
-    Override("foo", ty.bool_(), Id(1));
-    Override("bar", ty.bool_(), Expr(true), Id(20));
-    Override("baz", ty.bool_(), Expr(false), Id(300));
+    GlobalConst("C", Expr(true));
+    Override("a", ty.bool_(), Id(1_a));
+    Override("b", ty.bool_(), Expr(true), Id(20_a));
+    Override("c", Expr(false), Id(300_a));
+    Override("d", Or(true, false), Id(400_a));
+    Override("e", Expr("C"), Id(500_a));
 
     Inspector& inspector = Build();
 
     auto result = inspector.GetOverrideDefaultValues();
-    ASSERT_EQ(3u, result.size());
+    ASSERT_EQ(5u, result.size());
 
     ASSERT_TRUE(result.find(OverrideId{1}) != result.end());
     EXPECT_TRUE(result[OverrideId{1}].IsNull());
@@ -1244,16 +1493,29 @@ TEST_F(InspectorGetOverrideDefaultValuesTest, Bool) {
     ASSERT_TRUE(result.find(OverrideId{300}) != result.end());
     EXPECT_TRUE(result[OverrideId{300}].IsBool());
     EXPECT_FALSE(result[OverrideId{300}].AsBool());
+
+    ASSERT_TRUE(result.find(OverrideId{400}) != result.end());
+    EXPECT_TRUE(result[OverrideId{400}].IsBool());
+    EXPECT_TRUE(result[OverrideId{400}].AsBool());
+
+    ASSERT_TRUE(result.find(OverrideId{500}) != result.end());
+    EXPECT_TRUE(result[OverrideId{500}].IsBool());
+    EXPECT_TRUE(result[OverrideId{500}].AsBool());
 }
 
 TEST_F(InspectorGetOverrideDefaultValuesTest, U32) {
-    Override("foo", ty.u32(), Id(1));
-    Override("bar", ty.u32(), Expr(42_u), Id(20));
+    GlobalConst("C", Expr(100_u));
+    Override("a", ty.u32(), Id(1_a));
+    Override("b", ty.u32(), Expr(42_u), Id(20_a));
+    Override("c", ty.u32(), Expr(42_a), Id(30_a));
+    Override("d", ty.u32(), Add(42_a, 10_a), Id(40_a));
+    Override("e", Add(42_a, 10_u), Id(50_a));
+    Override("f", Expr("C"), Id(60_a));
 
     Inspector& inspector = Build();
 
     auto result = inspector.GetOverrideDefaultValues();
-    ASSERT_EQ(2u, result.size());
+    ASSERT_EQ(6u, result.size());
 
     ASSERT_TRUE(result.find(OverrideId{1}) != result.end());
     EXPECT_TRUE(result[OverrideId{1}].IsNull());
@@ -1261,17 +1523,37 @@ TEST_F(InspectorGetOverrideDefaultValuesTest, U32) {
     ASSERT_TRUE(result.find(OverrideId{20}) != result.end());
     EXPECT_TRUE(result[OverrideId{20}].IsU32());
     EXPECT_EQ(42u, result[OverrideId{20}].AsU32());
+
+    ASSERT_TRUE(result.find(OverrideId{30}) != result.end());
+    EXPECT_TRUE(result[OverrideId{30}].IsU32());
+    EXPECT_EQ(42u, result[OverrideId{30}].AsU32());
+
+    ASSERT_TRUE(result.find(OverrideId{40}) != result.end());
+    EXPECT_TRUE(result[OverrideId{40}].IsU32());
+    EXPECT_EQ(52u, result[OverrideId{40}].AsU32());
+
+    ASSERT_TRUE(result.find(OverrideId{50}) != result.end());
+    EXPECT_TRUE(result[OverrideId{50}].IsU32());
+    EXPECT_EQ(52u, result[OverrideId{50}].AsU32());
+
+    ASSERT_TRUE(result.find(OverrideId{60}) != result.end());
+    EXPECT_TRUE(result[OverrideId{60}].IsU32());
+    EXPECT_EQ(100u, result[OverrideId{60}].AsU32());
 }
 
 TEST_F(InspectorGetOverrideDefaultValuesTest, I32) {
-    Override("foo", ty.i32(), Id(1));
-    Override("bar", ty.i32(), Expr(-42_i), Id(20));
-    Override("baz", ty.i32(), Expr(42_i), Id(300));
+    GlobalConst("C", Expr(100_a));
+    Override("a", ty.i32(), Id(1_a));
+    Override("b", ty.i32(), Expr(-42_i), Id(20_a));
+    Override("c", ty.i32(), Expr(42_i), Id(300_a));
+    Override("d", Expr(42_a), Id(400_a));
+    Override("e", Add(42_a, 7_a), Id(500_a));
+    Override("f", Expr("C"), Id(6000_a));
 
     Inspector& inspector = Build();
 
     auto result = inspector.GetOverrideDefaultValues();
-    ASSERT_EQ(3u, result.size());
+    ASSERT_EQ(6u, result.size());
 
     ASSERT_TRUE(result.find(OverrideId{1}) != result.end());
     EXPECT_TRUE(result[OverrideId{1}].IsNull());
@@ -1283,18 +1565,32 @@ TEST_F(InspectorGetOverrideDefaultValuesTest, I32) {
     ASSERT_TRUE(result.find(OverrideId{300}) != result.end());
     EXPECT_TRUE(result[OverrideId{300}].IsI32());
     EXPECT_EQ(42, result[OverrideId{300}].AsI32());
+
+    ASSERT_TRUE(result.find(OverrideId{400}) != result.end());
+    EXPECT_TRUE(result[OverrideId{400}].IsI32());
+    EXPECT_EQ(42, result[OverrideId{400}].AsI32());
+
+    ASSERT_TRUE(result.find(OverrideId{500}) != result.end());
+    EXPECT_TRUE(result[OverrideId{500}].IsI32());
+    EXPECT_EQ(49, result[OverrideId{500}].AsI32());
+
+    ASSERT_TRUE(result.find(OverrideId{6000}) != result.end());
+    EXPECT_TRUE(result[OverrideId{6000}].IsI32());
+    EXPECT_EQ(100, result[OverrideId{6000}].AsI32());
 }
 
-TEST_F(InspectorGetOverrideDefaultValuesTest, Float) {
-    Override("foo", ty.f32(), Id(1));
-    Override("bar", ty.f32(), Expr(0_f), Id(20));
-    Override("baz", ty.f32(), Expr(-10_f), Id(300));
-    Override("x", ty.f32(), Expr(15_f), Id(4000));
+TEST_F(InspectorGetOverrideDefaultValuesTest, F32) {
+    Override("a", ty.f32(), Id(1_a));
+    Override("b", ty.f32(), Expr(0_f), Id(20_a));
+    Override("c", ty.f32(), Expr(-10_f), Id(300_a));
+    Override("d", Expr(15_f), Id(4000_a));
+    Override("3", Expr(42.0_a), Id(5000_a));
+    Override("e", ty.f32(), Mul(15_f, 10_a), Id(6000_a));
 
     Inspector& inspector = Build();
 
     auto result = inspector.GetOverrideDefaultValues();
-    ASSERT_EQ(4u, result.size());
+    ASSERT_EQ(6u, result.size());
 
     ASSERT_TRUE(result.find(OverrideId{1}) != result.end());
     EXPECT_TRUE(result[OverrideId{1}].IsNull());
@@ -1310,12 +1606,60 @@ TEST_F(InspectorGetOverrideDefaultValuesTest, Float) {
     ASSERT_TRUE(result.find(OverrideId{4000}) != result.end());
     EXPECT_TRUE(result[OverrideId{4000}].IsFloat());
     EXPECT_FLOAT_EQ(15.0f, result[OverrideId{4000}].AsFloat());
+
+    ASSERT_TRUE(result.find(OverrideId{5000}) != result.end());
+    EXPECT_TRUE(result[OverrideId{5000}].IsFloat());
+    EXPECT_FLOAT_EQ(42.0f, result[OverrideId{5000}].AsFloat());
+
+    ASSERT_TRUE(result.find(OverrideId{6000}) != result.end());
+    EXPECT_TRUE(result[OverrideId{6000}].IsFloat());
+    EXPECT_FLOAT_EQ(150.0f, result[OverrideId{6000}].AsFloat());
+}
+
+TEST_F(InspectorGetOverrideDefaultValuesTest, F16) {
+    Enable(builtin::Extension::kF16);
+
+    Override("a", ty.f16(), Id(1_a));
+    Override("b", ty.f16(), Expr(0_h), Id(20_a));
+    Override("c", ty.f16(), Expr(-10_h), Id(300_a));
+    Override("d", Expr(15_h), Id(4000_a));
+    Override("3", Expr(42.0_h), Id(5000_a));
+    Override("e", ty.f16(), Mul(15_h, 10_a), Id(6000_a));
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetOverrideDefaultValues();
+    ASSERT_EQ(6u, result.size());
+
+    ASSERT_TRUE(result.find(OverrideId{1}) != result.end());
+    EXPECT_TRUE(result[OverrideId{1}].IsNull());
+
+    ASSERT_TRUE(result.find(OverrideId{20}) != result.end());
+    // Default value of f16 override is also stored as float scalar.
+    EXPECT_TRUE(result[OverrideId{20}].IsFloat());
+    EXPECT_FLOAT_EQ(0.0f, result[OverrideId{20}].AsFloat());
+
+    ASSERT_TRUE(result.find(OverrideId{300}) != result.end());
+    EXPECT_TRUE(result[OverrideId{300}].IsFloat());
+    EXPECT_FLOAT_EQ(-10.0f, result[OverrideId{300}].AsFloat());
+
+    ASSERT_TRUE(result.find(OverrideId{4000}) != result.end());
+    EXPECT_TRUE(result[OverrideId{4000}].IsFloat());
+    EXPECT_FLOAT_EQ(15.0f, result[OverrideId{4000}].AsFloat());
+
+    ASSERT_TRUE(result.find(OverrideId{5000}) != result.end());
+    EXPECT_TRUE(result[OverrideId{5000}].IsFloat());
+    EXPECT_FLOAT_EQ(42.0f, result[OverrideId{5000}].AsFloat());
+
+    ASSERT_TRUE(result.find(OverrideId{6000}) != result.end());
+    EXPECT_TRUE(result[OverrideId{6000}].IsFloat());
+    EXPECT_FLOAT_EQ(150.0f, result[OverrideId{6000}].AsFloat());
 }
 
 TEST_F(InspectorGetConstantNameToIdMapTest, WithAndWithoutIds) {
-    Override("v1", ty.f32(), Id(1));
-    Override("v20", ty.f32(), Id(20));
-    Override("v300", ty.f32(), Id(300));
+    Override("v1", ty.f32(), Id(1_a));
+    Override("v20", ty.f32(), Id(20_a));
+    Override("v300", ty.f32(), Id(300_a));
     auto* a = Override("a", ty.f32());
     auto* b = Override("b", ty.f32());
     auto* c = Override("c", ty.f32());
@@ -1335,16 +1679,16 @@ TEST_F(InspectorGetConstantNameToIdMapTest, WithAndWithoutIds) {
     EXPECT_EQ(result["v300"].value, 300u);
 
     ASSERT_TRUE(result.count("a"));
-    ASSERT_TRUE(program_->Sem().Get<sem::GlobalVariable>(a));
-    EXPECT_EQ(result["a"], program_->Sem().Get<sem::GlobalVariable>(a)->OverrideId());
+    ASSERT_TRUE(program_->Sem().Get(a));
+    EXPECT_EQ(result["a"], program_->Sem().Get(a)->OverrideId());
 
     ASSERT_TRUE(result.count("b"));
-    ASSERT_TRUE(program_->Sem().Get<sem::GlobalVariable>(b));
-    EXPECT_EQ(result["b"], program_->Sem().Get<sem::GlobalVariable>(b)->OverrideId());
+    ASSERT_TRUE(program_->Sem().Get(b));
+    EXPECT_EQ(result["b"], program_->Sem().Get(b)->OverrideId());
 
     ASSERT_TRUE(result.count("c"));
-    ASSERT_TRUE(program_->Sem().Get<sem::GlobalVariable>(c));
-    EXPECT_EQ(result["c"], program_->Sem().Get<sem::GlobalVariable>(c)->OverrideId());
+    ASSERT_TRUE(program_->Sem().Get(c));
+    EXPECT_EQ(result["c"], program_->Sem().Get(c)->OverrideId());
 }
 
 TEST_F(InspectorGetStorageSizeTest, Empty) {
@@ -1358,8 +1702,8 @@ TEST_F(InspectorGetStorageSizeTest, Empty) {
 
 TEST_F(InspectorGetStorageSizeTest, Simple_NonStruct) {
     AddUniformBuffer("ub_var", ty.i32(), 0, 0);
-    AddStorageBuffer("sb_var", ty.i32(), ast::Access::kReadWrite, 1, 0);
-    AddStorageBuffer("rosb_var", ty.i32(), ast::Access::kRead, 1, 1);
+    AddStorageBuffer("sb_var", ty.i32(), builtin::Access::kReadWrite, 1, 0);
+    AddStorageBuffer("rosb_var", ty.i32(), builtin::Access::kRead, 1, 1);
     Func("ep_func", utils::Empty, ty.void_(),
          utils::Vector{
              Decl(Let("ub", Expr("ub_var"))),
@@ -1390,7 +1734,7 @@ TEST_F(InspectorGetStorageSizeTest, Simple_Struct) {
     auto sb = MakeStorageBufferTypes("sb_type", utils::Vector{
                                                     ty.i32(),
                                                 });
-    AddStorageBuffer("sb_var", sb(), ast::Access::kReadWrite, 1, 0);
+    AddStorageBuffer("sb_var", sb(), builtin::Access::kReadWrite, 1, 0);
     MakeStructVariableReferenceBodyFunction("sb_func", "sb_var",
                                             utils::Vector{
                                                 MemberInfo{0, ty.i32()},
@@ -1399,7 +1743,7 @@ TEST_F(InspectorGetStorageSizeTest, Simple_Struct) {
     auto ro_sb = MakeStorageBufferTypes("rosb_type", utils::Vector{
                                                          ty.i32(),
                                                      });
-    AddStorageBuffer("rosb_var", ro_sb(), ast::Access::kRead, 1, 1);
+    AddStorageBuffer("rosb_var", ro_sb(), builtin::Access::kRead, 1, 1);
     MakeStructVariableReferenceBodyFunction("rosb_func", "rosb_var",
                                             utils::Vector{
                                                 MemberInfo{0, ty.i32()},
@@ -1477,7 +1821,7 @@ TEST_F(InspectorGetResourceBindingsTest, Simple) {
     auto sb = MakeStorageBufferTypes("sb_type", utils::Vector{
                                                     ty.i32(),
                                                 });
-    AddStorageBuffer("sb_var", sb(), ast::Access::kReadWrite, 1, 0);
+    AddStorageBuffer("sb_var", sb(), builtin::Access::kReadWrite, 1, 0);
     MakeStructVariableReferenceBodyFunction("sb_func", "sb_var",
                                             utils::Vector{
                                                 MemberInfo{0, ty.i32()},
@@ -1486,20 +1830,20 @@ TEST_F(InspectorGetResourceBindingsTest, Simple) {
     auto ro_sb = MakeStorageBufferTypes("rosb_type", utils::Vector{
                                                          ty.i32(),
                                                      });
-    AddStorageBuffer("rosb_var", ro_sb(), ast::Access::kRead, 1, 1);
+    AddStorageBuffer("rosb_var", ro_sb(), builtin::Access::kRead, 1, 1);
     MakeStructVariableReferenceBodyFunction("rosb_func", "rosb_var",
                                             utils::Vector{
                                                 MemberInfo{0, ty.i32()},
                                             });
 
-    auto* s_texture_type = ty.sampled_texture(ast::TextureDimension::k1d, ty.f32());
+    auto s_texture_type = ty.sampled_texture(type::TextureDimension::k1d, ty.f32());
     AddResource("s_texture", s_texture_type, 2, 0);
     AddSampler("s_var", 3, 0);
     AddGlobalVariable("s_coords", ty.f32());
     MakeSamplerReferenceBodyFunction("s_func", "s_texture", "s_var", "s_coords", ty.f32(),
                                      utils::Empty);
 
-    auto* cs_depth_texture_type = ty.depth_texture(ast::TextureDimension::k2d);
+    auto cs_depth_texture_type = ty.depth_texture(type::TextureDimension::k2d);
     AddResource("cs_texture", cs_depth_texture_type, 3, 1);
     AddComparisonSampler("cs_var", 3, 2);
     AddGlobalVariable("cs_coords", ty.vec2<f32>());
@@ -1507,16 +1851,17 @@ TEST_F(InspectorGetResourceBindingsTest, Simple) {
     MakeComparisonSamplerReferenceBodyFunction("cs_func", "cs_texture", "cs_var", "cs_coords",
                                                "cs_depth", ty.f32(), utils::Empty);
 
-    auto* depth_ms_texture_type = ty.depth_multisampled_texture(ast::TextureDimension::k2d);
+    auto depth_ms_texture_type = ty.depth_multisampled_texture(type::TextureDimension::k2d);
     AddResource("depth_ms_texture", depth_ms_texture_type, 3, 3);
     Func("depth_ms_func", utils::Empty, ty.void_(),
          utils::Vector{
              Ignore("depth_ms_texture"),
          });
 
-    auto* st_type = MakeStorageTextureTypes(ast::TextureDimension::k2d, ast::TexelFormat::kR32Uint);
+    auto st_type =
+        MakeStorageTextureTypes(type::TextureDimension::k2d, builtin::TexelFormat::kR32Uint);
     AddStorageTexture("st_var", st_type, 4, 0);
-    MakeStorageTextureBodyFunction("st_func", "st_var", ty.vec2<i32>(), utils::Empty);
+    MakeStorageTextureBodyFunction("st_func", "st_var", ty.vec2<u32>(), utils::Empty);
 
     MakeCallerBodyFunction("ep_func",
                            utils::Vector{
@@ -1764,9 +2109,7 @@ TEST_F(InspectorGetUniformBufferResourceBindingsTest, MultipleUniformBuffers) {
     AddReferenceFunc("ub_bar_func", "ub_bar");
     AddReferenceFunc("ub_baz_func", "ub_baz");
 
-    auto FuncCall = [&](const std::string& callee) {
-        return create<ast::CallStatement>(Call(callee));
-    };
+    auto FuncCall = [&](const std::string& callee) { return CallStmt(Call(callee)); };
 
     Func("ep_func", utils::Empty, ty.void_(),
          utils::Vector{
@@ -1807,12 +2150,16 @@ TEST_F(InspectorGetUniformBufferResourceBindingsTest, MultipleUniformBuffers) {
 TEST_F(InspectorGetUniformBufferResourceBindingsTest, ContainingArray) {
     // Manually create uniform buffer to make sure it had a valid layout (array
     // with elem stride of 16, and that is 16-byte aligned within the struct)
-    auto* foo_struct_type = Structure(
-        "foo_type",
-        utils::Vector{
-            Member("0i32", ty.i32()),
-            Member("b", ty.array(ty.u32(), 4_u, /*stride*/ 16), utils::Vector{MemberAlign(16_u)}),
-        });
+    auto* foo_struct_type = Structure("foo_type", utils::Vector{
+                                                      Member("0i32", ty.i32()),
+                                                      Member("b",
+                                                             ty.array<u32, 4>(utils::Vector{
+                                                                 Stride(16),
+                                                             }),
+                                                             utils::Vector{
+                                                                 MemberAlign(16_i),
+                                                             }),
+                                                  });
 
     AddUniformBuffer("foo_ub", ty.Of(foo_struct_type), 0, 0);
 
@@ -1840,7 +2187,7 @@ TEST_F(InspectorGetUniformBufferResourceBindingsTest, ContainingArray) {
 }
 
 TEST_F(InspectorGetStorageBufferResourceBindingsTest, Simple_NonStruct) {
-    AddStorageBuffer("foo_sb", ty.i32(), ast::Access::kReadWrite, 0, 0);
+    AddStorageBuffer("foo_sb", ty.i32(), builtin::Access::kReadWrite, 0, 0);
     MakePlainGlobalReferenceBodyFunction("sb_func", "foo_sb", ty.i32(), utils::Empty);
 
     MakeCallerBodyFunction("ep_func", utils::Vector{std::string("sb_func")},
@@ -1865,7 +2212,7 @@ TEST_F(InspectorGetStorageBufferResourceBindingsTest, Simple_Struct) {
     auto foo_struct_type = MakeStorageBufferTypes("foo_type", utils::Vector{
                                                                   ty.i32(),
                                                               });
-    AddStorageBuffer("foo_sb", foo_struct_type(), ast::Access::kReadWrite, 0, 0);
+    AddStorageBuffer("foo_sb", foo_struct_type(), builtin::Access::kReadWrite, 0, 0);
 
     MakeStructVariableReferenceBodyFunction("sb_func", "foo_sb",
                                             utils::Vector{
@@ -1896,7 +2243,7 @@ TEST_F(InspectorGetStorageBufferResourceBindingsTest, MultipleMembers) {
                                                                   ty.u32(),
                                                                   ty.f32(),
                                                               });
-    AddStorageBuffer("foo_sb", foo_struct_type(), ast::Access::kReadWrite, 0, 0);
+    AddStorageBuffer("foo_sb", foo_struct_type(), builtin::Access::kReadWrite, 0, 0);
 
     MakeStructVariableReferenceBodyFunction("sb_func", "foo_sb",
                                             utils::Vector{
@@ -1929,9 +2276,9 @@ TEST_F(InspectorGetStorageBufferResourceBindingsTest, MultipleStorageBuffers) {
                                                                 ty.u32(),
                                                                 ty.f32(),
                                                             });
-    AddStorageBuffer("sb_foo", sb_struct_type(), ast::Access::kReadWrite, 0, 0);
-    AddStorageBuffer("sb_bar", sb_struct_type(), ast::Access::kReadWrite, 0, 1);
-    AddStorageBuffer("sb_baz", sb_struct_type(), ast::Access::kReadWrite, 2, 0);
+    AddStorageBuffer("sb_foo", sb_struct_type(), builtin::Access::kReadWrite, 0, 0);
+    AddStorageBuffer("sb_bar", sb_struct_type(), builtin::Access::kReadWrite, 0, 1);
+    AddStorageBuffer("sb_baz", sb_struct_type(), builtin::Access::kReadWrite, 2, 0);
 
     auto AddReferenceFunc = [this](const std::string& func_name, const std::string& var_name) {
         MakeStructVariableReferenceBodyFunction(func_name, var_name,
@@ -1945,9 +2292,7 @@ TEST_F(InspectorGetStorageBufferResourceBindingsTest, MultipleStorageBuffers) {
     AddReferenceFunc("sb_bar_func", "sb_bar");
     AddReferenceFunc("sb_baz_func", "sb_baz");
 
-    auto FuncCall = [&](const std::string& callee) {
-        return create<ast::CallStatement>(Call(callee));
-    };
+    auto FuncCall = [&](const std::string& callee) { return CallStmt(Call(callee)); };
 
     Func("ep_func", utils::Empty, ty.void_(),
          utils::Vector{
@@ -1990,7 +2335,7 @@ TEST_F(InspectorGetStorageBufferResourceBindingsTest, ContainingArray) {
                                                                   ty.i32(),
                                                                   ty.array<u32, 4>(),
                                                               });
-    AddStorageBuffer("foo_sb", foo_struct_type(), ast::Access::kReadWrite, 0, 0);
+    AddStorageBuffer("foo_sb", foo_struct_type(), builtin::Access::kReadWrite, 0, 0);
 
     MakeStructVariableReferenceBodyFunction("sb_func", "foo_sb",
                                             utils::Vector{
@@ -2020,7 +2365,7 @@ TEST_F(InspectorGetStorageBufferResourceBindingsTest, ContainingRuntimeArray) {
                                                                   ty.i32(),
                                                                   ty.array<u32>(),
                                                               });
-    AddStorageBuffer("foo_sb", foo_struct_type(), ast::Access::kReadWrite, 0, 0);
+    AddStorageBuffer("foo_sb", foo_struct_type(), builtin::Access::kReadWrite, 0, 0);
 
     MakeStructVariableReferenceBodyFunction("sb_func", "foo_sb",
                                             utils::Vector{
@@ -2049,7 +2394,7 @@ TEST_F(InspectorGetStorageBufferResourceBindingsTest, ContainingPadding) {
     auto foo_struct_type = MakeStorageBufferTypes("foo_type", utils::Vector{
                                                                   ty.vec3<f32>(),
                                                               });
-    AddStorageBuffer("foo_sb", foo_struct_type(), ast::Access::kReadWrite, 0, 0);
+    AddStorageBuffer("foo_sb", foo_struct_type(), builtin::Access::kReadWrite, 0, 0);
 
     MakeStructVariableReferenceBodyFunction("sb_func", "foo_sb",
                                             utils::Vector{
@@ -2075,7 +2420,7 @@ TEST_F(InspectorGetStorageBufferResourceBindingsTest, ContainingPadding) {
 }
 
 TEST_F(InspectorGetStorageBufferResourceBindingsTest, NonStructVec3) {
-    AddStorageBuffer("foo_ub", ty.vec3<f32>(), ast::Access::kReadWrite, 0, 0);
+    AddStorageBuffer("foo_ub", ty.vec3<f32>(), builtin::Access::kReadWrite, 0, 0);
     MakePlainGlobalReferenceBodyFunction("ub_func", "foo_ub", ty.vec3<f32>(), utils::Empty);
 
     MakeCallerBodyFunction("ep_func", utils::Vector{std::string("ub_func")},
@@ -2100,7 +2445,7 @@ TEST_F(InspectorGetStorageBufferResourceBindingsTest, SkipReadOnly) {
     auto foo_struct_type = MakeStorageBufferTypes("foo_type", utils::Vector{
                                                                   ty.i32(),
                                                               });
-    AddStorageBuffer("foo_sb", foo_struct_type(), ast::Access::kRead, 0, 0);
+    AddStorageBuffer("foo_sb", foo_struct_type(), builtin::Access::kRead, 0, 0);
 
     MakeStructVariableReferenceBodyFunction("sb_func", "foo_sb",
                                             utils::Vector{
@@ -2123,7 +2468,7 @@ TEST_F(InspectorGetReadOnlyStorageBufferResourceBindingsTest, Simple) {
     auto foo_struct_type = MakeStorageBufferTypes("foo_type", utils::Vector{
                                                                   ty.i32(),
                                                               });
-    AddStorageBuffer("foo_sb", foo_struct_type(), ast::Access::kRead, 0, 0);
+    AddStorageBuffer("foo_sb", foo_struct_type(), builtin::Access::kRead, 0, 0);
 
     MakeStructVariableReferenceBodyFunction("sb_func", "foo_sb",
                                             utils::Vector{
@@ -2154,9 +2499,9 @@ TEST_F(InspectorGetReadOnlyStorageBufferResourceBindingsTest, MultipleStorageBuf
                                                                 ty.u32(),
                                                                 ty.f32(),
                                                             });
-    AddStorageBuffer("sb_foo", sb_struct_type(), ast::Access::kRead, 0, 0);
-    AddStorageBuffer("sb_bar", sb_struct_type(), ast::Access::kRead, 0, 1);
-    AddStorageBuffer("sb_baz", sb_struct_type(), ast::Access::kRead, 2, 0);
+    AddStorageBuffer("sb_foo", sb_struct_type(), builtin::Access::kRead, 0, 0);
+    AddStorageBuffer("sb_bar", sb_struct_type(), builtin::Access::kRead, 0, 1);
+    AddStorageBuffer("sb_baz", sb_struct_type(), builtin::Access::kRead, 2, 0);
 
     auto AddReferenceFunc = [this](const std::string& func_name, const std::string& var_name) {
         MakeStructVariableReferenceBodyFunction(func_name, var_name,
@@ -2170,9 +2515,7 @@ TEST_F(InspectorGetReadOnlyStorageBufferResourceBindingsTest, MultipleStorageBuf
     AddReferenceFunc("sb_bar_func", "sb_bar");
     AddReferenceFunc("sb_baz_func", "sb_baz");
 
-    auto FuncCall = [&](const std::string& callee) {
-        return create<ast::CallStatement>(Call(callee));
-    };
+    auto FuncCall = [&](const std::string& callee) { return CallStmt(Call(callee)); };
 
     Func("ep_func", utils::Empty, ty.void_(),
          utils::Vector{
@@ -2215,7 +2558,7 @@ TEST_F(InspectorGetReadOnlyStorageBufferResourceBindingsTest, ContainingArray) {
                                                                   ty.i32(),
                                                                   ty.array<u32, 4>(),
                                                               });
-    AddStorageBuffer("foo_sb", foo_struct_type(), ast::Access::kRead, 0, 0);
+    AddStorageBuffer("foo_sb", foo_struct_type(), builtin::Access::kRead, 0, 0);
 
     MakeStructVariableReferenceBodyFunction("sb_func", "foo_sb",
                                             utils::Vector{
@@ -2245,7 +2588,7 @@ TEST_F(InspectorGetReadOnlyStorageBufferResourceBindingsTest, ContainingRuntimeA
                                                                   ty.i32(),
                                                                   ty.array<u32>(),
                                                               });
-    AddStorageBuffer("foo_sb", foo_struct_type(), ast::Access::kRead, 0, 0);
+    AddStorageBuffer("foo_sb", foo_struct_type(), builtin::Access::kRead, 0, 0);
 
     MakeStructVariableReferenceBodyFunction("sb_func", "foo_sb",
                                             utils::Vector{
@@ -2274,7 +2617,7 @@ TEST_F(InspectorGetReadOnlyStorageBufferResourceBindingsTest, SkipNonReadOnly) {
     auto foo_struct_type = MakeStorageBufferTypes("foo_type", utils::Vector{
                                                                   ty.i32(),
                                                               });
-    AddStorageBuffer("foo_sb", foo_struct_type(), ast::Access::kReadWrite, 0, 0);
+    AddStorageBuffer("foo_sb", foo_struct_type(), builtin::Access::kReadWrite, 0, 0);
 
     MakeStructVariableReferenceBodyFunction("sb_func", "foo_sb",
                                             utils::Vector{
@@ -2294,7 +2637,7 @@ TEST_F(InspectorGetReadOnlyStorageBufferResourceBindingsTest, SkipNonReadOnly) {
 }
 
 TEST_F(InspectorGetSamplerResourceBindingsTest, Simple) {
-    auto* sampled_texture_type = ty.sampled_texture(ast::TextureDimension::k1d, ty.f32());
+    auto sampled_texture_type = ty.sampled_texture(type::TextureDimension::k1d, ty.f32());
     AddResource("foo_texture", sampled_texture_type, 0, 0);
     AddSampler("foo_sampler", 0, 1);
     AddGlobalVariable("foo_coords", ty.f32());
@@ -2329,7 +2672,7 @@ TEST_F(InspectorGetSamplerResourceBindingsTest, NoSampler) {
 }
 
 TEST_F(InspectorGetSamplerResourceBindingsTest, InFunction) {
-    auto* sampled_texture_type = ty.sampled_texture(ast::TextureDimension::k1d, ty.f32());
+    auto sampled_texture_type = ty.sampled_texture(type::TextureDimension::k1d, ty.f32());
     AddResource("foo_texture", sampled_texture_type, 0, 0);
     AddSampler("foo_sampler", 0, 1);
     AddGlobalVariable("foo_coords", ty.f32());
@@ -2354,7 +2697,7 @@ TEST_F(InspectorGetSamplerResourceBindingsTest, InFunction) {
 }
 
 TEST_F(InspectorGetSamplerResourceBindingsTest, UnknownEntryPoint) {
-    auto* sampled_texture_type = ty.sampled_texture(ast::TextureDimension::k1d, ty.f32());
+    auto sampled_texture_type = ty.sampled_texture(type::TextureDimension::k1d, ty.f32());
     AddResource("foo_texture", sampled_texture_type, 0, 0);
     AddSampler("foo_sampler", 0, 1);
     AddGlobalVariable("foo_coords", ty.f32());
@@ -2371,7 +2714,7 @@ TEST_F(InspectorGetSamplerResourceBindingsTest, UnknownEntryPoint) {
 }
 
 TEST_F(InspectorGetSamplerResourceBindingsTest, SkipsComparisonSamplers) {
-    auto* depth_texture_type = ty.depth_texture(ast::TextureDimension::k2d);
+    auto depth_texture_type = ty.depth_texture(type::TextureDimension::k2d);
     AddResource("foo_texture", depth_texture_type, 0, 0);
     AddComparisonSampler("foo_sampler", 0, 1);
     AddGlobalVariable("foo_coords", ty.vec2<f32>());
@@ -2392,7 +2735,7 @@ TEST_F(InspectorGetSamplerResourceBindingsTest, SkipsComparisonSamplers) {
 }
 
 TEST_F(InspectorGetComparisonSamplerResourceBindingsTest, Simple) {
-    auto* depth_texture_type = ty.depth_texture(ast::TextureDimension::k2d);
+    auto depth_texture_type = ty.depth_texture(type::TextureDimension::k2d);
     AddResource("foo_texture", depth_texture_type, 0, 0);
     AddComparisonSampler("foo_sampler", 0, 1);
     AddGlobalVariable("foo_coords", ty.vec2<f32>());
@@ -2429,7 +2772,7 @@ TEST_F(InspectorGetComparisonSamplerResourceBindingsTest, NoSampler) {
 }
 
 TEST_F(InspectorGetComparisonSamplerResourceBindingsTest, InFunction) {
-    auto* depth_texture_type = ty.depth_texture(ast::TextureDimension::k2d);
+    auto depth_texture_type = ty.depth_texture(type::TextureDimension::k2d);
     AddResource("foo_texture", depth_texture_type, 0, 0);
     AddComparisonSampler("foo_sampler", 0, 1);
     AddGlobalVariable("foo_coords", ty.vec2<f32>());
@@ -2455,7 +2798,7 @@ TEST_F(InspectorGetComparisonSamplerResourceBindingsTest, InFunction) {
 }
 
 TEST_F(InspectorGetComparisonSamplerResourceBindingsTest, UnknownEntryPoint) {
-    auto* depth_texture_type = ty.depth_texture(ast::TextureDimension::k2d);
+    auto depth_texture_type = ty.depth_texture(type::TextureDimension::k2d);
     AddResource("foo_texture", depth_texture_type, 0, 0);
     AddComparisonSampler("foo_sampler", 0, 1);
     AddGlobalVariable("foo_coords", ty.vec2<f32>());
@@ -2474,7 +2817,7 @@ TEST_F(InspectorGetComparisonSamplerResourceBindingsTest, UnknownEntryPoint) {
 }
 
 TEST_F(InspectorGetComparisonSamplerResourceBindingsTest, SkipsSamplers) {
-    auto* sampled_texture_type = ty.sampled_texture(ast::TextureDimension::k1d, ty.f32());
+    auto sampled_texture_type = ty.sampled_texture(type::TextureDimension::k1d, ty.f32());
     AddResource("foo_texture", sampled_texture_type, 0, 0);
     AddSampler("foo_sampler", 0, 1);
     AddGlobalVariable("foo_coords", ty.f32());
@@ -2506,11 +2849,11 @@ TEST_F(InspectorGetSampledTextureResourceBindingsTest, Empty) {
 }
 
 TEST_P(InspectorGetSampledTextureResourceBindingsTestWithParam, textureSample) {
-    auto* sampled_texture_type =
+    ast::Type sampled_texture_type =
         ty.sampled_texture(GetParam().type_dim, GetBaseType(GetParam().sampled_kind));
     AddResource("foo_texture", sampled_texture_type, 0, 0);
     AddSampler("foo_sampler", 0, 1);
-    auto* coord_type = GetCoordsType(GetParam().type_dim, ty.f32());
+    ast::Type coord_type = GetCoordsType(GetParam().type_dim, ty.f32());
     AddGlobalVariable("foo_coords", coord_type);
 
     MakeSamplerReferenceBodyFunction("ep", "foo_texture", "foo_sampler", "foo_coords",
@@ -2541,25 +2884,25 @@ TEST_P(InspectorGetSampledTextureResourceBindingsTestWithParam, textureSample) {
 INSTANTIATE_TEST_SUITE_P(
     InspectorGetSampledTextureResourceBindingsTest,
     InspectorGetSampledTextureResourceBindingsTestWithParam,
-    testing::Values(GetSampledTextureTestParams{ast::TextureDimension::k1d,
+    testing::Values(GetSampledTextureTestParams{type::TextureDimension::k1d,
                                                 inspector::ResourceBinding::TextureDimension::k1d,
                                                 inspector::ResourceBinding::SampledKind::kFloat},
-                    GetSampledTextureTestParams{ast::TextureDimension::k2d,
+                    GetSampledTextureTestParams{type::TextureDimension::k2d,
                                                 inspector::ResourceBinding::TextureDimension::k2d,
                                                 inspector::ResourceBinding::SampledKind::kFloat},
-                    GetSampledTextureTestParams{ast::TextureDimension::k3d,
+                    GetSampledTextureTestParams{type::TextureDimension::k3d,
                                                 inspector::ResourceBinding::TextureDimension::k3d,
                                                 inspector::ResourceBinding::SampledKind::kFloat},
-                    GetSampledTextureTestParams{ast::TextureDimension::kCube,
+                    GetSampledTextureTestParams{type::TextureDimension::kCube,
                                                 inspector::ResourceBinding::TextureDimension::kCube,
                                                 inspector::ResourceBinding::SampledKind::kFloat}));
 
 TEST_P(InspectorGetSampledArrayTextureResourceBindingsTestWithParam, textureSample) {
-    auto* sampled_texture_type =
+    ast::Type sampled_texture_type =
         ty.sampled_texture(GetParam().type_dim, GetBaseType(GetParam().sampled_kind));
     AddResource("foo_texture", sampled_texture_type, 0, 0);
     AddSampler("foo_sampler", 0, 1);
-    auto* coord_type = GetCoordsType(GetParam().type_dim, ty.f32());
+    ast::Type coord_type = GetCoordsType(GetParam().type_dim, ty.f32());
     AddGlobalVariable("foo_coords", coord_type);
     AddGlobalVariable("foo_array_index", ty.i32());
 
@@ -2586,24 +2929,24 @@ INSTANTIATE_TEST_SUITE_P(
     InspectorGetSampledArrayTextureResourceBindingsTest,
     InspectorGetSampledArrayTextureResourceBindingsTestWithParam,
     testing::Values(
-        GetSampledTextureTestParams{ast::TextureDimension::k2dArray,
+        GetSampledTextureTestParams{type::TextureDimension::k2dArray,
                                     inspector::ResourceBinding::TextureDimension::k2dArray,
                                     inspector::ResourceBinding::SampledKind::kFloat},
-        GetSampledTextureTestParams{ast::TextureDimension::kCubeArray,
+        GetSampledTextureTestParams{type::TextureDimension::kCubeArray,
                                     inspector::ResourceBinding::TextureDimension::kCubeArray,
                                     inspector::ResourceBinding::SampledKind::kFloat}));
 
 TEST_P(InspectorGetMultisampledTextureResourceBindingsTestWithParam, textureLoad) {
-    auto* multisampled_texture_type =
+    ast::Type multisampled_texture_type =
         ty.multisampled_texture(GetParam().type_dim, GetBaseType(GetParam().sampled_kind));
     AddResource("foo_texture", multisampled_texture_type, 0, 0);
-    auto* coord_type = GetCoordsType(GetParam().type_dim, ty.i32());
+    ast::Type coord_type = GetCoordsType(GetParam().type_dim, ty.i32());
     AddGlobalVariable("foo_coords", coord_type);
     AddGlobalVariable("foo_sample_index", ty.i32());
 
     Func("ep", utils::Empty, ty.void_(),
          utils::Vector{
-             CallStmt(Call("textureLoad", "foo_texture", "foo_coords", "foo_sample_index")),
+             Assign(Phony(), Call("textureLoad", "foo_texture", "foo_coords", "foo_sample_index")),
          },
          utils::Vector{
              Stage(ast::PipelineStage::kFragment),
@@ -2632,13 +2975,13 @@ INSTANTIATE_TEST_SUITE_P(
     InspectorGetMultisampledTextureResourceBindingsTest,
     InspectorGetMultisampledTextureResourceBindingsTestWithParam,
     testing::Values(
-        GetMultisampledTextureTestParams{ast::TextureDimension::k2d,
+        GetMultisampledTextureTestParams{type::TextureDimension::k2d,
                                          inspector::ResourceBinding::TextureDimension::k2d,
                                          inspector::ResourceBinding::SampledKind::kFloat},
-        GetMultisampledTextureTestParams{ast::TextureDimension::k2d,
+        GetMultisampledTextureTestParams{type::TextureDimension::k2d,
                                          inspector::ResourceBinding::TextureDimension::k2d,
                                          inspector::ResourceBinding::SampledKind::kSInt},
-        GetMultisampledTextureTestParams{ast::TextureDimension::k2d,
+        GetMultisampledTextureTestParams{type::TextureDimension::k2d,
                                          inspector::ResourceBinding::TextureDimension::k2d,
                                          inspector::ResourceBinding::SampledKind::kUInt}));
 
@@ -2654,48 +2997,6 @@ TEST_F(InspectorGetMultisampledArrayTextureResourceBindingsTest, Empty) {
 
     EXPECT_EQ(0u, result.size());
 }
-
-TEST_P(InspectorGetMultisampledArrayTextureResourceBindingsTestWithParam, DISABLED_textureSample) {
-    auto* multisampled_texture_type =
-        ty.multisampled_texture(GetParam().type_dim, GetBaseType(GetParam().sampled_kind));
-    AddResource("foo_texture", multisampled_texture_type, 0, 0);
-    AddSampler("foo_sampler", 0, 1);
-    auto* coord_type = GetCoordsType(GetParam().type_dim, ty.f32());
-    AddGlobalVariable("foo_coords", coord_type);
-    AddGlobalVariable("foo_array_index", ty.i32());
-
-    MakeSamplerReferenceBodyFunction("ep", "foo_texture", "foo_sampler", "foo_coords",
-                                     "foo_array_index", GetBaseType(GetParam().sampled_kind),
-                                     utils::Vector{
-                                         Stage(ast::PipelineStage::kFragment),
-                                     });
-
-    Inspector& inspector = Build();
-
-    auto result = inspector.GetMultisampledTextureResourceBindings("ep");
-    ASSERT_FALSE(inspector.has_error()) << inspector.error();
-    ASSERT_EQ(1u, result.size());
-
-    EXPECT_EQ(ResourceBinding::ResourceType::kMultisampledTexture, result[0].resource_type);
-    EXPECT_EQ(0u, result[0].bind_group);
-    EXPECT_EQ(0u, result[0].binding);
-    EXPECT_EQ(GetParam().inspector_dim, result[0].dim);
-    EXPECT_EQ(GetParam().sampled_kind, result[0].sampled_kind);
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    InspectorGetMultisampledArrayTextureResourceBindingsTest,
-    InspectorGetMultisampledArrayTextureResourceBindingsTestWithParam,
-    testing::Values(
-        GetMultisampledTextureTestParams{ast::TextureDimension::k2dArray,
-                                         inspector::ResourceBinding::TextureDimension::k2dArray,
-                                         inspector::ResourceBinding::SampledKind::kFloat},
-        GetMultisampledTextureTestParams{ast::TextureDimension::k2dArray,
-                                         inspector::ResourceBinding::TextureDimension::k2dArray,
-                                         inspector::ResourceBinding::SampledKind::kSInt},
-        GetMultisampledTextureTestParams{ast::TextureDimension::k2dArray,
-                                         inspector::ResourceBinding::TextureDimension::k2dArray,
-                                         inspector::ResourceBinding::SampledKind::kUInt}));
 
 TEST_F(InspectorGetStorageTextureResourceBindingsTest, Empty) {
     MakeEmptyBodyFunction("ep", utils::Vector{
@@ -2714,29 +3015,29 @@ TEST_P(InspectorGetStorageTextureResourceBindingsTestWithParam, Simple) {
     TexelFormatParams format_params;
     std::tie(dim_params, format_params) = GetParam();
 
-    ast::TextureDimension dim;
+    type::TextureDimension dim;
     ResourceBinding::TextureDimension expected_dim;
     std::tie(dim, expected_dim) = dim_params;
 
-    ast::TexelFormat format;
+    builtin::TexelFormat format;
     ResourceBinding::TexelFormat expected_format;
     ResourceBinding::SampledKind expected_kind;
     std::tie(format, expected_format, expected_kind) = format_params;
 
-    auto* st_type = MakeStorageTextureTypes(dim, format);
+    ast::Type st_type = MakeStorageTextureTypes(dim, format);
     AddStorageTexture("st_var", st_type, 0, 0);
 
-    const ast::Type* dim_type = nullptr;
+    ast::Type dim_type;
     switch (dim) {
-        case ast::TextureDimension::k1d:
-            dim_type = ty.i32();
+        case type::TextureDimension::k1d:
+            dim_type = ty.u32();
             break;
-        case ast::TextureDimension::k2d:
-        case ast::TextureDimension::k2dArray:
-            dim_type = ty.vec2<i32>();
+        case type::TextureDimension::k2d:
+        case type::TextureDimension::k2dArray:
+            dim_type = ty.vec2<u32>();
             break;
-        case ast::TextureDimension::k3d:
-            dim_type = ty.vec3<i32>();
+        case type::TextureDimension::k3d:
+            dim_type = ty.vec3<u32>();
             break;
         default:
             break;
@@ -2766,70 +3067,70 @@ TEST_P(InspectorGetStorageTextureResourceBindingsTestWithParam, Simple) {
 INSTANTIATE_TEST_SUITE_P(
     InspectorGetStorageTextureResourceBindingsTest,
     InspectorGetStorageTextureResourceBindingsTestWithParam,
-    testing::Combine(testing::Values(std::make_tuple(ast::TextureDimension::k1d,
+    testing::Combine(testing::Values(std::make_tuple(type::TextureDimension::k1d,
                                                      ResourceBinding::TextureDimension::k1d),
-                                     std::make_tuple(ast::TextureDimension::k2d,
+                                     std::make_tuple(type::TextureDimension::k2d,
                                                      ResourceBinding::TextureDimension::k2d),
-                                     std::make_tuple(ast::TextureDimension::k2dArray,
+                                     std::make_tuple(type::TextureDimension::k2dArray,
                                                      ResourceBinding::TextureDimension::k2dArray),
-                                     std::make_tuple(ast::TextureDimension::k3d,
+                                     std::make_tuple(type::TextureDimension::k3d,
                                                      ResourceBinding::TextureDimension::k3d)),
-                     testing::Values(std::make_tuple(ast::TexelFormat::kR32Float,
+                     testing::Values(std::make_tuple(builtin::TexelFormat::kR32Float,
                                                      ResourceBinding::TexelFormat::kR32Float,
                                                      ResourceBinding::SampledKind::kFloat),
-                                     std::make_tuple(ast::TexelFormat::kR32Sint,
+                                     std::make_tuple(builtin::TexelFormat::kR32Sint,
                                                      ResourceBinding::TexelFormat::kR32Sint,
                                                      ResourceBinding::SampledKind::kSInt),
-                                     std::make_tuple(ast::TexelFormat::kR32Uint,
+                                     std::make_tuple(builtin::TexelFormat::kR32Uint,
                                                      ResourceBinding::TexelFormat::kR32Uint,
                                                      ResourceBinding::SampledKind::kUInt),
-                                     std::make_tuple(ast::TexelFormat::kRg32Float,
+                                     std::make_tuple(builtin::TexelFormat::kRg32Float,
                                                      ResourceBinding::TexelFormat::kRg32Float,
                                                      ResourceBinding::SampledKind::kFloat),
-                                     std::make_tuple(ast::TexelFormat::kRg32Sint,
+                                     std::make_tuple(builtin::TexelFormat::kRg32Sint,
                                                      ResourceBinding::TexelFormat::kRg32Sint,
                                                      ResourceBinding::SampledKind::kSInt),
-                                     std::make_tuple(ast::TexelFormat::kRg32Uint,
+                                     std::make_tuple(builtin::TexelFormat::kRg32Uint,
                                                      ResourceBinding::TexelFormat::kRg32Uint,
                                                      ResourceBinding::SampledKind::kUInt),
-                                     std::make_tuple(ast::TexelFormat::kRgba16Float,
+                                     std::make_tuple(builtin::TexelFormat::kRgba16Float,
                                                      ResourceBinding::TexelFormat::kRgba16Float,
                                                      ResourceBinding::SampledKind::kFloat),
-                                     std::make_tuple(ast::TexelFormat::kRgba16Sint,
+                                     std::make_tuple(builtin::TexelFormat::kRgba16Sint,
                                                      ResourceBinding::TexelFormat::kRgba16Sint,
                                                      ResourceBinding::SampledKind::kSInt),
-                                     std::make_tuple(ast::TexelFormat::kRgba16Uint,
+                                     std::make_tuple(builtin::TexelFormat::kRgba16Uint,
                                                      ResourceBinding::TexelFormat::kRgba16Uint,
                                                      ResourceBinding::SampledKind::kUInt),
-                                     std::make_tuple(ast::TexelFormat::kRgba32Float,
+                                     std::make_tuple(builtin::TexelFormat::kRgba32Float,
                                                      ResourceBinding::TexelFormat::kRgba32Float,
                                                      ResourceBinding::SampledKind::kFloat),
-                                     std::make_tuple(ast::TexelFormat::kRgba32Sint,
+                                     std::make_tuple(builtin::TexelFormat::kRgba32Sint,
                                                      ResourceBinding::TexelFormat::kRgba32Sint,
                                                      ResourceBinding::SampledKind::kSInt),
-                                     std::make_tuple(ast::TexelFormat::kRgba32Uint,
+                                     std::make_tuple(builtin::TexelFormat::kRgba32Uint,
                                                      ResourceBinding::TexelFormat::kRgba32Uint,
                                                      ResourceBinding::SampledKind::kUInt),
-                                     std::make_tuple(ast::TexelFormat::kRgba8Sint,
+                                     std::make_tuple(builtin::TexelFormat::kRgba8Sint,
                                                      ResourceBinding::TexelFormat::kRgba8Sint,
                                                      ResourceBinding::SampledKind::kSInt),
-                                     std::make_tuple(ast::TexelFormat::kRgba8Snorm,
+                                     std::make_tuple(builtin::TexelFormat::kRgba8Snorm,
                                                      ResourceBinding::TexelFormat::kRgba8Snorm,
                                                      ResourceBinding::SampledKind::kFloat),
-                                     std::make_tuple(ast::TexelFormat::kRgba8Uint,
+                                     std::make_tuple(builtin::TexelFormat::kRgba8Uint,
                                                      ResourceBinding::TexelFormat::kRgba8Uint,
                                                      ResourceBinding::SampledKind::kUInt),
-                                     std::make_tuple(ast::TexelFormat::kRgba8Unorm,
+                                     std::make_tuple(builtin::TexelFormat::kRgba8Unorm,
                                                      ResourceBinding::TexelFormat::kRgba8Unorm,
                                                      ResourceBinding::SampledKind::kFloat))));
 
 TEST_P(InspectorGetDepthTextureResourceBindingsTestWithParam, textureDimensions) {
-    auto* depth_texture_type = ty.depth_texture(GetParam().type_dim);
+    auto depth_texture_type = ty.depth_texture(GetParam().type_dim);
     AddResource("dt", depth_texture_type, 0, 0);
 
     Func("ep", utils::Empty, ty.void_(),
          utils::Vector{
-             CallStmt(Call("textureDimensions", "dt")),
+             Assign(Phony(), Call("textureDimensions", "dt")),
          },
          utils::Vector{
              Stage(ast::PipelineStage::kFragment),
@@ -2851,22 +3152,22 @@ INSTANTIATE_TEST_SUITE_P(
     InspectorGetDepthTextureResourceBindingsTest,
     InspectorGetDepthTextureResourceBindingsTestWithParam,
     testing::Values(
-        GetDepthTextureTestParams{ast::TextureDimension::k2d,
+        GetDepthTextureTestParams{type::TextureDimension::k2d,
                                   inspector::ResourceBinding::TextureDimension::k2d},
-        GetDepthTextureTestParams{ast::TextureDimension::k2dArray,
+        GetDepthTextureTestParams{type::TextureDimension::k2dArray,
                                   inspector::ResourceBinding::TextureDimension::k2dArray},
-        GetDepthTextureTestParams{ast::TextureDimension::kCube,
+        GetDepthTextureTestParams{type::TextureDimension::kCube,
                                   inspector::ResourceBinding::TextureDimension::kCube},
-        GetDepthTextureTestParams{ast::TextureDimension::kCubeArray,
+        GetDepthTextureTestParams{type::TextureDimension::kCubeArray,
                                   inspector::ResourceBinding::TextureDimension::kCubeArray}));
 
 TEST_F(InspectorGetDepthMultisampledTextureResourceBindingsTest, textureDimensions) {
-    auto* depth_ms_texture_type = ty.depth_multisampled_texture(ast::TextureDimension::k2d);
+    auto depth_ms_texture_type = ty.depth_multisampled_texture(type::TextureDimension::k2d);
     AddResource("tex", depth_ms_texture_type, 0, 0);
 
     Func("ep", utils::Empty, ty.void_(),
          utils::Vector{
-             CallStmt(Call("textureDimensions", "tex")),
+             Assign(Phony(), Call("textureDimensions", "tex")),
          },
          utils::Vector{
              Stage(ast::PipelineStage::kFragment),
@@ -2885,12 +3186,12 @@ TEST_F(InspectorGetDepthMultisampledTextureResourceBindingsTest, textureDimensio
 }
 
 TEST_F(InspectorGetExternalTextureResourceBindingsTest, Simple) {
-    auto* external_texture_type = ty.external_texture();
+    auto external_texture_type = ty.external_texture();
     AddResource("et", external_texture_type, 0, 0);
 
     Func("ep", utils::Empty, ty.void_(),
          utils::Vector{
-             CallStmt(Call("textureDimensions", "et")),
+             Assign(Phony(), Call("textureDimensions", "et")),
          },
          utils::Vector{
              Stage(ast::PipelineStage::kFragment),
@@ -2955,7 +3256,7 @@ fn main(@location(0) fragUV: vec2<f32>,
 })";
 
     Inspector& inspector = Initialize(shader);
-    auto result = inspector.GetSamplerTextureUses("foo");
+    inspector.GetSamplerTextureUses("foo");
     ASSERT_TRUE(inspector.has_error()) << inspector.error();
 }
 
@@ -2977,7 +3278,8 @@ fn main(@location(0) fragUV: vec2<f32>,
     auto result_1 = inspector.GetSamplerTextureUses("main");
     ASSERT_FALSE(inspector.has_error()) << inspector.error();
 
-    EXPECT_EQ(result_0, result_1);
+    EXPECT_EQ((utils::Vector<sem::SamplerTexturePair, 4>(result_0)),
+              (utils::Vector<sem::SamplerTexturePair, 4>(result_1)));
 }
 
 TEST_F(InspectorGetSamplerTextureUsesTest, BothIndirect) {
@@ -3195,7 +3497,9 @@ TEST_F(InspectorGetWorkgroupStorageSizeTest, CompoundTypes) {
     // from the 4-element array with 16-byte stride.
     auto* wg_struct_type = MakeStructType("WgStruct", utils::Vector{
                                                           ty.i32(),
-                                                          ty.array(ty.i32(), 4_u, /*stride=*/16),
+                                                          ty.array<i32, 4>(utils::Vector{
+                                                              Stride(16),
+                                                          }),
                                                       });
     AddWorkgroupStorage("wg_struct_var", ty.Of(wg_struct_type));
     MakeStructVariableReferenceBodyFunction("wg_struct_func", "wg_struct_var",
@@ -3239,7 +3543,7 @@ TEST_F(InspectorGetWorkgroupStorageSizeTest, StructAlignment) {
     // here the struct is expected to occupy 1024 bytes of workgroup storage.
     const auto* wg_struct_type = MakeStructTypeFromMembers(
         "WgStruct", utils::Vector{
-                        MakeStructMember(0, ty.f32(), utils::Vector{MemberAlign(1024_u)}),
+                        MakeStructMember(0, ty.f32(), utils::Vector{MemberAlign(1024_i)}),
                     });
 
     AddWorkgroupStorage("wg_struct_var", ty.Of(wg_struct_type));
@@ -3394,7 +3698,7 @@ fn main(@location(0) fragUV: vec2<f32>,
 })";
 
     Inspector& inspector = Initialize(shader);
-    auto result = inspector.GetSamplerTextureUses("main");
+    inspector.GetSamplerTextureUses("main");
 }
 
 }  // namespace

@@ -1,12 +1,18 @@
 struct S_atomic {
+  /* @offset(0) */
   x : i32,
+  /* @offset(4) */
   a : atomic<u32>,
+  /* @offset(8) */
   b : atomic<u32>,
 }
 
 struct S {
+  /* @offset(0) */
   x : i32,
+  /* @offset(4) */
   a : u32,
+  /* @offset(8) */
   b : u32,
 }
 
@@ -14,7 +20,7 @@ var<private> local_invocation_index_1 : u32;
 
 var<workgroup> wg : S_atomic;
 
-fn compute_main_inner(local_invocation_index : u32) {
+fn compute_main_inner(local_invocation_index_2 : u32) {
   wg.x = 0i;
   atomicStore(&(wg.a), 0u);
   atomicStore(&(wg.b), 0u);
@@ -25,7 +31,7 @@ fn compute_main_inner(local_invocation_index : u32) {
 }
 
 fn compute_main_1() {
-  let x_39 : u32 = local_invocation_index_1;
+  let x_39 = local_invocation_index_1;
   compute_main_inner(x_39);
   return;
 }

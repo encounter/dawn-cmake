@@ -21,8 +21,6 @@ StageVariable::StageVariable(const StageVariable& other)
     : name(other.name),
       has_location_attribute(other.has_location_attribute),
       location_attribute(other.location_attribute),
-      has_location_decoration(has_location_attribute),
-      location_decoration(location_attribute),
       component_type(other.component_type),
       composition_type(other.composition_type),
       interpolation_type(other.interpolation_type),
@@ -34,33 +32,5 @@ EntryPoint::EntryPoint() = default;
 EntryPoint::EntryPoint(EntryPoint&) = default;
 EntryPoint::EntryPoint(EntryPoint&&) = default;
 EntryPoint::~EntryPoint() = default;
-
-InterpolationType ASTToInspectorInterpolationType(ast::InterpolationType ast_type) {
-    switch (ast_type) {
-        case ast::InterpolationType::kPerspective:
-            return InterpolationType::kPerspective;
-        case ast::InterpolationType::kLinear:
-            return InterpolationType::kLinear;
-        case ast::InterpolationType::kFlat:
-            return InterpolationType::kFlat;
-    }
-
-    return InterpolationType::kUnknown;
-}
-
-InterpolationSampling ASTToInspectorInterpolationSampling(ast::InterpolationSampling sampling) {
-    switch (sampling) {
-        case ast::InterpolationSampling::kNone:
-            return InterpolationSampling::kNone;
-        case ast::InterpolationSampling::kCenter:
-            return InterpolationSampling::kCenter;
-        case ast::InterpolationSampling::kCentroid:
-            return InterpolationSampling::kCentroid;
-        case ast::InterpolationSampling::kSample:
-            return InterpolationSampling::kSample;
-    }
-
-    return InterpolationSampling::kUnknown;
-}
 
 }  // namespace tint::inspector

@@ -3,7 +3,7 @@ struct strided_arr {
   el : f32,
 }
 
-type Arr = array<strided_arr, 2u>;
+alias Arr = array<strided_arr, 2u>;
 
 struct buf1 {
   x_GLF_uniform_float_values : Arr,
@@ -18,7 +18,7 @@ struct strided_arr_1 {
   el : i32,
 }
 
-type Arr_1 = array<strided_arr_1, 2u>;
+alias Arr_1 = array<strided_arr_1, 2u>;
 
 struct buf0 {
   x_GLF_uniform_int_values : Arr_1,
@@ -44,10 +44,7 @@ fn main_1() {
       x_GLF_color = vec4<f32>(x_53, x_53, x_53, x_53);
 
       continuing {
-        if (true) {
-        } else {
-          break;
-        }
+        break if !(true);
       }
     }
   } else {
@@ -83,10 +80,7 @@ fn main_1() {
       continuing {
         let x_82 : f32 = x_7.zero;
         let x_84 : f32 = x_5.x_GLF_uniform_float_values[0].el;
-        if ((x_82 > x_84)) {
-        } else {
-          break;
-        }
+        break if !(x_82 > x_84);
       }
     }
   }

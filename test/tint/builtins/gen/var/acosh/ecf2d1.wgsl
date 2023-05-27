@@ -1,4 +1,4 @@
-// Copyright 2021 The Tint Authors.
+// Copyright 2022 The Tint Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,9 +23,11 @@
 
 // fn acosh(f32) -> f32
 fn acosh_ecf2d1() {
-  var arg_0 = 1.f;
+  var arg_0 = 1.5430806348f;
   var res: f32 = acosh(arg_0);
+  prevent_dce = res;
 }
+@group(2) @binding(0) var<storage, read_write> prevent_dce : f32;
 
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {

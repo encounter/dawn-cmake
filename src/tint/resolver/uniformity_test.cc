@@ -20,6 +20,7 @@
 #include "src/tint/program_builder.h"
 #include "src/tint/reader/wgsl/parser.h"
 #include "src/tint/resolver/uniformity.h"
+#include "src/tint/utils/string_stream.h"
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -31,13 +32,10 @@ namespace {
 
 class UniformityAnalysisTestBase {
   protected:
-    /// Parse and resolve a WGSL shader.
-    /// @param src the WGSL source code
-    /// @param should_pass true if `src` should pass the analysis, otherwise false
-    void RunTest(std::string src, bool should_pass) {
-        auto file = std::make_unique<Source::File>("test", src);
-        auto program = reader::wgsl::Parse(file.get());
-
+    /// Build and resolve a program from a ProgramBuilder object.
+    /// @param program the program
+    /// @param should_pass true if `builder` program should pass the analysis, otherwise false
+    void RunTest(Program&& program, bool should_pass) {
         diag::Formatter::Style style;
         style.print_newline_at_end = false;
         error_ = diag::Formatter(style).format(program.Diagnostics());
@@ -45,28 +43,31 @@ class UniformityAnalysisTestBase {
         bool valid = program.IsValid();
         if (should_pass) {
             EXPECT_TRUE(valid) << error_;
-            if (program.Diagnostics().count() == 1u) {
-                EXPECT_THAT(program.Diagnostics().str(), ::testing::HasSubstr("unreachable"));
-            } else {
-                EXPECT_EQ(program.Diagnostics().count(), 0u) << error_;
-            }
+            EXPECT_FALSE(program.Diagnostics().contains_errors());
         } else {
-            // TODO(jrprice): expect false when uniformity issues become errors.
-            EXPECT_TRUE(valid) << error_;
+            if (kUniformityFailuresAsError) {
+                EXPECT_FALSE(valid);
+            } else {
+                EXPECT_TRUE(valid) << error_;
+            }
         }
+    }
+
+    /// Parse and resolve a WGSL shader.
+    /// @param src the WGSL source code
+    /// @param should_pass true if `src` should pass the analysis, otherwise false
+    void RunTest(std::string src, bool should_pass) {
+        auto file = std::make_unique<Source::File>("test", src);
+        auto program = reader::wgsl::Parse(file.get());
+        return RunTest(std::move(program), should_pass);
     }
 
     /// Build and resolve a program from a ProgramBuilder object.
     /// @param builder the program builder
-    /// @returns true on success, false on failure
-    bool RunTest(ProgramBuilder&& builder) {
+    /// @param should_pass true if `builder` program should pass the analysis, otherwise false
+    void RunTest(ProgramBuilder&& builder, bool should_pass) {
         auto program = Program(std::move(builder));
-
-        diag::Formatter::Style style;
-        style.print_newline_at_end = false;
-        error_ = diag::Formatter(style).format(program.Diagnostics());
-
-        return program.IsValid();
+        return RunTest(std::move(program), should_pass);
     }
 
     /// The error message from the parser or resolver, if any.
@@ -112,6 +113,7 @@ class BasicTest : public UniformityAnalysisTestBase,
         kUserRequiredToBeUniform,
         kWorkgroupBarrier,
         kStorageBarrier,
+        kWorkgroupUniformLoad,
         kTextureSample,
         kTextureSampleBias,
         kTextureSampleCompare,
@@ -166,44 +168,46 @@ class BasicTest : public UniformityAnalysisTestBase,
     }
 
     /// Convert a function call to its string representation.
-    static std::string FunctionToStr(Function f) {
+    static std::string FunctionCallToStr(Function f) {
         switch (f) {
             case kUserNoRestriction:
                 return "user_no_restriction()";
             case kMin:
-                return "min(1, 1)";
+                return "_ = min(1, 1)";
             case kTextureSampleLevel:
-                return "textureSampleLevel(t, s, vec2(0.5, 0.5), 0.0)";
+                return "_ = textureSampleLevel(t, s, vec2(0.5, 0.5), 0.0)";
             case kUserRequiredToBeUniform:
                 return "user_required_to_be_uniform()";
             case kWorkgroupBarrier:
                 return "workgroupBarrier()";
             case kStorageBarrier:
                 return "storageBarrier()";
+            case kWorkgroupUniformLoad:
+                return "_ = workgroupUniformLoad(&w)";
             case kTextureSample:
-                return "textureSample(t, s, vec2(0.5, 0.5))";
+                return "_ = textureSample(t, s, vec2(0.5, 0.5))";
             case kTextureSampleBias:
-                return "textureSampleBias(t, s, vec2(0.5, 0.5), 2.0)";
+                return "_ = textureSampleBias(t, s, vec2(0.5, 0.5), 2.0)";
             case kTextureSampleCompare:
-                return "textureSampleCompare(td, sc, vec2(0.5, 0.5), 0.5)";
+                return "_ = textureSampleCompare(td, sc, vec2(0.5, 0.5), 0.5)";
             case kDpdx:
-                return "dpdx(1.0)";
+                return "_ = dpdx(1.0)";
             case kDpdxCoarse:
-                return "dpdxCoarse(1.0)";
+                return "_ = dpdxCoarse(1.0)";
             case kDpdxFine:
-                return "dpdxFine(1.0)";
+                return "_ = dpdxFine(1.0)";
             case kDpdy:
-                return "dpdy(1.0)";
+                return "_ = dpdy(1.0)";
             case kDpdyCoarse:
-                return "dpdyCoarse(1.0)";
+                return "_ = dpdyCoarse(1.0)";
             case kDpdyFine:
-                return "dpdyFine(1.0)";
+                return "_ = dpdyFine(1.0)";
             case kFwidth:
-                return "fwidth(1.0)";
+                return "_ = fwidth(1.0)";
             case kFwidthCoarse:
-                return "fwidthCoarse(1.0)";
+                return "_ = fwidthCoarse(1.0)";
             case kFwidthFine:
-                return "fwidthFine(1.0)";
+                return "_ = fwidthFine(1.0)";
             case kEndOfFunctionRange:
                 return "<invalid>";
         }
@@ -253,6 +257,7 @@ class BasicTest : public UniformityAnalysisTestBase,
             CASE(kUserRequiredToBeUniform);
             CASE(kWorkgroupBarrier);
             CASE(kStorageBarrier);
+            CASE(kWorkgroupUniformLoad);
             CASE(kTextureSample);
             CASE(kTextureSampleBias);
             CASE(kTextureSampleCompare);
@@ -309,7 +314,7 @@ fn foo() {
 
   if ()" + ConditionToStr(condition) +
                       R"() {
-    )" + FunctionToStr(function) +
+    )" + FunctionCallToStr(function) +
                       R"(;
   }
 }
@@ -318,7 +323,6 @@ fn foo() {
     bool should_pass = !(MayBeNonUniform(condition) && RequiredToBeUniform(function));
     RunTest(src, should_pass);
     if (!should_pass) {
-        EXPECT_THAT(error_, ::testing::StartsWith("test:31:5 warning: "));
         EXPECT_THAT(error_, ::testing::HasSubstr("must only be called from uniform control flow"));
     }
 }
@@ -333,134 +337,6 @@ INSTANTIATE_TEST_SUITE_P(
 ////////////////////////////////////////////////////////////////////////////////
 /// Test specific function and parameter tags that are not tested above.
 ////////////////////////////////////////////////////////////////////////////////
-
-TEST_F(UniformityAnalysisTest, SubsequentControlFlowMayBeNonUniform_Pass) {
-    // Call a function that causes subsequent control flow to be non-uniform, and then call another
-    // function that doesn't require uniformity.
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> rw : i32;
-
-var<private> p : i32;
-
-fn foo() {
-  if (rw == 0) {
-    p = 42;
-    return;
-  }
-  p = 5;
-  return;
-}
-
-fn bar() {
-  if (p == 42) {
-    p = 7;
-  }
-}
-
-fn main() {
-  foo();
-  bar();
-}
-)";
-
-    RunTest(src, true);
-}
-
-TEST_F(UniformityAnalysisTest, SubsequentControlFlowMayBeNonUniform_Fail) {
-    // Call a function that causes subsequent control flow to be non-uniform, and then call another
-    // function that requires uniformity.
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> rw : i32;
-
-var<private> p : i32;
-
-fn foo() {
-  if (rw == 0) {
-    p = 42;
-    return;
-  }
-  p = 5;
-  return;
-}
-
-fn main() {
-  foo();
-  workgroupBarrier();
-}
-)";
-
-    RunTest(src, false);
-    EXPECT_EQ(error_,
-              R"(test:17:3 warning: 'workgroupBarrier' must only be called from uniform control flow
-  workgroupBarrier();
-  ^^^^^^^^^^^^^^^^
-
-test:16:3 note: calling 'foo' may cause subsequent control flow to be non-uniform
-  foo();
-  ^^^
-
-test:7:3 note: control flow depends on non-uniform value
-  if (rw == 0) {
-  ^^
-
-test:7:7 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
-  if (rw == 0) {
-      ^^
-)");
-}
-
-TEST_F(UniformityAnalysisTest, SubsequentControlFlowMayBeNonUniform_Nested_Fail) {
-    // Indirectly call a function that causes subsequent control flow to be non-uniform, and then
-    // call another function that requires uniformity.
-    // The lack of return statement in `foo()` requires that we implicitly add an edge from
-    // CF_return to that last control flow node of the function.
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> rw : i32;
-
-var<private> p : i32;
-
-fn bar() {
-  if (rw == 0) {
-    p = 42;
-    return;
-  }
-  p = 5;
-  return;
-}
-
-fn foo() {
-  bar();
-}
-
-fn main() {
-  foo();
-  workgroupBarrier();
-}
-)";
-
-    RunTest(src, false);
-    EXPECT_EQ(error_,
-              R"(test:21:3 warning: 'workgroupBarrier' must only be called from uniform control flow
-  workgroupBarrier();
-  ^^^^^^^^^^^^^^^^
-
-test:20:3 note: calling 'foo' may cause subsequent control flow to be non-uniform
-  foo();
-  ^^^
-
-test:16:3 note: calling 'bar' may cause subsequent control flow to be non-uniform
-  bar();
-  ^^^
-
-test:7:3 note: control flow depends on non-uniform value
-  if (rw == 0) {
-  ^^
-
-test:7:7 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
-  if (rw == 0) {
-      ^^
-)");
-}
 
 TEST_F(UniformityAnalysisTest, ParameterNoRestriction_Pass) {
     // Pass a non-uniform value as an argument, and then try to use the return value for
@@ -528,13 +404,21 @@ fn bar() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:11:7 warning: parameter 'i' of 'foo' must be uniform
-  foo(rw);
-      ^^
-
-test:6:5 note: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
+
+test:5:3 note: control flow depends on possibly non-uniform value
+  if (i == 0) {
+  ^^
+
+test:5:7 note: parameter 'i' of 'foo' may be non-uniform
+  if (i == 0) {
+      ^
+
+test:11:7 note: possibly non-uniform value passed here
+  foo(rw);
+      ^^
 
 test:11:7 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
   foo(rw);
@@ -581,90 +465,17 @@ fn bar() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:10:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:9:3 note: control flow depends on non-uniform value
+test:9:3 note: control flow depends on possibly non-uniform value
   if (foo(rw) == 7) {
   ^^
 
 test:9:11 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
   if (foo(rw) == 7) {
           ^^
-)");
-}
-
-TEST_F(UniformityAnalysisTest, ParameterRequiredToBeUniformForSubsequentControlFlow_Pass) {
-    // Pass a uniform value as an argument to a function that uses that parameter return early, and
-    // then invoke a barrier after calling that function.
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read> ro : i32;
-
-var<private> p : i32;
-
-fn foo(i : i32) {
-  if (i == 0) {
-    p = 42;
-    return;
-  }
-  p = 5;
-  return;
-}
-
-fn bar() {
-  foo(ro);
-  workgroupBarrier();
-}
-)";
-
-    RunTest(src, true);
-}
-
-TEST_F(UniformityAnalysisTest, ParameterRequiredToBeUniformForSubsequentControlFlow_Fail) {
-    // Pass a non-uniform value as an argument to a function that uses that parameter return early,
-    // and then invoke a barrier after calling that function.
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> rw : i32;
-
-var<private> p : i32;
-
-fn foo(i : i32) {
-  if (i == 0) {
-    p = 42;
-    return;
-  }
-  p = 5;
-  return;
-}
-
-fn bar() {
-  foo(rw);
-  workgroupBarrier();
-}
-)";
-
-    RunTest(src, false);
-    EXPECT_EQ(error_,
-              R"(test:17:3 warning: 'workgroupBarrier' must only be called from uniform control flow
-  workgroupBarrier();
-  ^^^^^^^^^^^^^^^^
-
-test:16:7 note: non-uniform function call argument causes subsequent control flow to be non-uniform
-  foo(rw);
-      ^^
-
-test:7:3 note: control flow depends on non-uniform value
-  if (i == 0) {
-  ^^
-
-test:7:7 note: reading from 'i' may result in a non-uniform value
-  if (i == 0) {
-      ^
-
-test:16:7 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
-  foo(rw);
-      ^^
 )");
 }
 
@@ -697,15 +508,15 @@ fn main(@builtin()" + GetParam().name +
     if (!should_pass) {
         EXPECT_EQ(
             error_,
-            R"(test:5:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+            R"(test:5:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:4:3 note: control flow depends on non-uniform value
+test:4:3 note: control flow depends on possibly non-uniform value
   if (all(vec3(b) == vec3(0u))) {
   ^^
 
-test:4:16 note: reading from builtin 'b' may result in a non-uniform value
+test:4:16 note: builtin 'b' of 'main' may be non-uniform
   if (all(vec3(b) == vec3(0u))) {
                ^
 )");
@@ -732,15 +543,15 @@ fn main(s : S) {
     if (!should_pass) {
         EXPECT_EQ(
             error_,
-            R"(test:9:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+            R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:8:3 note: control flow depends on non-uniform value
+test:8:3 note: control flow depends on possibly non-uniform value
   if (all(vec3(s.b) == vec3(0u))) {
   ^^
 
-test:8:16 note: reading from 's' may result in a non-uniform value
+test:8:16 note: parameter 's' of 'main' may be non-uniform
   if (all(vec3(s.b) == vec3(0u))) {
                ^
 )");
@@ -777,15 +588,15 @@ fn main(s : S) {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:10:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:9:3 note: control flow depends on non-uniform value
+test:9:3 note: control flow depends on possibly non-uniform value
   if (s.num_groups.x == 0u) {
   ^^
 
-test:9:7 note: reading from 's' may result in a non-uniform value
+test:9:7 note: parameter 's' of 'main' may be non-uniform
   if (s.num_groups.x == 0u) {
       ^
 )");
@@ -799,7 +610,7 @@ TEST_P(FragmentBuiltin, AsParam) {
 fn main(@builtin()" + GetParam().name +
                       R"() b : )" + GetParam().type + R"() {
   if (u32(vec4(b).x) == 0u) {
-    dpdx(0.5);
+    _ = dpdx(0.5);
   }
 }
 )";
@@ -808,15 +619,15 @@ fn main(@builtin()" + GetParam().name +
     RunTest(src, should_pass);
     if (!should_pass) {
         EXPECT_EQ(error_,
-                  R"(test:5:5 warning: 'dpdx' must only be called from uniform control flow
-    dpdx(0.5);
-    ^^^^
+                  R"(test:5:9 error: 'dpdx' must only be called from uniform control flow
+    _ = dpdx(0.5);
+        ^^^^^^^^^
 
-test:4:3 note: control flow depends on non-uniform value
+test:4:3 note: control flow depends on possibly non-uniform value
   if (u32(vec4(b).x) == 0u) {
   ^^
 
-test:4:16 note: reading from builtin 'b' may result in a non-uniform value
+test:4:16 note: builtin 'b' of 'main' may be non-uniform
   if (u32(vec4(b).x) == 0u) {
                ^
 )");
@@ -833,7 +644,7 @@ struct S {
 @fragment
 fn main(s : S) {
   if (u32(vec4(s.b).x) == 0u) {
-    dpdx(0.5);
+    _ = dpdx(0.5);
   }
 }
 )";
@@ -842,15 +653,15 @@ fn main(s : S) {
     RunTest(src, should_pass);
     if (!should_pass) {
         EXPECT_EQ(error_,
-                  R"(test:9:5 warning: 'dpdx' must only be called from uniform control flow
-    dpdx(0.5);
-    ^^^^
+                  R"(test:9:9 error: 'dpdx' must only be called from uniform control flow
+    _ = dpdx(0.5);
+        ^^^^^^^^^
 
-test:8:3 note: control flow depends on non-uniform value
+test:8:3 note: control flow depends on possibly non-uniform value
   if (u32(vec4(s.b).x) == 0u) {
   ^^
 
-test:8:16 note: reading from 's' may result in a non-uniform value
+test:8:16 note: parameter 's' of 'main' may be non-uniform
   if (u32(vec4(s.b).x) == 0u) {
                ^
 )");
@@ -872,22 +683,22 @@ TEST_F(UniformityAnalysisTest, FragmentLocation) {
 @fragment
 fn main(@location(0) l : f32) {
   if (l == 0.0) {
-    dpdx(0.5);
+    _ = dpdx(0.5);
   }
 }
 )";
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:5:5 warning: 'dpdx' must only be called from uniform control flow
-    dpdx(0.5);
-    ^^^^
+              R"(test:5:9 error: 'dpdx' must only be called from uniform control flow
+    _ = dpdx(0.5);
+        ^^^^^^^^^
 
-test:4:3 note: control flow depends on non-uniform value
+test:4:3 note: control flow depends on possibly non-uniform value
   if (l == 0.0) {
   ^^
 
-test:4:7 note: reading from user-defined input 'l' may result in a non-uniform value
+test:4:7 note: user-defined input 'l' of 'main' may be non-uniform
   if (l == 0.0) {
       ^
 )");
@@ -902,22 +713,22 @@ struct S {
 @fragment
 fn main(s : S) {
   if (s.l == 0.0) {
-    dpdx(0.5);
+    _ = dpdx(0.5);
   }
 }
 )";
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:5 warning: 'dpdx' must only be called from uniform control flow
-    dpdx(0.5);
-    ^^^^
+              R"(test:9:9 error: 'dpdx' must only be called from uniform control flow
+    _ = dpdx(0.5);
+        ^^^^^^^^^
 
-test:8:3 note: control flow depends on non-uniform value
+test:8:3 note: control flow depends on possibly non-uniform value
   if (s.l == 0.0) {
   ^^
 
-test:8:7 note: reading from 's' may result in a non-uniform value
+test:8:7 note: parameter 's' of 'main' may be non-uniform
   if (s.l == 0.0) {
       ^
 )");
@@ -933,7 +744,6 @@ enum ControlFlowInterrupt {
     kBreak,
     kContinue,
     kReturn,
-    kDiscard,
 };
 enum Condition {
     kNone,
@@ -951,8 +761,6 @@ static std::string ToStr(ControlFlowInterrupt interrupt) {
             return "continue";
         case kReturn:
             return "return";
-        case kDiscard:
-            return "discard";
     }
     return "";
 }
@@ -987,7 +795,7 @@ class LoopTest : public UniformityAnalysisTestBase,
 
 INSTANTIATE_TEST_SUITE_P(UniformityAnalysisTest,
                          LoopTest,
-                         ::testing::Combine(::testing::Range<int>(0, kDiscard + 1),
+                         ::testing::Combine(::testing::Range<int>(0, kReturn + 1),
                                             ::testing::Range<int>(0, kNonUniform + 1)),
                          [](const ::testing::TestParamInfo<LoopTestParams>& p) {
                              ControlFlowInterrupt interrupt =
@@ -1025,7 +833,7 @@ fn foo() {
         EXPECT_THAT(
             error_,
             ::testing::StartsWith(
-                R"(test:13:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+                R"(test:13:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();)"));
         EXPECT_THAT(error_,
                     ::testing::HasSubstr("test:14:9 note: reading from read_write storage buffer "
@@ -1065,7 +873,7 @@ fn foo() {
         EXPECT_THAT(
             error_,
             ::testing::StartsWith(
-                R"(test:14:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+                R"(test:14:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();)"));
         EXPECT_THAT(error_,
                     ::testing::HasSubstr("test:13:9 note: reading from read_write storage buffer "
@@ -1106,7 +914,7 @@ fn foo() {
         EXPECT_THAT(
             error_,
             ::testing::StartsWith(
-                R"(test:15:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+                R"(test:15:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();)"));
         EXPECT_THAT(error_,
                     ::testing::HasSubstr("test:13:9 note: reading from read_write storage buffer "
@@ -1126,9 +934,7 @@ fn foo() {
     workgroupBarrier();
     continuing {
       i = i + 1;
-      if (i == n) {
-        break;
-      }
+      break if (i == n);
     }
   }
 }
@@ -1147,9 +953,7 @@ fn foo() {
     workgroupBarrier();
     continuing {
       i = i + 1;
-      if (i == n) {
-        break;
-      }
+      break if (i == n);
     }
   }
 }
@@ -1157,17 +961,17 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:7:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:7:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:10:7 note: control flow depends on non-uniform value
-      if (i == n) {
-      ^^
+test:10:7 note: control flow depends on possibly non-uniform value
+      break if (i == n);
+      ^^^^^
 
-test:10:16 note: reading from read_write storage buffer 'n' may result in a non-uniform value
-      if (i == n) {
-               ^
+test:10:22 note: reading from read_write storage buffer 'n' may result in a non-uniform value
+      break if (i == n);
+                     ^
 )");
 }
 
@@ -1181,9 +985,7 @@ fn foo() {
     continuing {
       workgroupBarrier();
       i = i + 1;
-      if (i == n) {
-        break;
-      }
+      break if (i == n);
     }
   }
 }
@@ -1202,9 +1004,7 @@ fn foo() {
     continuing {
       workgroupBarrier();
       i = i + 1;
-      if (i == n) {
-        break;
-      }
+      break if (i == n);
     }
   }
 }
@@ -1212,17 +1012,17 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:10:7 note: control flow depends on non-uniform value
-      if (i == n) {
-      ^^
+test:10:7 note: control flow depends on possibly non-uniform value
+      break if (i == n);
+      ^^^^^
 
-test:10:16 note: reading from read_write storage buffer 'n' may result in a non-uniform value
-      if (i == n) {
-               ^
+test:10:22 note: reading from read_write storage buffer 'n' may result in a non-uniform value
+      break if (i == n);
+                     ^
 )");
 }
 
@@ -1230,7 +1030,7 @@ class LoopDeadCodeTest : public UniformityAnalysisTestBase, public ::testing::Te
 
 INSTANTIATE_TEST_SUITE_P(UniformityAnalysisTest,
                          LoopDeadCodeTest,
-                         ::testing::Range<int>(0, kDiscard + 1),
+                         ::testing::Range<int>(0, kReturn + 1),
                          [](const ::testing::TestParamInfo<LoopDeadCodeTest::ParamType>& p) {
                              return ToStr(static_cast<ControlFlowInterrupt>(p.param));
                          });
@@ -1250,9 +1050,7 @@ fn foo() {
     continuing {
       // Pretend that this isn't an infinite loop, in case the interrupt is a
       // continue statement.
-      if (false) {
-        break;
-      }
+      break if (false);
     }
   }
 }
@@ -1282,11 +1080,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:7:5 note: control flow depends on non-uniform value
+test:7:5 note: control flow depends on possibly non-uniform value
     if (v == 0) {
     ^^
 
@@ -1366,11 +1164,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:14:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:14:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:13:5 note: control flow depends on non-uniform value
+test:13:5 note: control flow depends on possibly non-uniform value
     if (v == 0) {
     ^^
 
@@ -1404,11 +1202,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:15:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:15:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:14:3 note: control flow depends on non-uniform value
+test:14:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -1447,11 +1245,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:20:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:20:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:19:3 note: control flow depends on non-uniform value
+test:19:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -1521,11 +1319,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:20:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:20:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:19:3 note: control flow depends on non-uniform value
+test:19:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -1562,11 +1360,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:7:5 note: control flow depends on non-uniform value
+test:7:5 note: control flow depends on possibly non-uniform value
     if (v == 0) {
     ^^
 
@@ -1598,9 +1396,7 @@ fn foo() {
       if (v == 0) {
         workgroupBarrier();
       }
-      if (true) {
-        break;
-      }
+      break if (true);
     }
   }
 }
@@ -1608,11 +1404,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:16:9 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:16:9 error: 'workgroupBarrier' must only be called from uniform control flow
         workgroupBarrier();
         ^^^^^^^^^^^^^^^^
 
-test:15:7 note: control flow depends on non-uniform value
+test:15:7 note: control flow depends on possibly non-uniform value
       if (v == 0) {
       ^^
 
@@ -1649,11 +1445,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:7:5 note: control flow depends on non-uniform value
+test:7:5 note: control flow depends on possibly non-uniform value
     if (v == 0) {
     ^^
 
@@ -1690,11 +1486,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:7:5 note: control flow depends on non-uniform value
+test:7:5 note: control flow depends on possibly non-uniform value
     if (v == 0) {
     ^^
 
@@ -1757,6 +1553,71 @@ fn foo() {
     RunTest(src, true);
 }
 
+TEST_F(UniformityAnalysisTest, Loop_NonUniformValueDeclaredInBody_UnreachableContinuing) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn foo() {
+  var condition = true;
+  loop {
+    var v = non_uniform;
+    if (condition) {
+      break;
+    } else {
+      break;
+    }
+
+    continuing {
+      if (v == 0) {
+        workgroupBarrier();
+      }
+    }
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, Loop_NonUniformValueDeclaredInBody_MaybeReachesContinuing) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn foo() {
+  var condition = true;
+  loop {
+    var v = non_uniform;
+    if (condition) {
+      continue;
+    } else {
+      break;
+    }
+
+    continuing {
+      if (v == 0) {
+        workgroupBarrier();
+      }
+    }
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:16:9 error: 'workgroupBarrier' must only be called from uniform control flow
+        workgroupBarrier();
+        ^^^^^^^^^^^^^^^^
+
+test:15:7 note: control flow depends on possibly non-uniform value
+      if (v == 0) {
+      ^^
+
+test:7:13 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+    var v = non_uniform;
+            ^^^^^^^^^^^
+)");
+}
+
 TEST_F(UniformityAnalysisTest, Loop_NonUniformBreakInBody_Reconverge) {
     // Loops reconverge at exit, so test that we can call workgroupBarrier() after a loop that
     // contains a non-uniform conditional break.
@@ -1776,72 +1637,6 @@ fn foo() {
 )";
 
     RunTest(src, true);
-}
-
-TEST_F(UniformityAnalysisTest, Loop_NonUniformFunctionInBody_Reconverge) {
-    // Loops reconverge at exit, so test that we can call workgroupBarrier() after a loop that
-    // contains a call to a function that causes non-uniform control flow.
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> n : i32;
-
-fn bar() {
-  if (n == 42) {
-    return;
-  } else {
-    return;
-  }
-}
-
-fn foo() {
-  loop {
-    bar();
-    break;
-  }
-  workgroupBarrier();
-}
-)";
-
-    RunTest(src, true);
-}
-
-TEST_F(UniformityAnalysisTest, Loop_NonUniformFunctionDiscard_NoReconvergence) {
-    // Loops should not reconverge after non-uniform discard statements.
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> n : i32;
-
-fn bar() {
-  if (n == 42) {
-    discard;
-  }
-}
-
-fn foo() {
-  loop {
-    bar();
-    break;
-  }
-  workgroupBarrier();
-}
-)";
-
-    RunTest(src, false);
-    EXPECT_EQ(error_,
-              R"(test:15:3 warning: 'workgroupBarrier' must only be called from uniform control flow
-  workgroupBarrier();
-  ^^^^^^^^^^^^^^^^
-
-test:12:5 note: calling 'bar' may cause subsequent control flow to be non-uniform
-    bar();
-    ^^^
-
-test:5:3 note: control flow depends on non-uniform value
-  if (n == 42) {
-  ^^
-
-test:5:7 note: reading from read_write storage buffer 'n' may result in a non-uniform value
-  if (n == 42) {
-      ^
-)");
 }
 
 TEST_F(UniformityAnalysisTest, ForLoop_CallInside_UniformCondition) {
@@ -1871,95 +1666,17 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:6:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   for (var i = 0; i < n; i = i + 1) {
   ^^^
 
 test:5:23 note: reading from read_write storage buffer 'n' may result in a non-uniform value
   for (var i = 0; i < n; i = i + 1) {
                       ^
-)");
-}
-
-TEST_F(UniformityAnalysisTest, ForLoop_CallInside_InitializerCausesNonUniformFlow) {
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> n : i32;
-
-fn bar() -> i32 {
-  if (n == 42) {
-    return 1;
-  } else {
-    return 2;
-  }
-}
-
-fn foo() {
-  for (var i = bar(); i < 10; i = i + 1) {
-    workgroupBarrier();
-  }
-}
-)";
-
-    RunTest(src, false);
-    EXPECT_EQ(error_,
-              R"(test:14:5 warning: 'workgroupBarrier' must only be called from uniform control flow
-    workgroupBarrier();
-    ^^^^^^^^^^^^^^^^
-
-test:13:16 note: calling 'bar' may cause subsequent control flow to be non-uniform
-  for (var i = bar(); i < 10; i = i + 1) {
-               ^^^
-
-test:5:3 note: control flow depends on non-uniform value
-  if (n == 42) {
-  ^^
-
-test:5:7 note: reading from read_write storage buffer 'n' may result in a non-uniform value
-  if (n == 42) {
-      ^
-)");
-}
-
-TEST_F(UniformityAnalysisTest, ForLoop_CallInside_ContinuingCausesNonUniformFlow) {
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> n : i32;
-
-fn bar() -> i32 {
-  if (n == 42) {
-    return 1;
-  } else {
-    return 2;
-  }
-}
-
-fn foo() {
-  for (var i = 0; i < 10; i = i + bar()) {
-    workgroupBarrier();
-  }
-}
-)";
-
-    RunTest(src, false);
-    EXPECT_EQ(error_,
-              R"(test:14:5 warning: 'workgroupBarrier' must only be called from uniform control flow
-    workgroupBarrier();
-    ^^^^^^^^^^^^^^^^
-
-test:13:35 note: calling 'bar' may cause subsequent control flow to be non-uniform
-  for (var i = 0; i < 10; i = i + bar()) {
-                                  ^^^
-
-test:5:3 note: control flow depends on non-uniform value
-  if (n == 42) {
-  ^^
-
-test:5:7 note: reading from read_write storage buffer 'n' may result in a non-uniform value
-  if (n == 42) {
-      ^
 )");
 }
 
@@ -1982,11 +1699,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:7:5 note: control flow depends on non-uniform value
+test:7:5 note: control flow depends on possibly non-uniform value
     if (v == 0) {
     ^^
 
@@ -2037,11 +1754,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:10:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:9:3 note: control flow depends on non-uniform value
+test:9:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -2092,11 +1809,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:7:5 note: control flow depends on non-uniform value
+test:7:5 note: control flow depends on possibly non-uniform value
     if (v == 0) {
     ^^
 
@@ -2153,11 +1870,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:15:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:15:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:14:3 note: control flow depends on non-uniform value
+test:14:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -2198,11 +1915,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:21:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:21:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:20:3 note: control flow depends on non-uniform value
+test:20:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -2240,11 +1957,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:7:5 note: control flow depends on non-uniform value
+test:7:5 note: control flow depends on possibly non-uniform value
     if (v == 0) {
     ^^
 
@@ -2281,17 +1998,54 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:7:5 note: control flow depends on non-uniform value
+test:7:5 note: control flow depends on possibly non-uniform value
     if (v == 0) {
     ^^
 
 test:12:9 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
     v = non_uniform;
         ^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest,
+       ForLoop_InitializerVarBecomesNonUniformBeforeConditionalContinue_BarrierAtStart) {
+    // Use a variable declared in a for-loop initializer for a conditional barrier in a loop, assign
+    // a non-uniform value to that variable later in that loop and then execute a continue.
+    // Tests that variables declared in the for-loop initializer are properly tracked.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn foo() {
+  for (var i = 0; i < 10; i++) {
+    if (i < 5) {
+      workgroupBarrier();
+    }
+    if (true) {
+      i = non_uniform;
+      continue;
+    }
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:7:7 error: 'workgroupBarrier' must only be called from uniform control flow
+      workgroupBarrier();
+      ^^^^^^^^^^^^^^^^
+
+test:5:3 note: control flow depends on possibly non-uniform value
+  for (var i = 0; i < 10; i++) {
+  ^^^
+
+test:10:11 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+      i = non_uniform;
+          ^^^^^^^^^^^
 )");
 }
 
@@ -2305,6 +2059,41 @@ fn foo() {
   for (var i = 0; i < n; i = i + 1) {
   }
   workgroupBarrier();
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, ForLoop_VarDeclaredInBody) {
+    // Make sure that we can declare a variable inside the loop body without causing issues for
+    // tracking local variables across iterations.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> n : i32;
+
+fn foo() {
+  var outer : i32;
+  for (var i = 0; i < n; i = i + 1) {
+    var inner : i32;
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, ForLoop_InitializerScope) {
+    // Make sure that variables declared in a for-loop initializer are properly removed from the
+    // local variable list, otherwise a parent control-flow statement will try to add edges to nodes
+    // that no longer exist.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> n : i32;
+
+fn foo() {
+  if (n == 5) {
+    for (var i = 0; i < n; i = i + 1) {
+    }
+  }
 }
 )";
 
@@ -2342,11 +2131,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:7:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:7:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:6:3 note: control flow depends on non-uniform value
+test:6:3 note: control flow depends on possibly non-uniform value
   while (i < n) {
   ^^^^^
 
@@ -2379,11 +2168,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:9:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:8:5 note: control flow depends on non-uniform value
+test:8:5 note: control flow depends on possibly non-uniform value
     if (v == 0) {
     ^^
 
@@ -2444,11 +2233,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:17:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:17:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:16:3 note: control flow depends on non-uniform value
+test:16:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -2491,11 +2280,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:23:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:23:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:22:3 note: control flow depends on non-uniform value
+test:22:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -2534,11 +2323,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:9:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:8:5 note: control flow depends on non-uniform value
+test:8:5 note: control flow depends on possibly non-uniform value
     if (v == 0) {
     ^^
 
@@ -2577,11 +2366,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:9:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:8:5 note: control flow depends on non-uniform value
+test:8:5 note: control flow depends on possibly non-uniform value
     if (v == 0) {
     ^^
 
@@ -2672,11 +2461,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:6:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   if (non_uniform == 42) {
   ^^
 
@@ -2700,11 +2489,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:7:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:7:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   if (non_uniform == 42) {
   ^^
 
@@ -2729,11 +2518,11 @@ fn main() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:34 note: control flow depends on non-uniform value
+test:7:34 note: control flow depends on possibly non-uniform value
   if ((non_uniform_global == 42) && false) {
                                  ^^
 
@@ -2758,11 +2547,11 @@ fn main() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:3 note: control flow depends on non-uniform value
+test:7:3 note: control flow depends on possibly non-uniform value
   if (false && (non_uniform_global == 42)) {
   ^^
 
@@ -2787,11 +2576,11 @@ fn main() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:34 note: control flow depends on non-uniform value
+test:7:34 note: control flow depends on possibly non-uniform value
   if ((non_uniform_global == 42) || true) {
                                  ^^
 
@@ -2816,11 +2605,11 @@ fn main() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:3 note: control flow depends on non-uniform value
+test:7:3 note: control flow depends on possibly non-uniform value
   if (true || (non_uniform_global == 42)) {
   ^^
 
@@ -2844,11 +2633,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:7:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:7:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   if (non_uniform == 42) {
   ^^
 
@@ -2875,11 +2664,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:3 note: control flow depends on non-uniform value
+test:7:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -2952,11 +2741,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:15:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:15:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:14:3 note: control flow depends on non-uniform value
+test:14:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -3035,11 +2824,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:12:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:12:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:11:3 note: control flow depends on non-uniform value
+test:11:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -3072,11 +2861,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:13:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:13:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:12:3 note: control flow depends on non-uniform value
+test:12:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -3229,41 +3018,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:3 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:9:3 error: 'workgroupBarrier' must only be called from uniform control flow
   workgroupBarrier();
   ^^^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
-  if (non_uniform == 42) {
-  ^^
-
-test:5:7 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
-  if (non_uniform == 42) {
-      ^^^^^^^^^^^
-)");
-}
-
-TEST_F(UniformityAnalysisTest, IfElse_NonUniformDiscard_NoReconverge) {
-    // If statements should not reconverge after non-uniform discards.
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
-
-fn foo() {
-  if (non_uniform == 42) {
-    discard;
-  } else {
-  }
-  workgroupBarrier();
-}
-)";
-
-    RunTest(src, false);
-    EXPECT_EQ(error_,
-              R"(test:9:3 warning: 'workgroupBarrier' must only be called from uniform control flow
-  workgroupBarrier();
-  ^^^^^^^^^^^^^^^^
-
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   if (non_uniform == 42) {
   ^^
 
@@ -3296,11 +3055,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:7:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:7:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   switch (non_uniform) {
   ^^^^^^
 
@@ -3326,11 +3085,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:7:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:7:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   switch (non_uniform) {
   ^^^^^^
 
@@ -3361,11 +3120,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:11:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:11:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:8:7 note: control flow depends on non-uniform value
+test:8:7 note: control flow depends on possibly non-uniform value
       if (non_uniform == 42) {
       ^^
 
@@ -3399,49 +3158,6 @@ fn foo() {
     RunTest(src, true);
 }
 
-TEST_F(UniformityAnalysisTest, Switch_NonUniformBreakInDifferentCase_Fallthrough) {
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
-@group(0) @binding(0) var<uniform> condition : i32;
-
-fn foo() {
-  switch (condition) {
-    case 0: {
-      if (non_uniform == 42) {
-        break;
-      }
-      fallthrough;
-    }
-    case 42: {
-      workgroupBarrier();
-    }
-    default: {
-    }
-  }
-}
-)";
-
-    RunTest(src, false);
-    EXPECT_EQ(
-        error_,
-        R"(test:11:7 warning: use of deprecated language feature: fallthrough is set to be removed from WGSL. Case can accept multiple selectors if the existing case bodies are empty. default is not yet supported in a case selector list.
-      fallthrough;
-      ^^^^^^^^^^^
-
-test:14:7 warning: 'workgroupBarrier' must only be called from uniform control flow
-      workgroupBarrier();
-      ^^^^^^^^^^^^^^^^
-
-test:8:7 note: control flow depends on non-uniform value
-      if (non_uniform == 42) {
-      ^^
-
-test:8:11 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
-      if (non_uniform == 42) {
-          ^^^^^^^^^^^
-)");
-}
-
 TEST_F(UniformityAnalysisTest, Switch_VarBecomesNonUniformInDifferentCase_WithBreak) {
     std::string src = R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
@@ -3466,50 +3182,6 @@ fn foo() {
 )";
 
     RunTest(src, true);
-}
-
-TEST_F(UniformityAnalysisTest, Switch_VarBecomesNonUniformInDifferentCase_WithFallthrough) {
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
-@group(0) @binding(0) var<uniform> condition : i32;
-
-fn foo() {
-  var x = 0;
-  switch (condition) {
-    case 0: {
-      x = non_uniform;
-      fallthrough;
-    }
-    case 42: {
-      if (x == 0) {
-        workgroupBarrier();
-      }
-    }
-    default: {
-    }
-  }
-}
-)";
-
-    RunTest(src, false);
-    EXPECT_EQ(
-        error_,
-        R"(test:10:7 warning: use of deprecated language feature: fallthrough is set to be removed from WGSL. Case can accept multiple selectors if the existing case bodies are empty. default is not yet supported in a case selector list.
-      fallthrough;
-      ^^^^^^^^^^^
-
-test:14:9 warning: 'workgroupBarrier' must only be called from uniform control flow
-        workgroupBarrier();
-        ^^^^^^^^^^^^^^^^
-
-test:13:7 note: control flow depends on non-uniform value
-      if (x == 0) {
-      ^^
-
-test:9:11 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
-      x = non_uniform;
-          ^^^^^^^^^^^
-)");
 }
 
 TEST_F(UniformityAnalysisTest, Switch_VarBecomesUniformInDifferentCase_WithBreak) {
@@ -3537,11 +3209,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:14:9 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:14:9 error: 'workgroupBarrier' must only be called from uniform control flow
         workgroupBarrier();
         ^^^^^^^^^^^^^^^^
 
-test:13:7 note: control flow depends on non-uniform value
+test:13:7 note: control flow depends on possibly non-uniform value
       if (x == 0) {
       ^^
 
@@ -3577,11 +3249,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:19:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:19:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:18:3 note: control flow depends on non-uniform value
+test:18:3 note: control flow depends on possibly non-uniform value
   if (x == 0) {
   ^^
 
@@ -3643,11 +3315,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:18:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:18:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:17:3 note: control flow depends on non-uniform value
+test:17:3 note: control flow depends on possibly non-uniform value
   if (x == 0) {
   ^^
 
@@ -3712,11 +3384,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:21:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:21:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:20:3 note: control flow depends on non-uniform value
+test:20:3 note: control flow depends on possibly non-uniform value
   if (x == 0) {
   ^^
 
@@ -3754,11 +3426,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:9:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:8:5 note: control flow depends on non-uniform value
+test:8:5 note: control flow depends on possibly non-uniform value
     if (x == 0) {
     ^^
 
@@ -3840,76 +3512,6 @@ fn foo() {
     RunTest(src, true);
 }
 
-TEST_F(UniformityAnalysisTest, Switch_NonUniformFunctionCall_Reconverge) {
-    // Switch statements reconverge at exit, so test that we can call workgroupBarrier() after a
-    // switch statement that contains a call to a function that causes non-uniform control flow.
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> n : i32;
-
-fn bar() {
-  if (n == 42) {
-    return;
-  } else {
-    return;
-  }
-}
-
-fn foo() {
-  switch (42) {
-    default: {
-      bar();
-      break;
-    }
-  }
-  workgroupBarrier();
-}
-)";
-
-    RunTest(src, true);
-}
-
-TEST_F(UniformityAnalysisTest, Switch_NonUniformFunctionDiscard_NoReconvergence) {
-    // Switch statements should not reconverge after non-uniform discards.
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> n : i32;
-
-fn bar() {
-  if (n == 42) {
-    discard;
-  }
-}
-
-fn foo() {
-  switch (42) {
-    default: {
-      bar();
-      break;
-    }
-  }
-  workgroupBarrier();
-}
-)";
-
-    RunTest(src, false);
-    EXPECT_EQ(error_,
-              R"(test:17:3 warning: 'workgroupBarrier' must only be called from uniform control flow
-  workgroupBarrier();
-  ^^^^^^^^^^^^^^^^
-
-test:13:7 note: calling 'bar' may cause subsequent control flow to be non-uniform
-      bar();
-      ^^^
-
-test:5:3 note: control flow depends on non-uniform value
-  if (n == 42) {
-  ^^
-
-test:5:7 note: reading from read_write storage buffer 'n' may result in a non-uniform value
-  if (n == 42) {
-      ^
-)");
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 /// Pointer tests.
 ////////////////////////////////////////////////////////////////////////////////
@@ -3929,11 +3531,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:3 note: control flow depends on non-uniform value
+test:7:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -3959,11 +3561,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:8:3 note: control flow depends on non-uniform value
+test:8:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -4024,11 +3626,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:11:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:11:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:3 note: control flow depends on non-uniform value
+test:7:3 note: control flow depends on possibly non-uniform value
   if (non_uniform == 0) {
   ^^
 
@@ -4052,11 +3654,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:7:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:7:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:6:3 note: control flow depends on non-uniform value
+test:6:3 note: control flow depends on possibly non-uniform value
   if (*&v == 0) {
   ^^
 
@@ -4066,7 +3668,7 @@ test:5:11 note: reading from read_write storage buffer 'non_uniform' may result 
 )");
 }
 
-TEST_F(UniformityAnalysisTest, LoadNonUniformThroughCapturedPointer) {
+TEST_F(UniformityAnalysisTest, LoadNonUniformLocalThroughCapturedPointer) {
     std::string src = R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 
@@ -4081,11 +3683,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:3 note: control flow depends on non-uniform value
+test:7:3 note: control flow depends on possibly non-uniform value
   if (*pv == 0) {
   ^^
 
@@ -4095,7 +3697,7 @@ test:5:11 note: reading from read_write storage buffer 'non_uniform' may result 
 )");
 }
 
-TEST_F(UniformityAnalysisTest, LoadNonUniformThroughPointerParameter) {
+TEST_F(UniformityAnalysisTest, LoadNonUniformLocalThroughPointerParameter) {
     std::string src = R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 
@@ -4113,13 +3715,205 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:12:7 warning: parameter 'p' of 'bar' must be uniform
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:5:3 note: control flow depends on possibly non-uniform value
+  if (*p == 0) {
+  ^^
+
+test:5:8 note: parameter 'p' of 'bar' may be non-uniform
+  if (*p == 0) {
+       ^
+
+test:12:7 note: possibly non-uniform value passed via pointer here
   bar(&v);
       ^
 
-test:6:5 note: 'workgroupBarrier' must only be called from uniform control flow
+test:11:11 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  var v = non_uniform;
+          ^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, LoadNonUniformGlobalThroughCapturedPointer) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn foo() {
+  let pv = &non_uniform;
+  if (*pv == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:7:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
+
+test:6:3 note: control flow depends on possibly non-uniform value
+  if (*pv == 0) {
+  ^^
+
+test:6:8 note: reading from 'pv' may result in a non-uniform value
+  if (*pv == 0) {
+       ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, LoadNonUniformGlobalThroughPointerParameter) {
+    std::string src = R"(
+enable chromium_experimental_full_ptr_parameters;
+
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn bar(p : ptr<storage, i32, read_write>) {
+  if (*p == 0) {
+    workgroupBarrier();
+  }
+}
+
+fn foo() {
+  bar(&non_uniform);
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:7:3 note: control flow depends on possibly non-uniform value
+  if (*p == 0) {
+  ^^
+
+test:7:8 note: parameter 'p' of 'bar' may be non-uniform
+  if (*p == 0) {
+       ^
+
+test:13:7 note: possibly non-uniform value passed via pointer here
+  bar(&non_uniform);
+      ^
+
+test:4:48 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+                                               ^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, LoadNonUniformGlobalThroughPointerParameter_ViaReturnValue) {
+    std::string src = R"(
+enable chromium_experimental_full_ptr_parameters;
+
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn bar(p : ptr<storage, i32, read_write>) -> i32 {
+  return *p;
+}
+
+fn foo() {
+  if (0 == bar(&non_uniform)) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:12:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:11:3 note: control flow depends on possibly non-uniform value
+  if (0 == bar(&non_uniform)) {
+  ^^
+
+test:4:48 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+                                               ^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, LoadNonUniformThroughPointerParameter_BecomesUniformAfterUse) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn bar(p : ptr<function, i32>) {
+  if (*p == 0) {
+    workgroupBarrier();
+  }
+  *p = 0;
+}
+
+fn foo() {
+  var v = non_uniform;
+  bar(&v);
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:5:3 note: control flow depends on possibly non-uniform value
+  if (*p == 0) {
+  ^^
+
+test:5:8 note: parameter 'p' of 'bar' may be non-uniform
+  if (*p == 0) {
+       ^
+
+test:13:7 note: possibly non-uniform value passed via pointer here
+  bar(&v);
+      ^
+
+test:12:11 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  var v = non_uniform;
+          ^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, LoadNonUniformThroughPointerParameter_BecomesUniformAfterCall) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn bar(p : ptr<function, i32>) {
+  if (*p == 0) {
+    workgroupBarrier();
+  }
+}
+
+fn foo() {
+  var v = non_uniform;
+  bar(&v);
+  v = 0;
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:5:3 note: control flow depends on possibly non-uniform value
+  if (*p == 0) {
+  ^^
+
+test:5:8 note: parameter 'p' of 'bar' may be non-uniform
+  if (*p == 0) {
+       ^
+
+test:12:7 note: possibly non-uniform value passed via pointer here
+  bar(&v);
+      ^
 
 test:11:11 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
   var v = non_uniform;
@@ -4171,6 +3965,222 @@ fn foo() {
     RunTest(src, true);
 }
 
+TEST_F(UniformityAnalysisTest, LoadUniformThroughNonUniformPointer) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn foo() {
+  // The contents of `v` are uniform.
+  var v = array<i32, 4>();
+  // The pointer `p` is non-uniform.
+  let p = &v[non_uniform];
+  if (*p == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:9:3 note: control flow depends on possibly non-uniform value
+  if (*p == 0) {
+  ^^
+
+test:8:14 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  let p = &v[non_uniform];
+             ^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, LoadUniformThroughNonUniformPointer_ViaParameter) {
+    std::string src = R"(
+enable chromium_experimental_full_ptr_parameters;
+
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn bar(p : ptr<function, array<i32, 4>>) {
+  // The pointer `p` is non-uniform.
+  let local_p = &(*p)[non_uniform];
+  if (*local_p == 0) {
+    workgroupBarrier();
+  }
+}
+
+fn foo() {
+  // The contents of `v` are uniform.
+  var v = array<i32, 4>();
+  let p = &v;
+  bar(p);
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:9:3 note: control flow depends on possibly non-uniform value
+  if (*local_p == 0) {
+  ^^
+
+test:8:23 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  let local_p = &(*p)[non_uniform];
+                      ^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, LoadUniformThroughNonUniformPointer_ViaParameterChain) {
+    std::string src = R"(
+enable chromium_experimental_full_ptr_parameters;
+
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn zoo(p : ptr<function, i32>) {
+  if (*p == 0) {
+    workgroupBarrier();
+  }
+}
+
+fn bar(p : ptr<function, i32>) {
+  zoo(p);
+}
+
+fn foo() {
+  // The contents of `v` are uniform.
+  var v = array<i32, 4>();
+  // The pointer `p` is non-uniform.
+  let p = &v[non_uniform];
+  bar(p);
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:7:3 note: control flow depends on possibly non-uniform value
+  if (*p == 0) {
+  ^^
+
+test:7:8 note: parameter 'p' of 'zoo' may be non-uniform
+  if (*p == 0) {
+       ^
+
+test:13:7 note: possibly non-uniform value passed via pointer here
+  zoo(p);
+      ^
+
+test:12:8 note: reading from 'p' may result in a non-uniform value
+fn bar(p : ptr<function, i32>) {
+       ^
+
+test:21:7 note: possibly non-uniform value passed via pointer here
+  bar(p);
+      ^
+
+test:20:14 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  let p = &v[non_uniform];
+             ^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, LoadNonUniformThroughUniformPointer) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+@group(0) @binding(1) var<storage, read> uniform_idx : i32;
+
+fn foo() {
+  // The contents of `v` are non-uniform.
+  var v = array<i32, 4>(0, 0, 0, non_uniform);
+  // The pointer `p` is uniform.
+  let p = &v[uniform_idx];
+  if (*p == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:11:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:10:3 note: control flow depends on possibly non-uniform value
+  if (*p == 0) {
+  ^^
+
+test:7:34 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  var v = array<i32, 4>(0, 0, 0, non_uniform);
+                                 ^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, LoadNonUniformThroughUniformPointer_ViaParameter) {
+    std::string src = R"(
+enable chromium_experimental_full_ptr_parameters;
+
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+@group(0) @binding(1) var<storage, read> uniform_idx : i32;
+
+fn zoo(p : ptr<function, i32>) {
+  if (*p == 0) {
+    workgroupBarrier();
+  }
+}
+
+fn bar(p : ptr<function, i32>) {
+  zoo(p);
+}
+
+fn foo() {
+  // The contents of `v` are non-uniform.
+  var v = array<i32, 4>(0, 0, 0, non_uniform);
+  // The pointer `p` is uniform.
+  let p = &v[uniform_idx];
+  bar(p);
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:8:3 note: control flow depends on possibly non-uniform value
+  if (*p == 0) {
+  ^^
+
+test:8:8 note: parameter 'p' of 'zoo' may be non-uniform
+  if (*p == 0) {
+       ^
+
+test:14:7 note: possibly non-uniform value passed via pointer here
+  zoo(p);
+      ^
+
+test:13:8 note: reading from 'p' may result in a non-uniform value
+fn bar(p : ptr<function, i32>) {
+       ^
+
+test:22:7 note: possibly non-uniform value passed via pointer here
+  bar(p);
+      ^
+
+test:19:34 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  var v = array<i32, 4>(0, 0, 0, non_uniform);
+                                 ^^^^^^^^^^^
+)");
+}
+
 TEST_F(UniformityAnalysisTest, StoreNonUniformAfterCapturingPointer) {
     std::string src = R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
@@ -4187,11 +4197,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:8:3 note: control flow depends on non-uniform value
+test:8:3 note: control flow depends on possibly non-uniform value
   if (*pv == 0) {
   ^^
 
@@ -4235,11 +4245,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:10:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:9:3 note: control flow depends on non-uniform value
+test:9:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -4265,11 +4275,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:8:3 note: control flow depends on non-uniform value
+test:8:3 note: control flow depends on possibly non-uniform value
   if (*&*&*pv2 == 0) {
   ^^
 
@@ -4297,11 +4307,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:11:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:11:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:10:3 note: control flow depends on non-uniform value
+test:10:3 note: control flow depends on possibly non-uniform value
   if (*pv1 == 0) {
   ^^
 
@@ -4348,11 +4358,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:11:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:11:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:10:3 note: control flow depends on non-uniform value
+test:10:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -4398,15 +4408,15 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:12:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:12:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:11:3 note: control flow depends on non-uniform value
+test:11:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
-test:10:7 note: pointer contents may become non-uniform after calling 'bar'
+test:10:7 note: contents of pointer may become non-uniform after calling 'bar'
   bar(&v);
       ^
 )");
@@ -4451,11 +4461,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:12:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:12:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:11:3 note: control flow depends on non-uniform value
+test:11:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -4485,11 +4495,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:13:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:13:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:12:3 note: control flow depends on non-uniform value
+test:12:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -4568,11 +4578,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:21:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:21:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:20:3 note: control flow depends on non-uniform value
+test:20:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -4662,15 +4672,15 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:18:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:18:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:17:3 note: control flow depends on non-uniform value
+test:17:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
-test:16:7 note: pointer contents may become non-uniform after calling 'bar'
+test:16:7 note: contents of pointer may become non-uniform after calling 'bar'
   bar(&v);
       ^
 )");
@@ -4699,15 +4709,15 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:16:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:16:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:15:3 note: control flow depends on non-uniform value
+test:15:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
-test:14:7 note: pointer contents may become non-uniform after calling 'bar'
+test:14:7 note: contents of pointer may become non-uniform after calling 'bar'
   bar(&v);
       ^
 )");
@@ -4736,15 +4746,15 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:16:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:16:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:15:3 note: control flow depends on non-uniform value
+test:15:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
-test:14:7 note: pointer contents may become non-uniform after calling 'bar'
+test:14:7 note: contents of pointer may become non-uniform after calling 'bar'
   bar(&v);
       ^
 )");
@@ -4781,15 +4791,15 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:24:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:24:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:23:3 note: control flow depends on non-uniform value
+test:23:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
-test:22:7 note: pointer contents may become non-uniform after calling 'bar'
+test:22:7 note: contents of pointer may become non-uniform after calling 'bar'
   bar(&v);
       ^
 )");
@@ -4820,15 +4830,15 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:18:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:18:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:17:3 note: control flow depends on non-uniform value
+test:17:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
-test:16:7 note: pointer contents may become non-uniform after calling 'bar'
+test:16:7 note: contents of pointer may become non-uniform after calling 'bar'
   bar(&v);
       ^
 )");
@@ -4856,11 +4866,11 @@ fn foo(p : ptr<function, i32>) {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:7:7 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:7:7 error: 'workgroupBarrier' must only be called from uniform control flow
       workgroupBarrier();
       ^^^^^^^^^^^^^^^^
 
-test:6:5 note: control flow depends on non-uniform value
+test:6:5 note: control flow depends on possibly non-uniform value
     if (*p == 0) {
     ^^
 
@@ -4892,11 +4902,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:15:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:15:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:14:3 note: control flow depends on non-uniform value
+test:14:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -4929,11 +4939,11 @@ fn main() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:16:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:16:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:11:3 note: control flow depends on non-uniform value
+test:11:3 note: control flow depends on possibly non-uniform value
   if (non_uniform_global == 0) {
   ^^
 
@@ -4966,11 +4976,11 @@ fn main() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:16:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:16:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:11:3 note: control flow depends on non-uniform value
+test:11:3 note: control flow depends on possibly non-uniform value
   if (non_uniform_global == 0) {
   ^^
 
@@ -5007,11 +5017,11 @@ fn main() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:20:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:20:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:15:3 note: control flow depends on non-uniform value
+test:15:3 note: control flow depends on possibly non-uniform value
   if (non_uniform_global == 0) {
   ^^
 
@@ -5066,11 +5076,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:14:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:14:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:13:3 note: control flow depends on non-uniform value
+test:13:3 note: control flow depends on possibly non-uniform value
   if (b == 0) {
   ^^
 
@@ -5123,15 +5133,15 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:14:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:14:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:13:3 note: control flow depends on non-uniform value
+test:13:3 note: control flow depends on possibly non-uniform value
   if (b == 0) {
   ^^
 
-test:12:11 note: pointer contents may become non-uniform after calling 'bar'
+test:12:11 note: contents of pointer may become non-uniform after calling 'bar'
   bar(&a, &b);
           ^
 )");
@@ -5178,11 +5188,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:12:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:12:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:11:3 note: control flow depends on non-uniform value
+test:11:3 note: control flow depends on possibly non-uniform value
   if (v == 1) {
   ^^
 
@@ -5216,15 +5226,15 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:14:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:14:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:13:3 note: control flow depends on non-uniform value
+test:13:3 note: control flow depends on possibly non-uniform value
   if (b == 0) {
   ^^
 
-test:12:11 note: pointer contents may become non-uniform after calling 'bar'
+test:12:11 note: contents of pointer may become non-uniform after calling 'bar'
   bar(&a, &b);
           ^
 )");
@@ -5256,11 +5266,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:16:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:16:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:15:3 note: control flow depends on non-uniform value
+test:15:3 note: control flow depends on possibly non-uniform value
   if (c == 0) {
   ^^
 
@@ -5291,8 +5301,8 @@ TEST_F(UniformityAnalysisTest, MaximumNumberOfPointerParameters) {
     }
     foo_body.Push(b.Decl(b.Let("rhs", rhs_init)));
     for (int i = 0; i < 255; i++) {
-        params.Push(
-            b.Param("p" + std::to_string(i), ty.pointer(ty.i32(), ast::StorageClass::kFunction)));
+        params.Push(b.Param("p" + std::to_string(i),
+                            ty.pointer(ty.i32(), builtin::AddressSpace::kFunction)));
         if (i > 0) {
             foo_body.Push(b.Assign(b.Deref("p" + std::to_string(i)), "rhs"));
         }
@@ -5311,7 +5321,7 @@ TEST_F(UniformityAnalysisTest, MaximumNumberOfPointerParameters) {
     //     workgroupBarrier();
     //   }
     // }
-    b.GlobalVar("non_uniform_global", ty.i32(), ast::StorageClass::kPrivate);
+    b.GlobalVar("non_uniform_global", ty.i32(), builtin::AddressSpace::kPrivate);
     utils::Vector<const ast::Statement*, 8> main_body;
     utils::Vector<const ast::Expression*, 8> args;
     for (int i = 0; i < 255; i++) {
@@ -5320,15 +5330,14 @@ TEST_F(UniformityAnalysisTest, MaximumNumberOfPointerParameters) {
         args.Push(b.AddressOf(name));
     }
     main_body.Push(b.Assign("v0", "non_uniform_global"));
-    main_body.Push(b.CallStmt(b.create<ast::CallExpression>(b.Expr("foo"), args)));
+    main_body.Push(b.CallStmt(b.Call("foo", args)));
     main_body.Push(b.If(b.Equal("v254", 0_i), b.Block(b.CallStmt(b.Call("workgroupBarrier")))));
     b.Func("main", utils::Empty, ty.void_(), main_body);
 
-    // TODO(jrprice): Expect false when uniformity issues become errors.
-    EXPECT_TRUE(RunTest(std::move(b))) << error_;
+    RunTest(std::move(b), false);
     EXPECT_EQ(error_,
-              R"(warning: 'workgroupBarrier' must only be called from uniform control flow
-note: control flow depends on non-uniform value
+              R"(error: 'workgroupBarrier' must only be called from uniform control flow
+note: control flow depends on possibly non-uniform value
 note: reading from module-scope private variable 'non_uniform_global' may result in a non-uniform value)");
 }
 
@@ -5363,11 +5372,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:6:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   if (v[2] == 0) {
   ^^
 
@@ -5392,11 +5401,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:3 note: control flow depends on non-uniform value
+test:7:3 note: control flow depends on possibly non-uniform value
   if (v[2] == 0) {
   ^^
 
@@ -5437,11 +5446,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:3 note: control flow depends on non-uniform value
+test:7:3 note: control flow depends on possibly non-uniform value
   if (v[2] == 0) {
   ^^
 
@@ -5452,7 +5461,7 @@ test:6:10 note: reading from read_write storage buffer 'rw' may result in a non-
 }
 
 TEST_F(UniformityAnalysisTest, VectorElement_ElementBecomesUniform) {
-    // For aggregate types, we conservatively consider them to be forever non-uniform once they
+    // For aggregate types, we conservatively consider them to be non-uniform once they
     // become non-uniform. Test that after assigning a uniform value to an element, that element is
     // still considered to be non-uniform.
     std::string src = R"(
@@ -5470,11 +5479,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:8:3 note: control flow depends on non-uniform value
+test:8:3 note: control flow depends on possibly non-uniform value
   if (v[1] == 0) {
   ^^
 
@@ -5484,8 +5493,156 @@ test:6:10 note: reading from read_write storage buffer 'rw' may result in a non-
 )");
 }
 
+TEST_F(UniformityAnalysisTest, VectorElement_VectorBecomesUniform_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var v : vec4<i32>;
+  v[1] = rw;
+  v = vec4(1, 2, 3, 4);
+  if (v[1] == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, VectorElementViaMember_VectorBecomesUniform_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var v : vec4<i32>;
+  v.y = rw;
+  v = vec4(1, 2, 3, 4);
+  if (v.y == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, VectorElement_VectorBecomesUniform_ThroughPointer_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var v : vec4<i32>;
+  v[1] = rw;
+  *(&v) = vec4(1, 2, 3, 4);
+  if (v[1] == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest,
+       VectorElement_VectorBecomesUniform_ThroughPointerChain_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var v : vec4<i32>;
+  v[1] = rw;
+  *(&(*(&(*(&v))))) = vec4(1, 2, 3, 4);
+  if (v[1] == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest,
+       VectorElement_VectorBecomesUniform_ThroughCapturedPointer_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var v : vec4<i32>;
+  v[1] = rw;
+  let p = &v;
+  *p = vec4(1, 2, 3, 4);
+  if (v[1] == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, VectorElement_VectorBecomesUniform_PartialAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var v : vec4<i32>;
+  v[1] = rw;
+  v = vec4(1, 2, 3, v[3]);
+  if (v[1] == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:8:3 note: control flow depends on possibly non-uniform value
+  if (v[1] == 0) {
+  ^^
+
+test:6:10 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  v[1] = rw;
+         ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, VectorElementViaMember_VectorBecomesUniform_PartialAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var v : vec4<i32>;
+  v.y = rw;
+  v = vec4(1, 2, 3, v.w);
+  if (v.y == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:8:3 note: control flow depends on possibly non-uniform value
+  if (v.y == 0) {
+  ^^
+
+test:6:9 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  v.y = rw;
+        ^^
+)");
+}
+
 TEST_F(UniformityAnalysisTest, VectorElement_DifferentElementBecomesUniform) {
-    // For aggregate types, we conservatively consider them to be forever non-uniform once they
+    // For aggregate types, we conservatively consider them to be non-uniform once they
     // become non-uniform. Test that after assigning a uniform value to an element, the whole vector
     // is still considered to be non-uniform.
     std::string src = R"(
@@ -5503,11 +5660,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:8:3 note: control flow depends on non-uniform value
+test:8:3 note: control flow depends on possibly non-uniform value
   if (v[1] == 0) {
   ^^
 
@@ -5532,17 +5689,478 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:3 note: control flow depends on non-uniform value
+test:7:3 note: control flow depends on possibly non-uniform value
   if (any(v == vec4(42))) {
   ^^
 
 test:6:10 note: reading from read_write storage buffer 'non_uniform_global' may result in a non-uniform value
   v[1] = non_uniform_global;
          ^^^^^^^^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, MatrixElement_ElementBecomesUniform) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to an element, that element is
+    // still considered to be non-uniform.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  m[1][1] = rw;
+  m[1][1] = 42.0;
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:8:3 note: control flow depends on possibly non-uniform value
+  if (m[1][1] == 0.0) {
+  ^^
+
+test:6:13 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  m[1][1] = rw;
+            ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, MatrixElement_ElementBecomesUniform_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  m[1][1] = rw;
+  m = mat3x3<f32>(vec3(1.0, 2.0, 3.0), vec3(4.0, 5.0, 6.0), vec3(7.0, 8.0, 9.0));
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, MatrixElement_ElementBecomesUniform_ThroughPointer_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  m[1][1] = rw;
+  *(&m) = mat3x3<f32>(vec3(1.0, 2.0, 3.0), vec3(4.0, 5.0, 6.0), vec3(7.0, 8.0, 9.0));
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest,
+       MatrixElement_ElementBecomesUniform_ThroughPointerChain_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  m[1][1] = rw;
+  *(&(*(&(*(&m))))) = mat3x3<f32>(vec3(1.0, 2.0, 3.0), vec3(4.0, 5.0, 6.0), vec3(7.0, 8.0, 9.0));
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest,
+       MatrixElement_ElementBecomesUniform_ThroughCapturedPointer_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  m[1][1] = rw;
+  let p = &m;
+  *p = mat3x3<f32>(vec3(1.0, 2.0, 3.0), vec3(4.0, 5.0, 6.0), vec3(7.0, 8.0, 9.0));
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, MatrixElement_ColumnBecomesUniform) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to an element, that element is
+    // still considered to be non-uniform.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  m[1][1] = rw;
+  m[1] = vec3(0.0, 42.0, 0.0);
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:8:3 note: control flow depends on possibly non-uniform value
+  if (m[1][1] == 0.0) {
+  ^^
+
+test:6:13 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  m[1][1] = rw;
+            ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, MatrixElement_ColumnBecomesUniform_ThroughPartialPointer) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to an element, that element is
+    // still considered to be non-uniform.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  m[1][1] = rw;
+  *(&(m[1])) = vec3(0.0, 42.0, 0.0);
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:8:3 note: control flow depends on possibly non-uniform value
+  if (m[1][1] == 0.0) {
+  ^^
+
+test:6:13 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  m[1][1] = rw;
+            ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, MatrixElement_ColumnBecomesUniform_ThroughPartialPointerChain) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to an element, that element is
+    // still considered to be non-uniform.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  m[1][1] = rw;
+  *(&(*(&(m[1])))) = vec3(0.0, 42.0, 0.0);
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:8:3 note: control flow depends on possibly non-uniform value
+  if (m[1][1] == 0.0) {
+  ^^
+
+test:6:13 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  m[1][1] = rw;
+            ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, MatrixElement_ColumnBecomesUniform_ThroughCapturedPartialPointer) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to an element, that element is
+    // still considered to be non-uniform.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  let p = &m[1];
+  m[1][1] = rw;
+  *p = vec3(0.0, 42.0, 0.0);
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:9:3 note: control flow depends on possibly non-uniform value
+  if (m[1][1] == 0.0) {
+  ^^
+
+test:7:13 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  m[1][1] = rw;
+            ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest,
+       MatrixElement_ColumnBecomesUniform_ThroughCapturedPartialPointerChain) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to an element, that element is
+    // still considered to be non-uniform.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  let p = &m[1];
+  m[1][1] = rw;
+  *(&(*p)) = vec3(0.0, 42.0, 0.0);
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:9:3 note: control flow depends on possibly non-uniform value
+  if (m[1][1] == 0.0) {
+  ^^
+
+test:7:13 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  m[1][1] = rw;
+            ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, MatrixElement_ColumnBecomesUniform_ThroughCapturedPointer) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to an element, that element is
+    // still considered to be non-uniform.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  let p = &m;
+  m[1][1] = rw;
+  (*p)[1] = vec3(0.0, 42.0, 0.0);
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:9:3 note: control flow depends on possibly non-uniform value
+  if (m[1][1] == 0.0) {
+  ^^
+
+test:7:13 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  m[1][1] = rw;
+            ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, MatrixElement_MatrixBecomesUniform_PartialAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  m[1][1] = rw;
+  m = mat3x3<f32>(vec3(1.0, 2.0, 3.0), vec3(4.0, 5.0, 6.0), m[2]);
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:8:3 note: control flow depends on possibly non-uniform value
+  if (m[1][1] == 0.0) {
+  ^^
+
+test:6:13 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  m[1][1] = rw;
+            ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest,
+       MatrixElement_MatrixBecomesUniform_PartialAssignment_ThroughPointer) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  m[1][1] = rw;
+  *(&m) = mat3x3<f32>(vec3(1.0, 2.0, 3.0), vec3(4.0, 5.0, 6.0), m[2]);
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:8:3 note: control flow depends on possibly non-uniform value
+  if (m[1][1] == 0.0) {
+  ^^
+
+test:6:13 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  m[1][1] = rw;
+            ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest,
+       MatrixElement_MatrixBecomesUniform_PartialAssignment_ThroughCapturedPointer) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  let p = &m;
+  m[1][1] = rw;
+  *p = mat3x3<f32>(vec3(1.0, 2.0, 3.0), vec3(4.0, 5.0, 6.0), (*p)[2]);
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:9:3 note: control flow depends on possibly non-uniform value
+  if (m[1][1] == 0.0) {
+  ^^
+
+test:7:13 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  m[1][1] = rw;
+            ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest,
+       MatrixElement_MatrixBecomesUniform_PartialAssignment_ThroughCapturedPointerChain) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  let p = &(*(&m));
+  m[1][1] = rw;
+  *p = mat3x3<f32>(vec3(1.0, 2.0, 3.0), vec3(4.0, 5.0, 6.0), (*p)[2]);
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:9:3 note: control flow depends on possibly non-uniform value
+  if (m[1][1] == 0.0) {
+  ^^
+
+test:7:13 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  m[1][1] = rw;
+            ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, MatrixElement_DifferentElementBecomesUniform) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : f32;
+
+fn foo() {
+  var m : mat3x3<f32>;
+  m[1][1] = rw;
+  m[2][2] = 42.0;
+  if (m[1][1] == 0.0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:8:3 note: control flow depends on possibly non-uniform value
+  if (m[1][1] == 0.0) {
+  ^^
+
+test:6:13 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  m[1][1] = rw;
+            ^^
 )");
 }
 
@@ -5581,11 +6199,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:10:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:9:3 note: control flow depends on non-uniform value
+test:9:3 note: control flow depends on possibly non-uniform value
   if (s.b == 0) {
   ^^
 
@@ -5614,11 +6232,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:12:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:12:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:11:3 note: control flow depends on non-uniform value
+test:11:3 note: control flow depends on possibly non-uniform value
   if (s.b == 0) {
   ^^
 
@@ -5667,11 +6285,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:12:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:12:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:11:3 note: control flow depends on non-uniform value
+test:11:3 note: control flow depends on possibly non-uniform value
   if (s.b == 0) {
   ^^
 
@@ -5682,7 +6300,7 @@ test:10:9 note: reading from read_write storage buffer 'rw' may result in a non-
 }
 
 TEST_F(UniformityAnalysisTest, StructMember_MemberBecomesUniform) {
-    // For aggregate types, we conservatively consider them to be forever non-uniform once they
+    // For aggregate types, we conservatively consider them to be non-uniform once they
     // become non-uniform. Test that after assigning a uniform value to a member, that member is
     // still considered to be non-uniform.
     std::string src = R"(
@@ -5704,11 +6322,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:13:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:13:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:12:3 note: control flow depends on non-uniform value
+test:12:3 note: control flow depends on possibly non-uniform value
   if (s.a == 0) {
   ^^
 
@@ -5718,8 +6336,349 @@ test:10:9 note: reading from read_write storage buffer 'rw' may result in a non-
 )");
 }
 
+TEST_F(UniformityAnalysisTest, StructMember_MemberBecomesUniformThroughCapturedPointer) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to a member, that member is
+    // still considered to be non-uniform.
+    std::string src = R"(
+struct S {
+  a : i32,
+  b : i32,
+}
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var s : S;
+  let p = &s;
+  s.a = rw;
+  (*p).a = 0;
+  if (s.a == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:14:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:13:3 note: control flow depends on possibly non-uniform value
+  if (s.a == 0) {
+  ^^
+
+test:11:9 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  s.a = rw;
+        ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, StructMember_MemberBecomesUniformThroughPartialPointer) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to a member, that member is
+    // still considered to be non-uniform.
+    std::string src = R"(
+struct S {
+  a : i32,
+  b : i32,
+}
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var s : S;
+  s.a = rw;
+  *&s.a = 0;
+  if (s.a == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:13:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:12:3 note: control flow depends on possibly non-uniform value
+  if (s.a == 0) {
+  ^^
+
+test:10:9 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  s.a = rw;
+        ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, StructMember_MemberBecomesUniformThroughCapturedPartialPointer) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to a member, that member is
+    // still considered to be non-uniform.
+    std::string src = R"(
+struct S {
+  a : i32,
+  b : i32,
+}
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var s : S;
+  let p = &s.a;
+  s.a = rw;
+  (*p) = 0;
+  if (s.a == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:14:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:13:3 note: control flow depends on possibly non-uniform value
+  if (s.a == 0) {
+  ^^
+
+test:11:9 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  s.a = rw;
+        ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, StructMember_StructBecomesUniform_FullAssignment) {
+    std::string src = R"(
+struct S {
+  a : i32,
+  b : i32,
+}
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var s : S;
+  s.a = rw;
+  s = S(1, 2);
+  if (s.a == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, StructMember_StructBecomesUniform_PartialAssignment) {
+    std::string src = R"(
+struct S {
+  a : i32,
+  b : i32,
+}
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var s : S;
+  s.a = rw;
+  s = S(1, s.b);
+  if (s.a == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:13:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:12:3 note: control flow depends on possibly non-uniform value
+  if (s.a == 0) {
+  ^^
+
+test:10:9 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  s.a = rw;
+        ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, StructMember_StructBecomesUniform_FullAssignment_ThroughPointer) {
+    std::string src = R"(
+struct S {
+  a : i32,
+  b : i32,
+}
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var s : S;
+  s.a = rw;
+  *(&s) = S(1, 2);
+  if (s.a == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest,
+       StructMember_StructBecomesUniform_FullAssignment_ThroughCapturedPointer) {
+    std::string src = R"(
+struct S {
+  a : i32,
+  b : i32,
+}
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var s : S;
+  let p = &s;
+  s.a = rw;
+  *p = S(1, 2);
+  if (s.a == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest,
+       StructMember_StructBecomesUniform_FullAssignment_ThroughCapturedPointerChain) {
+    std::string src = R"(
+struct S {
+  a : i32,
+  b : i32,
+}
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var s : S;
+  let p = &(*(&s));
+  s.a = rw;
+  *p = S(1, 2);
+  if (s.a == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, StructMember_StructBecomesUniform_PartialAssignment_ThroughPointer) {
+    std::string src = R"(
+struct S {
+  a : i32,
+  b : i32,
+}
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var s : S;
+  s.a = rw;
+  *(&s) = S(1, (*(&s)).b);
+  if (s.a == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:13:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:12:3 note: control flow depends on possibly non-uniform value
+  if (s.a == 0) {
+  ^^
+
+test:10:9 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  s.a = rw;
+        ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest,
+       StructMember_StructBecomesUniform_PartialAssignment_ThroughCapturedPointer) {
+    std::string src = R"(
+struct S {
+  a : i32,
+  b : i32,
+}
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var s : S;
+  let p = &s;
+  s.a = rw;
+  *p = S(1, (*p).b);
+  if (s.a == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:14:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:13:3 note: control flow depends on possibly non-uniform value
+  if (s.a == 0) {
+  ^^
+
+test:11:9 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  s.a = rw;
+        ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest,
+       StructMember_StructBecomesUniform_PartialAssignment_ThroughCapturedPointerChain) {
+    std::string src = R"(
+struct S {
+  a : i32,
+  b : i32,
+}
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var s : S;
+  let p = &(*(&s));
+  s.a = rw;
+  *p = S(1, (*p).b);
+  if (s.a == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:14:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:13:3 note: control flow depends on possibly non-uniform value
+  if (s.a == 0) {
+  ^^
+
+test:11:9 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  s.a = rw;
+        ^^
+)");
+}
+
 TEST_F(UniformityAnalysisTest, StructMember_DifferentMemberBecomesUniform) {
-    // For aggregate types, we conservatively consider them to be forever non-uniform once they
+    // For aggregate types, we conservatively consider them to be non-uniform once they
     // become non-uniform. Test that after assigning a uniform value to a member, the whole struct
     // is still considered to be non-uniform.
     std::string src = R"(
@@ -5741,11 +6700,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:13:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:13:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:12:3 note: control flow depends on non-uniform value
+test:12:3 note: control flow depends on possibly non-uniform value
   if (s.a == 0) {
   ^^
 
@@ -5782,11 +6741,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:6:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   if (arr[7] == 0) {
   ^^
 
@@ -5811,11 +6770,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:3 note: control flow depends on non-uniform value
+test:7:3 note: control flow depends on possibly non-uniform value
   if (arr[2] == 0) {
   ^^
 
@@ -5856,11 +6815,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:3 note: control flow depends on non-uniform value
+test:7:3 note: control flow depends on possibly non-uniform value
   if (arr[2] == 0) {
   ^^
 
@@ -5870,7 +6829,8 @@ test:6:12 note: reading from read_write storage buffer 'rw' may result in a non-
 )");
 }
 
-TEST_F(UniformityAnalysisTest, ArrayElement_DifferentElementBecomesNonUniformThroughPointer) {
+TEST_F(UniformityAnalysisTest,
+       ArrayElement_DifferentElementBecomesNonUniformThroughPartialPointer) {
     std::string src = R"(
 @group(0) @binding(0) var<storage, read_write> rw : i32;
 
@@ -5886,11 +6846,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:8:3 note: control flow depends on non-uniform value
+test:8:3 note: control flow depends on possibly non-uniform value
   if (arr[2] == 0) {
   ^^
 
@@ -5919,11 +6879,58 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:8:3 note: control flow depends on non-uniform value
+test:8:3 note: control flow depends on possibly non-uniform value
+  if (arr[1] == 0) {
+  ^^
+
+test:6:12 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  arr[1] = rw;
+           ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, ArrayElement_ElementBecomesUniform_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var arr : array<i32, 4>;
+  arr[1] = rw;
+  arr = array<i32, 4>(1, 2, 3, 4);
+  if (arr[1] == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, ArrayElement_ElementBecomesUniform_PartialAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var arr : array<i32, 4>;
+  arr[1] = rw;
+  arr = array<i32, 4>(1, 2, 3, arr[3]);
+  if (arr[1] == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:8:3 note: control flow depends on possibly non-uniform value
   if (arr[1] == 0) {
   ^^
 
@@ -5934,7 +6941,7 @@ test:6:12 note: reading from read_write storage buffer 'rw' may result in a non-
 }
 
 TEST_F(UniformityAnalysisTest, ArrayElement_DifferentElementBecomesUniform) {
-    // For aggregate types, we conservatively consider them to be forever non-uniform once they
+    // For aggregate types, we conservatively consider them to be non-uniform once they
     // become non-uniform. Test that after assigning a uniform value to an element, the whole array
     // is still considered to be non-uniform.
     std::string src = R"(
@@ -5952,11 +6959,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:9:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:8:3 note: control flow depends on non-uniform value
+test:8:3 note: control flow depends on possibly non-uniform value
   if (arr[1] == 0) {
   ^^
 
@@ -5966,8 +6973,74 @@ test:6:12 note: reading from read_write storage buffer 'rw' may result in a non-
 )");
 }
 
-TEST_F(UniformityAnalysisTest, ArrayElement_ElementBecomesUniformThroughPointer) {
-    // For aggregate types, we conservatively consider them to be forever non-uniform once they
+TEST_F(UniformityAnalysisTest, ArrayElement_ElementBecomesUniform_ThroughPartialPointer) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to an element through a
+    // pointer, the whole array is still considered to be non-uniform.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var arr : array<i32, 4>;
+  arr[1] = rw;
+  *(&(arr[2])) = 42;
+  if (arr[1] == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:8:3 note: control flow depends on possibly non-uniform value
+  if (arr[1] == 0) {
+  ^^
+
+test:6:12 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  arr[1] = rw;
+           ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, ArrayElement_ElementBecomesUniform_ThroughPartialPointerChain) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to an element through a
+    // pointer, the whole array is still considered to be non-uniform.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var arr : array<i32, 4>;
+  arr[1] = rw;
+  *(&(*(&(*(&(arr[2])))))) = 42;
+  if (arr[1] == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:9:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:8:3 note: control flow depends on possibly non-uniform value
+  if (arr[1] == 0) {
+  ^^
+
+test:6:12 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  arr[1] = rw;
+           ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, ArrayElement_ElementBecomesUniform_ThroughCapturedPartialPointer) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
     // become non-uniform. Test that after assigning a uniform value to an element through a
     // pointer, the whole array is still considered to be non-uniform.
     std::string src = R"(
@@ -5986,11 +7059,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:10:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:9:3 note: control flow depends on non-uniform value
+test:9:3 note: control flow depends on possibly non-uniform value
   if (arr[1] == 0) {
   ^^
 
@@ -6000,34 +7073,195 @@ test:7:12 note: reading from read_write storage buffer 'rw' may result in a non-
 )");
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// Miscellaneous statement and expression tests.
-////////////////////////////////////////////////////////////////////////////////
-
-TEST_F(UniformityAnalysisTest, FunctionRequiresUniformFlowAndCausesNonUniformFlow) {
-    // Test that a function that requires uniform flow and then causes non-uniform flow can be
-    // called without error.
+TEST_F(UniformityAnalysisTest,
+       ArrayElement_ElementBecomesUniform_ThroughCapturedPartialPointerChain) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to an element through a
+    // pointer, the whole array is still considered to be non-uniform.
     std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> non_uniform_global : i32;
+@group(0) @binding(0) var<storage, read_write> rw : i32;
 
 fn foo() {
-  _ = dpdx(0.5);
-
-  if (non_uniform_global == 0) {
-    discard;
+  var arr : array<i32, 4>;
+  let pa = &(*(&arr[2]));
+  arr[1] = rw;
+  *pa = 42;
+  if (arr[1] == 0) {
+    workgroupBarrier();
   }
 }
+)";
 
-@fragment
-fn main() {
-  foo();
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:9:3 note: control flow depends on possibly non-uniform value
+  if (arr[1] == 0) {
+  ^^
+
+test:7:12 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  arr[1] = rw;
+           ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, ArrayElement_ElementBecomesUniform_ThroughCapturedPointer) {
+    // For aggregate types, we conservatively consider them to be non-uniform once they
+    // become non-uniform. Test that after assigning a uniform value to an element through a
+    // pointer, the whole array is still considered to be non-uniform.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var arr : array<i32, 4>;
+  let pa = &arr;
+  arr[1] = rw;
+  (*pa)[2] = 42;
+  if (arr[1] == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:10:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:9:3 note: control flow depends on possibly non-uniform value
+  if (arr[1] == 0) {
+  ^^
+
+test:7:12 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  arr[1] = rw;
+           ^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, ArrayElement_ArrayBecomesUniform_ThroughPointer_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var arr : array<i32, 4>;
+  arr[1] = rw;
+  *(&arr) = array<i32, 4>();
+  if (arr[1] == 0) {
+    workgroupBarrier();
+  }
 }
 )";
 
     RunTest(src, true);
 }
 
-TEST_F(UniformityAnalysisTest, TypeConstructor) {
+TEST_F(UniformityAnalysisTest,
+       ArrayElement_ArrayBecomesUniform_ThroughPointerChain_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var arr : array<i32, 4>;
+  arr[1] = rw;
+  *(&(*(&(*(&arr))))) = array<i32, 4>();
+  if (arr[1] == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest,
+       ArrayElement_ArrayBecomesUniform_ThroughCapturedPointer_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var arr : array<i32, 4>;
+  let pa = &arr;
+  arr[1] = rw;
+  *pa = array<i32, 4>();
+  if (arr[1] == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest,
+       ArrayElement_ArrayBecomesUniform_ThroughCapturedPointerChain_FullAssignment) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+fn foo() {
+  var arr : array<i32, 4>;
+  let pa = &(*(&arr));
+  arr[1] = rw;
+  *pa = array<i32, 4>();
+  if (arr[1] == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Miscellaneous statement and expression tests.
+////////////////////////////////////////////////////////////////////////////////
+
+TEST_F(UniformityAnalysisTest, NonUniformDiscard) {
+    // Non-uniform discard statements should not cause uniformity issues.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn foo() {
+  if (non_uniform == 42) {
+    discard;
+  }
+  _ = dpdx(1.0);
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, FunctionReconvergesOnExit) {
+    // Call a function that has returns during non-uniform control flow, and test that the analysis
+    // reconverges when returning to the caller.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> rw : i32;
+
+var<private> p : i32;
+
+fn foo() {
+  if (rw == 0) {
+    p = 42;
+    return;
+  }
+  p = 5;
+  return;
+}
+
+fn main() {
+  foo();
+  workgroupBarrier();
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, TypeInitializer) {
     std::string src = R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform_global : i32;
 
@@ -6040,11 +7274,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:6:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   if (i32(non_uniform_global) == 0) {
   ^^
 
@@ -6067,11 +7301,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:6:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   if (f32(non_uniform_global) == 0.0) {
   ^^
 
@@ -6094,11 +7328,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:6:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   if (bitcast<f32>(non_uniform_global) == 0.0) {
   ^^
 
@@ -6124,11 +7358,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:3 note: control flow depends on non-uniform value
+test:7:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -6154,11 +7388,11 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:8:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:7:3 note: control flow depends on non-uniform value
+test:7:3 note: control flow depends on possibly non-uniform value
   if (v == 0) {
   ^^
 
@@ -6168,158 +7402,411 @@ test:5:11 note: reading from read_write storage buffer 'rw' may result in a non-
 )");
 }
 
-TEST_F(UniformityAnalysisTest, PhonyAssignment_LhsCausesNonUniformControlFlow) {
+TEST_F(UniformityAnalysisTest, CompoundAssignment_Global) {
+    // Use compound assignment on a global variable.
+    // Tests that we do not assume there is always a variable node for the LHS, but we still process
+    // the expression.
     std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> nonuniform_var : i32;
+@group(0) @binding(0) var<storage, read_write> rw : i32;
 
-fn bar() -> i32 {
-  if (nonuniform_var == 42) {
-    return 1;
-  } else {
-    return 2;
+var<private> v : array<i32, 4>;
+
+fn bar(p : ptr<function, i32>) -> i32 {
+  if (*p == 0) {
+    workgroupBarrier();
   }
+  return 0;
 }
 
 fn foo() {
-  _ = bar();
-  workgroupBarrier();
+  var f = rw;
+  v[bar(&f)] += 1;
 }
 )";
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:14:3 warning: 'workgroupBarrier' must only be called from uniform control flow
-  workgroupBarrier();
-  ^^^^^^^^^^^^^^^^
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
 
-test:13:7 note: calling 'bar' may cause subsequent control flow to be non-uniform
-  _ = bar();
-      ^^^
-
-test:5:3 note: control flow depends on non-uniform value
-  if (nonuniform_var == 42) {
+test:7:3 note: control flow depends on possibly non-uniform value
+  if (*p == 0) {
   ^^
 
-test:5:7 note: reading from read_write storage buffer 'nonuniform_var' may result in a non-uniform value
-  if (nonuniform_var == 42) {
-      ^^^^^^^^^^^^^^
+test:7:8 note: parameter 'p' of 'bar' may be non-uniform
+  if (*p == 0) {
+       ^
+
+test:15:9 note: possibly non-uniform value passed via pointer here
+  v[bar(&f)] += 1;
+        ^
+
+test:14:11 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  var f = rw;
+          ^^
 )");
 }
 
-TEST_F(UniformityAnalysisTest, ShortCircuiting_NoReconvergeLHS) {
+TEST_F(UniformityAnalysisTest, IncDec_StillNonUniform) {
+    // Use increment on a variable that is already non-uniform.
     std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> non_uniform_global : i32;
+@group(0) @binding(0) var<storage, read_write> rw : i32;
 
-var<private> p : i32;
-
-fn non_uniform_discard_func() -> bool {
-  if (non_uniform_global == 42) {
-    discard;
+fn foo() {
+  var v = rw;
+  v++;
+  if (v == 0) {
+    workgroupBarrier();
   }
-  return false;
-}
-
-fn main() {
-  let b = non_uniform_discard_func() && false;
-  workgroupBarrier();
 }
 )";
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:15:3 warning: 'workgroupBarrier' must only be called from uniform control flow
-  workgroupBarrier();
-  ^^^^^^^^^^^^^^^^
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
 
-test:14:11 note: calling 'non_uniform_discard_func' may cause subsequent control flow to be non-uniform
-  let b = non_uniform_discard_func() && false;
-          ^^^^^^^^^^^^^^^^^^^^^^^^
-
-test:7:3 note: control flow depends on non-uniform value
-  if (non_uniform_global == 42) {
+test:7:3 note: control flow depends on possibly non-uniform value
+  if (v == 0) {
   ^^
 
-test:7:7 note: reading from read_write storage buffer 'non_uniform_global' may result in a non-uniform value
-  if (non_uniform_global == 42) {
-      ^^^^^^^^^^^^^^^^^^
+test:5:11 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  var v = rw;
+          ^^
 )");
 }
 
-TEST_F(UniformityAnalysisTest, ShortCircuiting_NoReconvergeRHS) {
+TEST_F(UniformityAnalysisTest, IncDec_Global) {
+    // Use increment on a global variable.
+    // Tests that we do not assume there is always a variable node for the LHS, but we still process
+    // the expression.
     std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> non_uniform_global : i32;
+@group(0) @binding(0) var<storage, read_write> rw : i32;
 
-var<private> p : i32;
+var<private> v : array<i32, 4>;
 
-fn non_uniform_discard_func() -> bool {
-  if (non_uniform_global == 42) {
-    discard;
+fn bar(p : ptr<function, i32>) -> i32 {
+  if (*p == 0) {
+    workgroupBarrier();
   }
-  return false;
+  return 0;
 }
 
-fn main() {
-  let b = false && non_uniform_discard_func();
-  workgroupBarrier();
+fn foo() {
+  var f = rw;
+  v[bar(&f)]++;
 }
 )";
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:15:3 warning: 'workgroupBarrier' must only be called from uniform control flow
-  workgroupBarrier();
-  ^^^^^^^^^^^^^^^^
+              R"(test:8:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
 
-test:14:20 note: calling 'non_uniform_discard_func' may cause subsequent control flow to be non-uniform
-  let b = false && non_uniform_discard_func();
-                   ^^^^^^^^^^^^^^^^^^^^^^^^
-
-test:7:3 note: control flow depends on non-uniform value
-  if (non_uniform_global == 42) {
+test:7:3 note: control flow depends on possibly non-uniform value
+  if (*p == 0) {
   ^^
 
-test:7:7 note: reading from read_write storage buffer 'non_uniform_global' may result in a non-uniform value
-  if (non_uniform_global == 42) {
-      ^^^^^^^^^^^^^^^^^^
+test:7:8 note: parameter 'p' of 'bar' may be non-uniform
+  if (*p == 0) {
+       ^
+
+test:15:9 note: possibly non-uniform value passed via pointer here
+  v[bar(&f)]++;
+        ^
+
+test:14:11 note: reading from read_write storage buffer 'rw' may result in a non-uniform value
+  var f = rw;
+          ^^
 )");
 }
 
-TEST_F(UniformityAnalysisTest, ShortCircuiting_NoReconvergeBoth) {
+TEST_F(UniformityAnalysisTest, AssignmentEval_LHS_Then_RHS_Pass) {
     std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> non_uniform_global : i32;
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 
-var<private> p : i32;
-
-fn non_uniform_discard_func() -> bool {
-  if (non_uniform_global == 42) {
-    discard;
-  }
-  return false;
+fn b(p : ptr<function, i32>) -> i32 {
+  *p = non_uniform;
+  return 0;
 }
 
-fn main() {
-  let b = non_uniform_discard_func() && non_uniform_discard_func();
-  workgroupBarrier();
+fn a(p : ptr<function, i32>) -> i32 {
+  if (*p == 0) {
+    workgroupBarrier();
+  }
+  return 0;
+}
+
+fn foo() {
+  var i = 0;
+  var arr : array<i32, 4>;
+  arr[a(&i)] = arr[b(&i)];
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, AssignmentEval_LHS_Then_RHS_Fail) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn a(p : ptr<function, i32>) -> i32 {
+  *p = non_uniform;
+  return 0;
+}
+
+fn b(p : ptr<function, i32>) -> i32 {
+  if (*p == 0) {
+    workgroupBarrier();
+  }
+  return 0;
+}
+
+fn foo() {
+  var i = 0;
+  var arr : array<i32, 4>;
+  arr[a(&i)] = arr[b(&i)];
 }
 )";
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:15:3 warning: 'workgroupBarrier' must only be called from uniform control flow
-  workgroupBarrier();
-  ^^^^^^^^^^^^^^^^
+              R"(test:11:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
 
-test:14:41 note: calling 'non_uniform_discard_func' may cause subsequent control flow to be non-uniform
-  let b = non_uniform_discard_func() && non_uniform_discard_func();
-                                        ^^^^^^^^^^^^^^^^^^^^^^^^
-
-test:7:3 note: control flow depends on non-uniform value
-  if (non_uniform_global == 42) {
+test:10:3 note: control flow depends on possibly non-uniform value
+  if (*p == 0) {
   ^^
 
-test:7:7 note: reading from read_write storage buffer 'non_uniform_global' may result in a non-uniform value
-  if (non_uniform_global == 42) {
-      ^^^^^^^^^^^^^^^^^^
+test:10:8 note: parameter 'p' of 'b' may be non-uniform
+  if (*p == 0) {
+       ^
+
+test:19:22 note: possibly non-uniform value passed via pointer here
+  arr[a(&i)] = arr[b(&i)];
+                     ^
+
+test:19:9 note: contents of pointer may become non-uniform after calling 'a'
+  arr[a(&i)] = arr[b(&i)];
+        ^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, CompoundAssignmentEval_LHS_Then_RHS_Pass) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn b(p : ptr<function, i32>) -> i32 {
+  *p = non_uniform;
+  return 0;
+}
+
+fn a(p : ptr<function, i32>) -> i32 {
+  if (*p == 0) {
+    workgroupBarrier();
+  }
+  return 0;
+}
+
+fn foo() {
+  var i = 0;
+  var arr : array<i32, 4>;
+  arr[a(&i)] += arr[b(&i)];
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, CompoundAssignmentEval_LHS_Then_RHS_Fail) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn a(p : ptr<function, i32>) -> i32 {
+  *p = non_uniform;
+  return 0;
+}
+
+fn b(p : ptr<function, i32>) -> i32 {
+  if (*p == 0) {
+    workgroupBarrier();
+  }
+  return 0;
+}
+
+fn foo() {
+  var i = 0;
+  var arr : array<i32, 4>;
+  arr[a(&i)] += arr[b(&i)];
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:11:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:10:3 note: control flow depends on possibly non-uniform value
+  if (*p == 0) {
+  ^^
+
+test:10:8 note: parameter 'p' of 'b' may be non-uniform
+  if (*p == 0) {
+       ^
+
+test:19:23 note: possibly non-uniform value passed via pointer here
+  arr[a(&i)] += arr[b(&i)];
+                      ^
+
+test:19:9 note: contents of pointer may become non-uniform after calling 'a'
+  arr[a(&i)] += arr[b(&i)];
+        ^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, CompoundAssignmentEval_RHS_Makes_LHS_NonUniform_After_Load) {
+    // Test that the LHS is loaded from before the RHS makes is evaluated.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn bar(p : ptr<function, i32>) -> i32 {
+  *p = non_uniform;
+  return 0;
+}
+
+fn foo() {
+  var i = 0;
+  var arr : array<i32, 4>;
+  i += arr[bar(&i)];
+  if (i == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, CompoundAssignmentEval_RHS_Makes_LHS_Uniform_After_Load) {
+    // Test that the LHS is loaded from before the RHS makes is evaluated.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn bar(p : ptr<function, i32>) -> i32 {
+  *p = 0;
+  return 0;
+}
+
+fn foo() {
+  var i = non_uniform;
+  var arr : array<i32, 4>;
+  i += arr[bar(&i)];
+  if (i == 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:14:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:13:3 note: control flow depends on possibly non-uniform value
+  if (i == 0) {
+  ^^
+
+test:10:11 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  var i = non_uniform;
+          ^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, CompoundAssignmentEval_LHS_OnlyOnce) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn bar(p : ptr<function, i32>) -> i32 {
+  if (*p == 0) {
+    workgroupBarrier();
+  }
+  *p = non_uniform;
+  return 0;
+}
+
+fn foo(){
+  var f : i32 = 0;
+  var arr : array<i32, 4>;
+  arr[bar(&f)] += 1;
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, IncDec_LHS_OnlyOnce) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn bar(p : ptr<function, i32>) -> i32 {
+  if (*p == 0) {
+    workgroupBarrier();
+  }
+  *p = non_uniform;
+  return 0;
+}
+
+fn foo(){
+  var f : i32 = 0;
+  var arr : array<i32, 4>;
+  arr[bar(&f)]++;
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, ShortCircuiting_UniformLHS) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read> uniform_global : i32;
+
+fn main() {
+  let b = (uniform_global == 0) && (dpdx(1.0) == 0.0);
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, ShortCircuiting_NonUniformLHS) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform_global : i32;
+
+fn main() {
+  let b = (non_uniform_global == 0) && (dpdx(1.0) == 0.0);
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:5:41 error: 'dpdx' must only be called from uniform control flow
+  let b = (non_uniform_global == 0) && (dpdx(1.0) == 0.0);
+                                        ^^^^^^^^^
+
+test:5:37 note: control flow depends on possibly non-uniform value
+  let b = (non_uniform_global == 0) && (dpdx(1.0) == 0.0);
+                                    ^^
+
+test:5:12 note: reading from read_write storage buffer 'non_uniform_global' may result in a non-uniform value
+  let b = (non_uniform_global == 0) && (dpdx(1.0) == 0.0);
+           ^^^^^^^^^^^^^^^^^^
 )");
 }
 
@@ -6327,17 +7814,8 @@ TEST_F(UniformityAnalysisTest, ShortCircuiting_ReconvergeLHS) {
     std::string src = R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform_global : i32;
 
-var<private> p : i32;
-
-fn uniform_discard_func() -> bool {
-  if (true) {
-    discard;
-  }
-  return false;
-}
-
 fn main() {
-  let b = uniform_discard_func() && false;
+  let b = (non_uniform_global == 0) && false;
   workgroupBarrier();
 }
 )";
@@ -6349,17 +7827,8 @@ TEST_F(UniformityAnalysisTest, ShortCircuiting_ReconvergeRHS) {
     std::string src = R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform_global : i32;
 
-var<private> p : i32;
-
-fn uniform_discard_func() -> bool {
-  if (true) {
-    discard;
-  }
-  return false;
-}
-
 fn main() {
-  let b = false && uniform_discard_func();
+  let b = false && (non_uniform_global == 0);
   workgroupBarrier();
 }
 )";
@@ -6371,17 +7840,8 @@ TEST_F(UniformityAnalysisTest, ShortCircuiting_ReconvergeBoth) {
     std::string src = R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform_global : i32;
 
-var<private> p : i32;
-
-fn uniform_discard_func() -> bool {
-  if (true) {
-    discard;
-  }
-  return false;
-}
-
 fn main() {
-  let b = uniform_discard_func() && uniform_discard_func();
+  let b = (non_uniform_global != 0) && (non_uniform_global != 42);
   workgroupBarrier();
 }
 )";
@@ -6405,22 +7865,6 @@ fn foo() {
     RunTest(src, true);
 }
 
-TEST_F(UniformityAnalysisTest, DeadCode_AfterDiscard) {
-    // Dead code after a discard statement shouldn't cause uniformity errors.
-    std::string src = R"(
-@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
-
-fn foo() {
-  discard;
-  if (non_uniform == 42) {
-    workgroupBarrier();
-  }
-}
-)";
-
-    RunTest(src, true);
-}
-
 TEST_F(UniformityAnalysisTest, ArrayLength) {
     std::string src = R"(
 @group(0) @binding(0) var<storage, read_write> arr : array<f32>;
@@ -6433,6 +7877,296 @@ fn foo() {
 )";
 
     RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, ArrayLength_OnPtrArg) {
+    std::string src = R"(
+enable chromium_experimental_full_ptr_parameters;
+
+@group(0) @binding(0) var<storage, read_write> arr : array<f32>;
+
+fn bar(p : ptr<storage, array<f32>, read_write>) {
+  for (var i = 0u; i < arrayLength(p); i++) {
+    workgroupBarrier();
+  }
+}
+
+fn foo() {
+  bar(&arr);
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, ArrayLength_PtrArgRequiredToBeUniformForRetval_Pass) {
+    std::string src = R"(
+enable chromium_experimental_full_ptr_parameters;
+
+@group(0) @binding(0) var<storage, read_write> arr : array<f32>;
+
+fn length(p : ptr<storage, array<f32>, read_write>) -> u32 {
+  return arrayLength(p);
+}
+
+fn foo() {
+  for (var i = 0u; i < length(&arr); i++) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+// TODO(jrprice): This test requires variable pointers.
+TEST_F(UniformityAnalysisTest, DISABLED_ArrayLength_PtrArgRequiredToBeUniformForRetval_Fail) {
+    std::string src = R"(
+enable chromium_experimental_full_ptr_parameters;
+
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+@group(0) @binding(1) var<storage, read_write> arr1 : array<f32>;
+@group(0) @binding(2) var<storage, read_write> arr2 : array<f32>;
+
+fn length(p : ptr<storage, array<f32>, read_write>) -> u32 {
+  return arrayLength(p);
+}
+
+fn foo() {
+  let non_uniform_ptr = select(&arr1, &arr2, non_uniform == 0);
+  let len = length(non_uniform_ptr);
+  if (len > 10) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:16:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:15:3 note: control flow depends on non-uniform value
+  if (len > 10) {
+  ^^
+
+test:14:20 note: passing non-uniform pointer to 'length' may produce a non-uniform output
+  let len = length(non_uniform_ptr, &len);
+                   ^^^^^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, ArrayLength_PtrArgRequiredToBeUniformForOtherPtrResult_Pass) {
+    std::string src = R"(
+enable chromium_experimental_full_ptr_parameters;
+
+@group(0) @binding(0) var<storage, read_write> arr : array<f32>;
+
+fn length(p : ptr<storage, array<f32>, read_write>, out : ptr<function, u32>) {
+  *out = arrayLength(p);
+}
+
+fn foo() {
+  var len : u32;
+  length(&arr, &len);
+  if (len > 10) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+// TODO(jrprice): This test requires variable pointers.
+TEST_F(UniformityAnalysisTest,
+       DISABLED_ArrayLength_PtrArgRequiredToBeUniformForOtherPtrResult_Fail) {
+    std::string src = R"(
+enable chromium_experimental_full_ptr_parameters;
+
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+@group(0) @binding(1) var<storage, read_write> arr1 : array<f32>;
+@group(0) @binding(2) var<storage, read_write> arr2 : array<f32>;
+
+fn length(p : ptr<storage, array<f32>, read_write>, out : ptr<function, u32>) {
+  *out = arrayLength(p);
+}
+
+fn foo() {
+  var len : u32;
+  let non_uniform_ptr = select(&arr1, &arr2, non_uniform == 0);
+  length(non_uniform_ptr, &len);
+  if (len > 10) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:17:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:16:3 note: control flow depends on non-uniform value
+  if (len > 10) {
+  ^^
+
+test:15:10 note: passing non-uniform pointer to 'length' may produce a non-uniform output
+  length(non_uniform_ptr, &len);
+         ^^^^^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, ArrayLength_PtrArgRequiresUniformityAndAffectsReturnValue) {
+    // Test that a single pointer argument can directly require uniformity as well as affecting the
+    // uniformity of the return value.
+    std::string src = R"(
+enable chromium_experimental_full_ptr_parameters;
+
+@group(0) @binding(0) var<storage, read_write> arr : array<u32>;
+
+fn bar(p : ptr<storage, array<u32>, read_write>) -> u32 {
+  // This requires `p` to always be uniform.
+  if (arrayLength(p) == 10) {
+    workgroupBarrier();
+  }
+
+  // This requires the contents of `p` to be uniform in order for the return value to be uniform.
+  return (*p)[0];
+}
+
+fn foo() {
+  let p = &arr;
+  // We pass a uniform pointer, so the direct uniformity requirement on the parameter is satisfied.
+  if (0 == bar(p)) {
+    // This will fail as the return value of `p` is non-uniform due to non-uniform contents of `p`.
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:21:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:19:3 note: control flow depends on possibly non-uniform value
+  if (0 == bar(p)) {
+  ^^
+
+test:4:48 note: reading from read_write storage buffer 'arr' may result in a non-uniform value
+@group(0) @binding(0) var<storage, read_write> arr : array<u32>;
+                                               ^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, WorkgroupUniformLoad) {
+    std::string src = R"(
+const wgsize = 4;
+var<workgroup> data : array<u32, wgsize>;
+
+@compute @workgroup_size(wgsize)
+fn main(@builtin(local_invocation_index) idx : u32) {
+  data[idx] = idx + 1;
+  if (workgroupUniformLoad(&data[0]) > 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, WorkgroupUniformLoad_ViaPtrArg) {
+    std::string src = R"(
+enable chromium_experimental_full_ptr_parameters;
+
+const wgsize = 4;
+var<workgroup> data : array<u32, wgsize>;
+
+fn foo(p : ptr<workgroup, u32>) -> u32 {
+  return workgroupUniformLoad(p);
+}
+
+@compute @workgroup_size(wgsize)
+fn main(@builtin(local_invocation_index) idx : u32) {
+  data[idx] = idx + 1;
+  if (foo(&data[0]) > 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, true);
+}
+
+TEST_F(UniformityAnalysisTest, WorkgroupUniformLoad_NonUniformPtr) {
+    std::string src = R"(
+const wgsize = 4;
+var<workgroup> data : array<u32, wgsize>;
+
+@compute @workgroup_size(wgsize)
+fn main(@builtin(local_invocation_index) idx : u32) {
+  data[idx] = idx + 1;
+  if (workgroupUniformLoad(&data[idx]) > 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:8:28 error: possibly non-uniform value passed here
+  if (workgroupUniformLoad(&data[idx]) > 0) {
+                           ^
+
+test:8:34 note: builtin 'idx' of 'main' may be non-uniform
+  if (workgroupUniformLoad(&data[idx]) > 0) {
+                                 ^^^
+)");
+}
+
+TEST_F(UniformityAnalysisTest, WorkgroupUniformLoad_NonUniformPtr_ViaPtrArg) {
+    std::string src = R"(
+enable chromium_experimental_full_ptr_parameters;
+
+const wgsize = 4;
+var<workgroup> data : array<u32, wgsize>;
+
+fn foo(p : ptr<workgroup, u32>) -> u32 {
+  return workgroupUniformLoad(p);
+}
+
+@compute @workgroup_size(wgsize)
+fn main(@builtin(local_invocation_index) idx : u32) {
+  data[idx] = idx + 1;
+  if (foo(&data[idx]) > 0) {
+    workgroupBarrier();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:8:31 error: possibly non-uniform value passed here
+  return workgroupUniformLoad(p);
+                              ^
+
+test:8:31 note: parameter 'p' of 'foo' may be non-uniform
+  return workgroupUniformLoad(p);
+                              ^
+
+test:14:11 note: possibly non-uniform value passed here
+  if (foo(&data[idx]) > 0) {
+          ^
+
+test:14:17 note: builtin 'idx' of 'main' may be non-uniform
+  if (foo(&data[idx]) > 0) {
+                ^^^
+)");
 }
 
 TEST_F(UniformityAnalysisTest, WorkgroupAtomics) {
@@ -6448,17 +8182,17 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:6:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   if (atomicAdd(&a, 1) == 1) {
   ^^
 
-test:5:18 note: reading from workgroup storage variable 'a' may result in a non-uniform value
+test:5:7 note: return value of 'atomicAdd' may be non-uniform
   if (atomicAdd(&a, 1) == 1) {
-                 ^
+      ^^^^^^^^^^^^^^^^
 )");
 }
 
@@ -6475,17 +8209,17 @@ fn foo() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:6:5 warning: 'storageBarrier' must only be called from uniform control flow
+              R"(test:6:5 error: 'storageBarrier' must only be called from uniform control flow
     storageBarrier();
     ^^^^^^^^^^^^^^
 
-test:5:3 note: control flow depends on non-uniform value
+test:5:3 note: control flow depends on possibly non-uniform value
   if (atomicAdd(&a, 1) == 1) {
   ^^
 
-test:5:18 note: reading from read_write storage buffer 'a' may result in a non-uniform value
+test:5:7 note: return value of 'atomicAdd' may be non-uniform
   if (atomicAdd(&a, 1) == 1) {
-                 ^
+      ^^^^^^^^^^^^^^^^
 )");
 }
 
@@ -6521,7 +8255,7 @@ TEST_F(UniformityAnalysisTest, StressGraphTraversalDepth) {
     //     workgroupBarrier();
     //   }
     // }
-    b.GlobalVar("v0", ty.i32(), ast::StorageClass::kPrivate, b.Expr(0_i));
+    b.GlobalVar("v0", ty.i32(), builtin::AddressSpace::kPrivate, b.Expr(0_i));
     utils::Vector<const ast::Statement*, 8> foo_body;
     std::string v_last = "v0";
     for (int i = 1; i < 100000; i++) {
@@ -6532,12 +8266,824 @@ TEST_F(UniformityAnalysisTest, StressGraphTraversalDepth) {
     foo_body.Push(b.If(b.Equal(v_last, 0_i), b.Block(b.CallStmt(b.Call("workgroupBarrier")))));
     b.Func("foo", utils::Empty, ty.void_(), foo_body);
 
-    // TODO(jrprice): Expect false when uniformity issues become errors.
-    EXPECT_TRUE(RunTest(std::move(b))) << error_;
+    RunTest(std::move(b), false);
     EXPECT_EQ(error_,
-              R"(warning: 'workgroupBarrier' must only be called from uniform control flow
-note: control flow depends on non-uniform value
+              R"(error: 'workgroupBarrier' must only be called from uniform control flow
+note: control flow depends on possibly non-uniform value
 note: reading from module-scope private variable 'v0' may result in a non-uniform value)");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Tests for the derivative_uniformity diagnostic filter.
+////////////////////////////////////////////////////////////////////////////////
+
+class UniformityAnalysisDiagnosticFilterTest
+    : public UniformityAnalysisTestBase,
+      public ::testing::TestWithParam<builtin::DiagnosticSeverity> {
+  protected:
+    // TODO(jrprice): Remove this in favour of utils::ToString() when we change "note" to "info".
+    const char* ToStr(builtin::DiagnosticSeverity severity) {
+        switch (severity) {
+            case builtin::DiagnosticSeverity::kError:
+                return "error";
+            case builtin::DiagnosticSeverity::kWarning:
+                return "warning";
+            case builtin::DiagnosticSeverity::kInfo:
+                return "note";
+            default:
+                return "<undefined>";
+        }
+    }
+};
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, Directive) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << "diagnostic(" << param << ", derivative_uniformity);"
+       << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+@group(0) @binding(1) var t : texture_2d<f32>;
+@group(0) @binding(2) var s : sampler;
+
+fn foo() {
+  if (non_uniform == 42) {
+    let color = textureSample(t, s, vec2(0, 0));
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'textureSample' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnFunction) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+@group(0) @binding(1) var t : texture_2d<f32>;
+@group(0) @binding(2) var s : sampler;
+)"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       <<
+        R"(fn foo() {
+  if (non_uniform == 42) {
+    let color = textureSample(t, s, vec2(0, 0));
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'textureSample' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnBlock) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+@group(0) @binding(1) var t : texture_2d<f32>;
+@group(0) @binding(2) var s : sampler;
+fn foo() {
+  if (non_uniform == 42))"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"({
+    let color = textureSample(t, s, vec2(0, 0));
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'textureSample' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnForStatement_CallInInitializer) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+fn foo() {
+  )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"(for (var b = (non_uniform == 42 && dpdx(1.0) > 0.0); false;) {
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'dpdx' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnForStatement_CallInCondition) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+fn foo() {
+  )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"(for (; non_uniform == 42 && dpdx(1.0) > 0.0;) {
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'dpdx' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnForStatement_CallInIncrement) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+fn foo() {
+  )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"(for (var b = false; false; b = (non_uniform == 42 && dpdx(1.0) > 0.0)) {
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'dpdx' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnForStatement_CallInBody) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+@group(0) @binding(1) var t : texture_2d<f32>;
+@group(0) @binding(2) var s : sampler;
+fn foo() {
+  )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"(for (; non_uniform == 42;) {
+    let color = textureSample(t, s, vec2(0, 0));
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'textureSample' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnIfStatement_CallInCondition) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+fn foo() {
+  )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"(if (non_uniform == 42 && dpdx(1.0) > 0.0) {
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'dpdx' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnIfStatement_CallInBody) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+@group(0) @binding(1) var t : texture_2d<f32>;
+@group(0) @binding(2) var s : sampler;
+fn foo() {
+  )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"(if (non_uniform == 42) {
+    let color = textureSample(t, s, vec2(0, 0));
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'textureSample' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnIfStatement_CallInElse) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+@group(0) @binding(1) var t : texture_2d<f32>;
+@group(0) @binding(2) var s : sampler;
+fn foo() {
+  )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"(if (non_uniform == 42) {
+  } else {
+    let color = textureSample(t, s, vec2(0, 0));
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'textureSample' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnLoopStatement_CallInBody) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+fn foo() {
+  )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"(loop {
+    _ = dpdx(1.0);
+    continuing {
+      break if non_uniform == 0;
+    }
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'dpdx' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnLoopStatement_CallInContinuing) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+fn foo() {
+  )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"(loop {
+    continuing {
+      _ = dpdx(1.0);
+      break if non_uniform == 0;
+    }
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'dpdx' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnLoopBody_CallInBody) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+fn foo() {
+  loop )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"( {
+    _ = dpdx(1.0);
+    continuing {
+      break if non_uniform == 0;
+    }
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'dpdx' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnLoopBody_CallInContinuing) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+fn foo() {
+  loop )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"( {
+    continuing {
+      _ = dpdx(1.0);
+      break if non_uniform == 0;
+    }
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'dpdx' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnLoopContinuing_CallInContinuing) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+fn foo() {
+  loop {
+    continuing )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"( {
+      _ = dpdx(1.0);
+      break if non_uniform == 0;
+    }
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'dpdx' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnSwitchStatement_CallInCondition) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+fn foo() {
+  )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"(switch (i32(non_uniform == 42 && dpdx(1.0) > 0.0)) {
+    default {}
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'dpdx' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnSwitchStatement_CallInBody) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+@group(0) @binding(1) var t : texture_2d<f32>;
+@group(0) @binding(2) var s : sampler;
+fn foo() {
+  )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"(switch (non_uniform) {
+    default {
+      let color = textureSample(t, s, vec2(0, 0));
+    }
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'textureSample' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnSwitchBody_CallInBody) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+@group(0) @binding(1) var t : texture_2d<f32>;
+@group(0) @binding(2) var s : sampler;
+fn foo() {
+  switch (non_uniform))"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"( {
+    default {
+      let color = textureSample(t, s, vec2(0, 0));
+    }
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'textureSample' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnWhileStatement_CallInCondition) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+fn foo() {
+  )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"(while (non_uniform == 42 && dpdx(1.0) > 0.0) {
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'dpdx' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnWhileStatement_CallInBody) {
+    auto& param = GetParam();
+    utils::StringStream ss;
+    ss << R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+@group(0) @binding(1) var t : texture_2d<f32>;
+@group(0) @binding(2) var s : sampler;
+fn foo() {
+  )"
+       << "@diagnostic(" << param << ", derivative_uniformity)"
+       << R"(while (non_uniform == 42) {
+    let color = textureSample(t, s, vec2(0, 0));
+  }
+}
+)";
+
+    RunTest(ss.str(), param != builtin::DiagnosticSeverity::kError);
+    if (param == builtin::DiagnosticSeverity::kOff) {
+        EXPECT_TRUE(error_.empty());
+    } else {
+        utils::StringStream err;
+        err << ToStr(param) << ": 'textureSample' must only be called";
+        EXPECT_THAT(error_, ::testing::HasSubstr(err.str()));
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(UniformityAnalysisTest,
+                         UniformityAnalysisDiagnosticFilterTest,
+                         ::testing::Values(builtin::DiagnosticSeverity::kError,
+                                           builtin::DiagnosticSeverity::kWarning,
+                                           builtin::DiagnosticSeverity::kInfo,
+                                           builtin::DiagnosticSeverity::kOff));
+
+TEST_F(UniformityAnalysisDiagnosticFilterTest, AttributeOnFunction_CalledByAnotherFunction) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+@diagnostic(info, derivative_uniformity)
+fn bar() {
+  _ = dpdx(1.0);
+}
+
+fn foo() {
+  if (non_uniform == 42) {
+    bar();
+  }
+}
+)";
+
+    RunTest(src, true);
+    EXPECT_THAT(error_, ::testing::HasSubstr("note: 'dpdx' must only be called"));
+}
+
+TEST_F(UniformityAnalysisDiagnosticFilterTest, AttributeOnFunction_RequirementOnParameter) {
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+@diagnostic(info, derivative_uniformity)
+fn bar(x : i32) {
+  if (x == 0) {
+    _ = dpdx(1.0);
+  }
+}
+
+fn foo() {
+  bar(non_uniform);
+}
+)";
+
+    RunTest(src, true);
+    EXPECT_THAT(error_, ::testing::HasSubstr("note: 'dpdx' must only be called"));
+}
+
+TEST_F(UniformityAnalysisDiagnosticFilterTest, AttributeOnFunction_BuiltinInChildCall) {
+    // Make sure that the diagnostic filter does not descend into functions called by the function
+    // with the attribute.
+    std::string src = R"(
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn bar() {
+  _ = dpdx(1.0);
+}
+
+@diagnostic(off, derivative_uniformity)
+fn foo() {
+  if (non_uniform == 42) {
+    bar();
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_THAT(error_, ::testing::HasSubstr(": 'dpdx' must only be called"));
+}
+
+TEST_F(UniformityAnalysisDiagnosticFilterTest, MixOfGlobalAndLocalFilters) {
+    // Test that a global filter is overridden by a local attribute, and that we find multiple
+    // violations until an error is found.
+    std::string src = R"(
+diagnostic(info, derivative_uniformity);
+
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn a() {
+  if (non_uniform == 42) {
+    _ = dpdx(1.0);
+  }
+}
+
+@diagnostic(off, derivative_uniformity)
+fn b() {
+  if (non_uniform == 42) {
+    _ = dpdx(1.0);
+  }
+}
+
+@diagnostic(info, derivative_uniformity)
+fn c() {
+  if (non_uniform == 42) {
+    _ = dpdx(1.0);
+  }
+}
+
+@diagnostic(warning, derivative_uniformity)
+fn d() {
+  if (non_uniform == 42) {
+    _ = dpdx(1.0);
+  }
+}
+
+@diagnostic(error, derivative_uniformity)
+fn e() {
+  if (non_uniform == 42) {
+    _ = dpdx(1.0);
+  }
+}
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:8:9 note: 'dpdx' must only be called from uniform control flow
+    _ = dpdx(1.0);
+        ^^^^^^^^^
+
+test:7:3 note: control flow depends on possibly non-uniform value
+  if (non_uniform == 42) {
+  ^^
+
+test:7:7 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  if (non_uniform == 42) {
+      ^^^^^^^^^^^
+
+test:22:9 note: 'dpdx' must only be called from uniform control flow
+    _ = dpdx(1.0);
+        ^^^^^^^^^
+
+test:21:3 note: control flow depends on possibly non-uniform value
+  if (non_uniform == 42) {
+  ^^
+
+test:21:7 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  if (non_uniform == 42) {
+      ^^^^^^^^^^^
+
+test:29:9 warning: 'dpdx' must only be called from uniform control flow
+    _ = dpdx(1.0);
+        ^^^^^^^^^
+
+test:28:3 note: control flow depends on possibly non-uniform value
+  if (non_uniform == 42) {
+  ^^
+
+test:28:7 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  if (non_uniform == 42) {
+      ^^^^^^^^^^^
+
+test:36:9 error: 'dpdx' must only be called from uniform control flow
+    _ = dpdx(1.0);
+        ^^^^^^^^^
+
+test:35:3 note: control flow depends on possibly non-uniform value
+  if (non_uniform == 42) {
+  ^^
+
+test:35:7 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  if (non_uniform == 42) {
+      ^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisDiagnosticFilterTest, BuiltinReturnValueNotAffected) {
+    // Make sure that a diagnostic filter does not affect the uniformity of the return value of a
+    // derivative builtin.
+    std::string src = R"(
+fn foo() {
+  var x: f32;
+
+  @diagnostic(off,derivative_uniformity) {
+    x = dpdx(1.0);
+  }
+
+  if (x < 0.5) {
+    _ = dpdy(1.0); // Should trigger an error
+  }
+}
+
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:10:9 error: 'dpdy' must only be called from uniform control flow
+    _ = dpdy(1.0); // Should trigger an error
+        ^^^^^^^^^
+
+test:9:3 note: control flow depends on possibly non-uniform value
+  if (x < 0.5) {
+  ^^
+
+test:6:9 note: return value of 'dpdx' may be non-uniform
+    x = dpdx(1.0);
+        ^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisDiagnosticFilterTest,
+       ParameterRequiredToBeUniform_With_ParameterRequiredToBeUniformForReturnValue) {
+    // Make sure that both requirements on parameters are captured.
+    std::string src = R"(
+@diagnostic(info,derivative_uniformity)
+fn foo(x : bool) -> bool {
+  if (x) {
+    _ = dpdx(1.0); // Should trigger an info
+  }
+  return x;
+}
+
+var<private> non_uniform: bool;
+
+@diagnostic(error,derivative_uniformity)
+fn bar() {
+  let ret = foo(non_uniform);
+  if (ret) {
+    _ = dpdy(1.0); // Should trigger an error
+  }
+}
+
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:16:9 error: 'dpdy' must only be called from uniform control flow
+    _ = dpdy(1.0); // Should trigger an error
+        ^^^^^^^^^
+
+test:15:3 note: control flow depends on possibly non-uniform value
+  if (ret) {
+  ^^
+
+test:14:17 note: reading from module-scope private variable 'non_uniform' may result in a non-uniform value
+  let ret = foo(non_uniform);
+                ^^^^^^^^^^^
+)");
+}
+
+TEST_F(UniformityAnalysisDiagnosticFilterTest, BarriersNotAffected) {
+    // Make sure that the diagnostic filter does not affect barriers.
+    std::string src = R"(
+diagnostic(off, derivative_uniformity);
+
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
+
+fn foo() {
+  if (non_uniform == 42) {
+    _ = dpdx(1.0);
+  }
+}
+
+fn bar() {
+  if (non_uniform == 42) {
+    workgroupBarrier();
+  }
+}
+
+)";
+
+    RunTest(src, false);
+    EXPECT_EQ(error_,
+              R"(test:14:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
+
+test:13:3 note: control flow depends on possibly non-uniform value
+  if (non_uniform == 42) {
+  ^^
+
+test:13:7 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  if (non_uniform == 42) {
+      ^^^^^^^^^^^
+)");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6561,15 +9107,15 @@ fn main() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:10:5 warning: 'foo' must only be called from uniform control flow
-    foo();
-    ^^^
-
-test:5:3 note: 'foo' requires uniformity because it calls workgroupBarrier
+              R"(test:5:3 error: 'workgroupBarrier' must only be called from uniform control flow
   workgroupBarrier();
   ^^^^^^^^^^^^^^^^
 
-test:9:3 note: control flow depends on non-uniform value
+test:10:5 note: called by 'foo' from 'main'
+    foo();
+    ^^^
+
+test:9:3 note: control flow depends on possibly non-uniform value
   if (non_uniform == 42) {
   ^^
 
@@ -6604,15 +9150,15 @@ fn main() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:18:5 warning: 'foo' must only be called from uniform control flow
-    foo();
-    ^^^
-
-test:5:3 note: 'foo' requires uniformity because it indirectly calls workgroupBarrier
+              R"(test:5:3 error: 'workgroupBarrier' must only be called from uniform control flow
   workgroupBarrier();
   ^^^^^^^^^^^^^^^^
 
-test:17:3 note: control flow depends on non-uniform value
+test:18:5 note: called indirectly by 'foo' from 'main'
+    foo();
+    ^^^
+
+test:17:3 note: control flow depends on possibly non-uniform value
   if (non_uniform == 42) {
   ^^
 
@@ -6647,21 +9193,37 @@ fn main() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:19:7 warning: parameter 'c' of 'foo' must be uniform
-  foo(non_uniform);
-      ^^^^^^^^^^^
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
+    workgroupBarrier();
+    ^^^^^^^^^^^^^^^^
 
-test:15:7 note: parameter 'b' of 'bar' must be uniform
-  bar(c);
+test:5:3 note: control flow depends on possibly non-uniform value
+  if (a == 42) {
+  ^^
+
+test:5:7 note: parameter 'a' of 'zoo' may be non-uniform
+  if (a == 42) {
       ^
 
-test:11:7 note: parameter 'a' of 'zoo' must be uniform
+test:11:7 note: possibly non-uniform value passed here
   zoo(b);
       ^
 
-test:6:5 note: 'workgroupBarrier' must only be called from uniform control flow
-    workgroupBarrier();
-    ^^^^^^^^^^^^^^^^
+test:11:7 note: parameter 'b' of 'bar' may be non-uniform
+  zoo(b);
+      ^
+
+test:15:7 note: possibly non-uniform value passed here
+  bar(c);
+      ^
+
+test:15:7 note: parameter 'c' of 'foo' may be non-uniform
+  bar(c);
+      ^
+
+test:19:7 note: possibly non-uniform value passed here
+  foo(non_uniform);
+      ^^^^^^^^^^^
 
 test:19:7 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
   foo(non_uniform);
@@ -6694,147 +9256,56 @@ fn main() {
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:18:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:18:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:17:3 note: control flow depends on non-uniform value
+test:17:3 note: control flow depends on possibly non-uniform value
   if (foo() == 42) {
   ^^
 
 test:17:7 note: return value of 'foo' may be non-uniform
   if (foo() == 42) {
-      ^^^
+      ^^^^^
 )");
 }
 
-TEST_F(UniformityAnalysisTest, Error_SubsequentControlFlowMayBeNonUniform) {
-    // Make sure we correctly identify the function call as the source of non-uniform control flow
-    // and not the if statement with the uniform condition.
+TEST_F(UniformityAnalysisTest, Error_CallsiteAndParameterRequireUniformity) {
+    // Test that we report a violation for the callsite of a function when it has multiple
+    // uniformity requirements.
     std::string src = R"(
-@group(0) @binding(0) var<uniform> uniform_value : i32;
-@group(0) @binding(1) var<storage, read_write> non_uniform_value : i32;
+@group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 
-fn foo() -> i32 {
-  if (non_uniform_value == 0) {
-    return 5;
+fn foo(v : i32) {
+  if (v == 0) {
+    workgroupBarrier();
   }
-  return 6;
 }
 
 fn main() {
-  foo();
-  if (uniform_value == 42) {
-    workgroupBarrier();
+  if (non_uniform == 42) {
+    foo(0);
   }
 }
 )";
 
     RunTest(src, false);
     EXPECT_EQ(error_,
-              R"(test:15:5 warning: 'workgroupBarrier' must only be called from uniform control flow
+              R"(test:6:5 error: 'workgroupBarrier' must only be called from uniform control flow
     workgroupBarrier();
     ^^^^^^^^^^^^^^^^
 
-test:13:3 note: calling 'foo' may cause subsequent control flow to be non-uniform
-  foo();
-  ^^^
+test:12:5 note: called by 'foo' from 'main'
+    foo(0);
+    ^^^
 
-test:6:3 note: control flow depends on non-uniform value
-  if (non_uniform_value == 0) {
+test:11:3 note: control flow depends on possibly non-uniform value
+  if (non_uniform == 42) {
   ^^
 
-test:6:7 note: reading from read_write storage buffer 'non_uniform_value' may result in a non-uniform value
-  if (non_uniform_value == 0) {
-      ^^^^^^^^^^^^^^^^^
-)");
-}
-
-TEST_F(UniformityAnalysisTest, Error_ParameterRequiredToBeUniformForSubsequentControlFlow) {
-    // Make sure we correctly identify the function call as the source of non-uniform control flow
-    // and not the if statement with the uniform condition.
-    std::string src = R"(
-@group(0) @binding(0) var<uniform> uniform_value : i32;
-@group(0) @binding(1) var<storage, read_write> non_uniform_value : i32;
-
-fn foo(x : i32) -> i32 {
-  if (x == 0) {
-    return 5;
-  }
-  return 6;
-}
-
-fn main() {
-  foo(non_uniform_value);
-  if (uniform_value == 42) {
-    workgroupBarrier();
-  }
-}
-)";
-
-    RunTest(src, false);
-    EXPECT_EQ(error_,
-              R"(test:15:5 warning: 'workgroupBarrier' must only be called from uniform control flow
-    workgroupBarrier();
-    ^^^^^^^^^^^^^^^^
-
-test:13:7 note: non-uniform function call argument causes subsequent control flow to be non-uniform
-  foo(non_uniform_value);
-      ^^^^^^^^^^^^^^^^^
-
-test:6:3 note: control flow depends on non-uniform value
-  if (x == 0) {
-  ^^
-
-test:6:7 note: reading from 'x' may result in a non-uniform value
-  if (x == 0) {
-      ^
-
-test:13:7 note: reading from read_write storage buffer 'non_uniform_value' may result in a non-uniform value
-  foo(non_uniform_value);
-      ^^^^^^^^^^^^^^^^^
-)");
-}
-
-TEST_F(UniformityAnalysisTest, Error_ShortCircuitingExprCausesNonUniformControlFlow) {
-    // Make sure we correctly identify the short-circuit as the source of non-uniform control flow
-    // and not the if statement with the uniform condition.
-    std::string src = R"(
-@group(0) @binding(0) var<uniform> uniform_value : i32;
-@group(0) @binding(1) var<storage, read_write> non_uniform_value : i32;
-
-fn non_uniform_discard_func() -> bool {
-  if (non_uniform_value == 42) {
-    discard;
-  }
-  return false;
-}
-
-fn main() {
-  let b = non_uniform_discard_func() && true;
-  if (uniform_value == 42) {
-    workgroupBarrier();
-  }
-}
-)";
-
-    RunTest(src, false);
-    EXPECT_EQ(error_,
-              R"(test:15:5 warning: 'workgroupBarrier' must only be called from uniform control flow
-    workgroupBarrier();
-    ^^^^^^^^^^^^^^^^
-
-test:13:11 note: calling 'non_uniform_discard_func' may cause subsequent control flow to be non-uniform
-  let b = non_uniform_discard_func() && true;
-          ^^^^^^^^^^^^^^^^^^^^^^^^
-
-test:6:3 note: control flow depends on non-uniform value
-  if (non_uniform_value == 42) {
-  ^^
-
-test:6:7 note: reading from read_write storage buffer 'non_uniform_value' may result in a non-uniform value
-  if (non_uniform_value == 42) {
-      ^^^^^^^^^^^^^^^^^
+test:11:7 note: reading from read_write storage buffer 'non_uniform' may result in a non-uniform value
+  if (non_uniform == 42) {
+      ^^^^^^^^^^^
 )");
 }
 

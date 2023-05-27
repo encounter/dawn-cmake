@@ -83,9 +83,10 @@ func (p *Permuter) Permute(overload *sem.Overload) ([]Permutation, error) {
 				return nil
 			}
 			o.Parameters = append(o.Parameters, sem.Parameter{
-				Name:    p.Name,
-				Type:    ty,
-				IsConst: p.IsConst,
+				Name:      p.Name,
+				Type:      ty,
+				IsConst:   p.IsConst,
+				TestValue: p.TestValue,
 			})
 		}
 		if overload.ReturnType != nil {
@@ -111,7 +112,7 @@ func (p *Permuter) Permute(overload *sem.Overload) ([]Permutation, error) {
 		// Check for hash collisions
 		if existing, collision := hashes[shortHash]; collision {
 			return fmt.Errorf("hash '%v' collision between %v and %v\nIncrease hashLength in %v",
-				shortHash, existing, desc, fileutils.GoSourcePath())
+				shortHash, existing, desc, fileutils.ThisLine())
 		}
 		hashes[shortHash] = desc
 		return nil
@@ -327,23 +328,28 @@ func validate(fqn sem.FullyQualifiedName, uses *sem.StageUses) bool {
 		return false // Builtin, untypeable return type
 	}
 
-	switch fqn.Target.GetName() {
-	case "array":
-		elTy := fqn.TemplateArguments[0].(sem.FullyQualifiedName)
+	isStorable := func(elTy sem.FullyQualifiedName) bool {
 		elTyName := elTy.Target.GetName()
 		switch {
-		case elTyName == "bool" ||
+		case elTyName == "bool",
 			strings.Contains(elTyName, "sampler"),
-			strings.Contains(elTyName, "texture"):
-			return false // Not storable
-		case IsAbstract(DeepestElementType(elTy)):
-			return false // Abstract types are not typeable
+			strings.Contains(elTyName, "texture"),
+			IsAbstract(DeepestElementType(elTy)):
+			return false
+		}
+		return true
+	}
+
+	switch fqn.Target.GetName() {
+	case "array":
+		if !isStorable(fqn.TemplateArguments[0].(sem.FullyQualifiedName)) {
+			return false
 		}
 	case "ptr":
-		// https://gpuweb.github.io/gpuweb/wgsl/#storage-class
+		// https://gpuweb.github.io/gpuweb/wgsl/#address-space
 		access := fqn.TemplateArguments[2].(sem.FullyQualifiedName).Target.(*sem.EnumEntry).Name
-		storageClass := fqn.TemplateArguments[0].(sem.FullyQualifiedName).Target.(*sem.EnumEntry).Name
-		switch storageClass {
+		addressSpace := fqn.TemplateArguments[0].(sem.FullyQualifiedName).Target.(*sem.EnumEntry).Name
+		switch addressSpace {
 		case "function", "private":
 			if access != "read_write" {
 				return false
@@ -352,6 +358,9 @@ func validate(fqn sem.FullyQualifiedName, uses *sem.StageUses) bool {
 			uses.Vertex = false
 			uses.Fragment = false
 			if access != "read_write" {
+				return false
+			}
+			if !isStorable(fqn.TemplateArguments[1].(sem.FullyQualifiedName)) {
 				return false
 			}
 		case "uniform":

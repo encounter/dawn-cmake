@@ -14,7 +14,10 @@
 
 #include "src/tint/ast/call_statement.h"
 #include "src/tint/ast/variable_decl_statement.h"
+#include "src/tint/utils/string_stream.h"
 #include "src/tint/writer/glsl/test_helper.h"
+
+#include "gmock/gmock.h"
 
 using namespace tint::number_suffixes;  // NOLINT
 
@@ -28,7 +31,9 @@ struct BinaryData {
     ast::BinaryOp op;
 };
 inline std::ostream& operator<<(std::ostream& out, BinaryData data) {
-    out << data.op;
+    utils::StringStream str;
+    str << data.op;
+    out << str.str();
     return out;
 }
 
@@ -43,8 +48,8 @@ TEST_P(GlslBinaryTest, Emit_f32) {
         return;
     }
 
-    GlobalVar("left", ty.f32(), ast::StorageClass::kPrivate);
-    GlobalVar("right", ty.f32(), ast::StorageClass::kPrivate);
+    GlobalVar("left", ty.f32(), builtin::AddressSpace::kPrivate);
+    GlobalVar("right", ty.f32(), builtin::AddressSpace::kPrivate);
 
     auto* left = Expr("left");
     auto* right = Expr("right");
@@ -55,8 +60,9 @@ TEST_P(GlslBinaryTest, Emit_f32) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), params.result);
 }
 TEST_P(GlslBinaryTest, Emit_f16) {
@@ -69,10 +75,10 @@ TEST_P(GlslBinaryTest, Emit_f16) {
         return;
     }
 
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
-    GlobalVar("left", ty.f16(), ast::StorageClass::kPrivate);
-    GlobalVar("right", ty.f16(), ast::StorageClass::kPrivate);
+    GlobalVar("left", ty.f16(), builtin::AddressSpace::kPrivate);
+    GlobalVar("right", ty.f16(), builtin::AddressSpace::kPrivate);
 
     auto* left = Expr("left");
     auto* right = Expr("right");
@@ -83,15 +89,16 @@ TEST_P(GlslBinaryTest, Emit_f16) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), params.result);
 }
 TEST_P(GlslBinaryTest, Emit_u32) {
     auto params = GetParam();
 
-    GlobalVar("left", ty.u32(), ast::StorageClass::kPrivate);
-    GlobalVar("right", ty.u32(), ast::StorageClass::kPrivate);
+    GlobalVar("left", ty.u32(), builtin::AddressSpace::kPrivate);
+    GlobalVar("right", ty.u32(), builtin::AddressSpace::kPrivate);
 
     auto* left = Expr("left");
     auto* right = Expr("right");
@@ -102,8 +109,9 @@ TEST_P(GlslBinaryTest, Emit_u32) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), params.result);
 }
 TEST_P(GlslBinaryTest, Emit_i32) {
@@ -114,8 +122,8 @@ TEST_P(GlslBinaryTest, Emit_i32) {
         return;
     }
 
-    GlobalVar("left", ty.i32(), ast::StorageClass::kPrivate);
-    GlobalVar("right", ty.i32(), ast::StorageClass::kPrivate);
+    GlobalVar("left", ty.i32(), builtin::AddressSpace::kPrivate);
+    GlobalVar("right", ty.i32(), builtin::AddressSpace::kPrivate);
 
     auto* left = Expr("left");
     auto* right = Expr("right");
@@ -126,8 +134,9 @@ TEST_P(GlslBinaryTest, Emit_i32) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), params.result);
 }
 INSTANTIATE_TEST_SUITE_P(
@@ -151,7 +160,8 @@ INSTANTIATE_TEST_SUITE_P(
                     BinaryData{"(left % right)", ast::BinaryOp::kModulo}));
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_VectorScalar_f32) {
-    auto* lhs = vec3<f32>(1_f, 1_f, 1_f);
+    GlobalVar("a", vec3<f32>(1_f, 1_f, 1_f), builtin::AddressSpace::kPrivate);
+    auto* lhs = Expr("a");
     auto* rhs = Expr(1_f);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kMultiply, lhs, rhs);
@@ -160,15 +170,17 @@ TEST_F(GlslGeneratorImplTest_Binary, Multiply_VectorScalar_f32) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
-    EXPECT_EQ(out.str(), "(vec3(1.0f) * 1.0f)");
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
+    EXPECT_EQ(out.str(), "(a * 1.0f)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_VectorScalar_f16) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
-    auto* lhs = vec3<f16>(1_h, 1_h, 1_h);
+    GlobalVar("a", vec3<f16>(1_h, 1_h, 1_h), builtin::AddressSpace::kPrivate);
+    auto* lhs = Expr("a");
     auto* rhs = Expr(1_h);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kMultiply, lhs, rhs);
@@ -177,14 +189,16 @@ TEST_F(GlslGeneratorImplTest_Binary, Multiply_VectorScalar_f16) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
-    EXPECT_EQ(out.str(), "(f16vec3(1.0hf) * 1.0hf)");
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
+    EXPECT_EQ(out.str(), "(a * 1.0hf)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_ScalarVector_f32) {
+    GlobalVar("a", vec3<f32>(1_f, 1_f, 1_f), builtin::AddressSpace::kPrivate);
     auto* lhs = Expr(1_f);
-    auto* rhs = vec3<f32>(1_f, 1_f, 1_f);
+    auto* rhs = Expr("a");
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kMultiply, lhs, rhs);
 
@@ -192,16 +206,18 @@ TEST_F(GlslGeneratorImplTest_Binary, Multiply_ScalarVector_f32) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
-    EXPECT_EQ(out.str(), "(1.0f * vec3(1.0f))");
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
+    EXPECT_EQ(out.str(), "(1.0f * a)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_ScalarVector_f16) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
+    GlobalVar("a", vec3<f16>(1_h, 1_h, 1_h), builtin::AddressSpace::kPrivate);
     auto* lhs = Expr(1_h);
-    auto* rhs = vec3<f16>(1_h, 1_h, 1_h);
+    auto* rhs = Expr("a");
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kMultiply, lhs, rhs);
 
@@ -209,13 +225,14 @@ TEST_F(GlslGeneratorImplTest_Binary, Multiply_ScalarVector_f16) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
-    EXPECT_EQ(out.str(), "(1.0hf * f16vec3(1.0hf))");
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
+    EXPECT_EQ(out.str(), "(1.0hf * a)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_MatrixScalar_f32) {
-    GlobalVar("mat", ty.mat3x3<f32>(), ast::StorageClass::kPrivate);
+    GlobalVar("mat", ty.mat3x3<f32>(), builtin::AddressSpace::kPrivate);
     auto* lhs = Expr("mat");
     auto* rhs = Expr(1_f);
 
@@ -224,15 +241,16 @@ TEST_F(GlslGeneratorImplTest_Binary, Multiply_MatrixScalar_f32) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "(mat * 1.0f)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_MatrixScalar_f16) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
-    GlobalVar("mat", ty.mat3x3<f16>(), ast::StorageClass::kPrivate);
+    GlobalVar("mat", ty.mat3x3<f16>(), builtin::AddressSpace::kPrivate);
     auto* lhs = Expr("mat");
     auto* rhs = Expr(1_h);
 
@@ -241,13 +259,14 @@ TEST_F(GlslGeneratorImplTest_Binary, Multiply_MatrixScalar_f16) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "(mat * 1.0hf)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_ScalarMatrix_f32) {
-    GlobalVar("mat", ty.mat3x3<f32>(), ast::StorageClass::kPrivate);
+    GlobalVar("mat", ty.mat3x3<f32>(), builtin::AddressSpace::kPrivate);
     auto* lhs = Expr(1_f);
     auto* rhs = Expr("mat");
 
@@ -256,15 +275,16 @@ TEST_F(GlslGeneratorImplTest_Binary, Multiply_ScalarMatrix_f32) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "(1.0f * mat)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_ScalarMatrix_f16) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
-    GlobalVar("mat", ty.mat3x3<f16>(), ast::StorageClass::kPrivate);
+    GlobalVar("mat", ty.mat3x3<f16>(), builtin::AddressSpace::kPrivate);
     auto* lhs = Expr(1_h);
     auto* rhs = Expr("mat");
 
@@ -273,13 +293,14 @@ TEST_F(GlslGeneratorImplTest_Binary, Multiply_ScalarMatrix_f16) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "(1.0hf * mat)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_MatrixVector_f32) {
-    GlobalVar("mat", ty.mat3x3<f32>(), ast::StorageClass::kPrivate);
+    GlobalVar("mat", ty.mat3x3<f32>(), builtin::AddressSpace::kPrivate);
     auto* lhs = Expr("mat");
     auto* rhs = vec3<f32>(1_f, 1_f, 1_f);
 
@@ -288,15 +309,16 @@ TEST_F(GlslGeneratorImplTest_Binary, Multiply_MatrixVector_f32) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "(mat * vec3(1.0f))");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_MatrixVector_f16) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
-    GlobalVar("mat", ty.mat3x3<f16>(), ast::StorageClass::kPrivate);
+    GlobalVar("mat", ty.mat3x3<f16>(), builtin::AddressSpace::kPrivate);
     auto* lhs = Expr("mat");
     auto* rhs = vec3<f16>(1_h, 1_h, 1_h);
 
@@ -305,13 +327,14 @@ TEST_F(GlslGeneratorImplTest_Binary, Multiply_MatrixVector_f16) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "(mat * f16vec3(1.0hf))");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_VectorMatrix_f32) {
-    GlobalVar("mat", ty.mat3x3<f32>(), ast::StorageClass::kPrivate);
+    GlobalVar("mat", ty.mat3x3<f32>(), builtin::AddressSpace::kPrivate);
     auto* lhs = vec3<f32>(1_f, 1_f, 1_f);
     auto* rhs = Expr("mat");
 
@@ -320,15 +343,16 @@ TEST_F(GlslGeneratorImplTest_Binary, Multiply_VectorMatrix_f32) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "(vec3(1.0f) * mat)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_VectorMatrix_f16) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
-    GlobalVar("mat", ty.mat3x3<f16>(), ast::StorageClass::kPrivate);
+    GlobalVar("mat", ty.mat3x3<f16>(), builtin::AddressSpace::kPrivate);
     auto* lhs = vec3<f16>(1_h, 1_h, 1_h);
     auto* rhs = Expr("mat");
 
@@ -337,164 +361,175 @@ TEST_F(GlslGeneratorImplTest_Binary, Multiply_VectorMatrix_f16) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "(f16vec3(1.0hf) * mat)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_MatrixMatrix_f32) {
-    GlobalVar("lhs", ty.mat3x3<f32>(), ast::StorageClass::kPrivate);
-    GlobalVar("rhs", ty.mat3x3<f32>(), ast::StorageClass::kPrivate);
+    GlobalVar("lhs", ty.mat3x3<f32>(), builtin::AddressSpace::kPrivate);
+    GlobalVar("rhs", ty.mat3x3<f32>(), builtin::AddressSpace::kPrivate);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kMultiply, Expr("lhs"), Expr("rhs"));
     WrapInFunction(expr);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "(lhs * rhs)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Multiply_MatrixMatrix_f16) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
-    GlobalVar("lhs", ty.mat3x3<f16>(), ast::StorageClass::kPrivate);
-    GlobalVar("rhs", ty.mat3x3<f16>(), ast::StorageClass::kPrivate);
+    GlobalVar("lhs", ty.mat3x3<f16>(), builtin::AddressSpace::kPrivate);
+    GlobalVar("rhs", ty.mat3x3<f16>(), builtin::AddressSpace::kPrivate);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kMultiply, Expr("lhs"), Expr("rhs"));
     WrapInFunction(expr);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    EXPECT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "(lhs * rhs)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, ModF32) {
-    GlobalVar("a", ty.f32(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.f32(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.f32(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.f32(), builtin::AddressSpace::kPrivate);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kModulo, Expr("a"), Expr("b"));
     WrapInFunction(expr);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "tint_float_modulo(a, b)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, ModF16) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
-    GlobalVar("a", ty.f16(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.f16(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.f16(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.f16(), builtin::AddressSpace::kPrivate);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kModulo, Expr("a"), Expr("b"));
     WrapInFunction(expr);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "tint_float_modulo(a, b)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, ModVec3F32) {
-    GlobalVar("a", ty.vec3<f32>(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.vec3<f32>(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.vec3<f32>(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.vec3<f32>(), builtin::AddressSpace::kPrivate);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kModulo, Expr("a"), Expr("b"));
     WrapInFunction(expr);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "tint_float_modulo(a, b)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, ModVec3F16) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
-    GlobalVar("a", ty.vec3<f16>(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.vec3<f16>(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.vec3<f16>(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.vec3<f16>(), builtin::AddressSpace::kPrivate);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kModulo, Expr("a"), Expr("b"));
     WrapInFunction(expr);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "tint_float_modulo(a, b)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, ModVec3F32ScalarF32) {
-    GlobalVar("a", ty.vec3<f32>(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.f32(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.vec3<f32>(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.f32(), builtin::AddressSpace::kPrivate);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kModulo, Expr("a"), Expr("b"));
     WrapInFunction(expr);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "tint_float_modulo(a, b)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, ModVec3F16ScalarF16) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
-    GlobalVar("a", ty.vec3<f16>(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.f16(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.vec3<f16>(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.f16(), builtin::AddressSpace::kPrivate);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kModulo, Expr("a"), Expr("b"));
     WrapInFunction(expr);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "tint_float_modulo(a, b)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, ModScalarF32Vec3F32) {
-    GlobalVar("a", ty.f32(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.vec3<f32>(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.f32(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.vec3<f32>(), builtin::AddressSpace::kPrivate);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kModulo, Expr("a"), Expr("b"));
     WrapInFunction(expr);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "tint_float_modulo(a, b)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, ModScalarF16Vec3F16) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
-    GlobalVar("a", ty.f16(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.vec3<f16>(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.f16(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.vec3<f16>(), builtin::AddressSpace::kPrivate);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kModulo, Expr("a"), Expr("b"));
     WrapInFunction(expr);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "tint_float_modulo(a, b)");
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, ModMixedVec3ScalarF32) {
-    GlobalVar("a", ty.vec3<f32>(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.f32(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.vec3<f32>(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.f32(), builtin::AddressSpace::kPrivate);
 
     auto* expr_vec_mod_vec =
         create<ast::BinaryExpression>(ast::BinaryOp::kModulo, Expr("a"), Expr("a"));
@@ -506,7 +541,8 @@ TEST_F(GlslGeneratorImplTest_Binary, ModMixedVec3ScalarF32) {
 
     GeneratorImpl& gen = Build();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
 
 vec3 tint_float_modulo(vec3 lhs, vec3 rhs) {
@@ -535,10 +571,10 @@ void test_function() {
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, ModMixedVec3ScalarF16) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
-    GlobalVar("a", ty.vec3<f16>(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.f16(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.vec3<f16>(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.f16(), builtin::AddressSpace::kPrivate);
 
     auto* expr_vec_mod_vec =
         create<ast::BinaryExpression>(ast::BinaryOp::kModulo, Expr("a"), Expr("a"));
@@ -550,7 +586,8 @@ TEST_F(GlslGeneratorImplTest_Binary, ModMixedVec3ScalarF16) {
 
     GeneratorImpl& gen = Build();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
+    gen.Generate();
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(#version 310 es
 #extension GL_AMD_gpu_shader_half_float : require
 
@@ -580,16 +617,17 @@ void test_function() {
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Logical_And) {
-    GlobalVar("a", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.bool_(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.bool_(), builtin::AddressSpace::kPrivate);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kLogicalAnd, Expr("a"), Expr("b"));
     WrapInFunction(expr);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "(tint_tmp)");
     EXPECT_EQ(gen.result(), R"(bool tint_tmp = a;
 if (tint_tmp) {
@@ -600,10 +638,10 @@ if (tint_tmp) {
 
 TEST_F(GlslGeneratorImplTest_Binary, Logical_Multi) {
     // (a && b) || (c || d)
-    GlobalVar("a", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("c", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("d", ty.bool_(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("c", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("d", ty.bool_(), builtin::AddressSpace::kPrivate);
 
     auto* expr = create<ast::BinaryExpression>(
         ast::BinaryOp::kLogicalOr,
@@ -613,8 +651,9 @@ TEST_F(GlslGeneratorImplTest_Binary, Logical_Multi) {
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "(tint_tmp)");
     EXPECT_EQ(gen.result(), R"(bool tint_tmp_1 = a;
 if (tint_tmp_1) {
@@ -632,16 +671,17 @@ if (!tint_tmp) {
 }
 
 TEST_F(GlslGeneratorImplTest_Binary, Logical_Or) {
-    GlobalVar("a", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.bool_(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.bool_(), builtin::AddressSpace::kPrivate);
 
     auto* expr = create<ast::BinaryExpression>(ast::BinaryOp::kLogicalOr, Expr("a"), Expr("b"));
     WrapInFunction(expr);
 
     GeneratorImpl& gen = Build();
 
-    std::stringstream out;
-    ASSERT_TRUE(gen.EmitExpression(out, expr)) << gen.error();
+    utils::StringStream out;
+    gen.EmitExpression(out, expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(out.str(), "(tint_tmp)");
     EXPECT_EQ(gen.result(), R"(bool tint_tmp = a;
 if (!tint_tmp) {
@@ -659,9 +699,9 @@ TEST_F(GlslGeneratorImplTest_Binary, If_WithLogical) {
     //   return 3i;
     // }
 
-    GlobalVar("a", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("c", ty.bool_(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("c", ty.bool_(), builtin::AddressSpace::kPrivate);
 
     auto* expr =
         If(create<ast::BinaryExpression>(ast::BinaryOp::kLogicalAnd, Expr("a"), Expr("b")),
@@ -672,7 +712,8 @@ TEST_F(GlslGeneratorImplTest_Binary, If_WithLogical) {
 
     GeneratorImpl& gen = Build();
 
-    ASSERT_TRUE(gen.EmitStatement(expr)) << gen.error();
+    gen.EmitStatement(expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(bool tint_tmp = a;
 if (tint_tmp) {
   tint_tmp = b;
@@ -696,9 +737,9 @@ if ((tint_tmp)) {
 TEST_F(GlslGeneratorImplTest_Binary, Return_WithLogical) {
     // return (a && b) || c;
 
-    GlobalVar("a", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("c", ty.bool_(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("c", ty.bool_(), builtin::AddressSpace::kPrivate);
 
     auto* expr = Return(create<ast::BinaryExpression>(
         ast::BinaryOp::kLogicalOr,
@@ -708,7 +749,8 @@ TEST_F(GlslGeneratorImplTest_Binary, Return_WithLogical) {
 
     GeneratorImpl& gen = Build();
 
-    ASSERT_TRUE(gen.EmitStatement(expr)) << gen.error();
+    gen.EmitStatement(expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(bool tint_tmp_1 = a;
 if (tint_tmp_1) {
   tint_tmp_1 = b;
@@ -724,10 +766,10 @@ return (tint_tmp);
 TEST_F(GlslGeneratorImplTest_Binary, Assign_WithLogical) {
     // a = (b || c) && d;
 
-    GlobalVar("a", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("c", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("d", ty.bool_(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("c", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("d", ty.bool_(), builtin::AddressSpace::kPrivate);
 
     auto* expr =
         Assign(Expr("a"),
@@ -739,7 +781,8 @@ TEST_F(GlslGeneratorImplTest_Binary, Assign_WithLogical) {
 
     GeneratorImpl& gen = Build();
 
-    ASSERT_TRUE(gen.EmitStatement(expr)) << gen.error();
+    gen.EmitStatement(expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(bool tint_tmp_1 = b;
 if (!tint_tmp_1) {
   tint_tmp_1 = c;
@@ -755,9 +798,9 @@ a = (tint_tmp);
 TEST_F(GlslGeneratorImplTest_Binary, Decl_WithLogical) {
     // var a : bool = (b && c) || d;
 
-    GlobalVar("b", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("c", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("d", ty.bool_(), ast::StorageClass::kPrivate);
+    GlobalVar("b", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("c", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("d", ty.bool_(), builtin::AddressSpace::kPrivate);
 
     auto* var =
         Var("a", ty.bool_(),
@@ -771,7 +814,8 @@ TEST_F(GlslGeneratorImplTest_Binary, Decl_WithLogical) {
 
     GeneratorImpl& gen = Build();
 
-    ASSERT_TRUE(gen.EmitStatement(decl)) << gen.error();
+    gen.EmitStatement(decl);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(bool tint_tmp_1 = b;
 if (tint_tmp_1) {
   tint_tmp_1 = c;
@@ -794,10 +838,10 @@ TEST_F(GlslGeneratorImplTest_Binary, Call_WithLogical) {
              Param(Sym(), ty.bool_()),
          },
          ty.void_(), utils::Empty, utils::Empty);
-    GlobalVar("a", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("c", ty.bool_(), ast::StorageClass::kPrivate);
-    GlobalVar("d", ty.bool_(), ast::StorageClass::kPrivate);
+    GlobalVar("a", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("c", ty.bool_(), builtin::AddressSpace::kPrivate);
+    GlobalVar("d", ty.bool_(), builtin::AddressSpace::kPrivate);
 
     utils::Vector params{
         create<ast::BinaryExpression>(ast::BinaryOp::kLogicalAnd, Expr("a"), Expr("b")),
@@ -813,7 +857,8 @@ TEST_F(GlslGeneratorImplTest_Binary, Call_WithLogical) {
 
     GeneratorImpl& gen = Build();
 
-    ASSERT_TRUE(gen.EmitStatement(expr)) << gen.error();
+    gen.EmitStatement(expr);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(bool tint_tmp = a;
 if (tint_tmp) {
   tint_tmp = b;

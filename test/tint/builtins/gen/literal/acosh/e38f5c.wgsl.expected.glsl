@@ -1,11 +1,12 @@
 #version 310 es
 
-vec3 tint_acosh(vec3 x) {
-  return mix(acosh(x), vec3(0.0f), lessThan(x, vec3(1.0f)));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec3 inner;
+} prevent_dce;
 
 void acosh_e38f5c() {
-  vec3 res = tint_acosh(vec3(1.0f));
+  vec3 res = vec3(1.0f);
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -22,14 +23,15 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-vec3 tint_acosh(vec3 x) {
-  return mix(acosh(x), vec3(0.0f), lessThan(x, vec3(1.0f)));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec3 inner;
+} prevent_dce;
 
 void acosh_e38f5c() {
-  vec3 res = tint_acosh(vec3(1.0f));
+  vec3 res = vec3(1.0f);
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -42,12 +44,13 @@ void main() {
 }
 #version 310 es
 
-vec3 tint_acosh(vec3 x) {
-  return mix(acosh(x), vec3(0.0f), lessThan(x, vec3(1.0f)));
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec3 inner;
+} prevent_dce;
 
 void acosh_e38f5c() {
-  vec3 res = tint_acosh(vec3(1.0f));
+  vec3 res = vec3(1.0f);
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

@@ -1,4 +1,4 @@
-// Copyright 2021 The Tint Authors.
+// Copyright 2023 The Tint Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,35 +15,31 @@
 #ifndef SRC_TINT_SEM_EXTERNAL_TEXTURE_H_
 #define SRC_TINT_SEM_EXTERNAL_TEXTURE_H_
 
-#include <string>
+#include <unordered_map>
 
-#include "src/tint/sem/texture.h"
+#include "src/tint/sem/binding_point.h"
 
-namespace tint::sem {
+namespace tint::sem::external_texture {
 
-/// An external texture type
-class ExternalTexture final : public Castable<ExternalTexture, Texture> {
-  public:
-    /// Constructor
-    ExternalTexture();
+/// This struct identifies the binding groups and locations for new bindings to
+/// use when transforming a texture_external instance.
+struct BindingPoints {
+    /// The desired binding location of the texture_2d representing plane #1 when
+    /// a texture_external binding is expanded.
+    BindingPoint plane_1;
+    /// The desired binding location of the ExternalTextureParams uniform when a
+    /// texture_external binding is expanded.
+    BindingPoint params;
 
-    /// Move constructor
-    ExternalTexture(ExternalTexture&&);
-    ~ExternalTexture() override;
-
-    /// @returns a hash of the type.
-    size_t Hash() const override;
-
-    /// @param other the other type to compare against
-    /// @returns true if the this type is equal to the given type
-    bool Equals(const Type& other) const override;
-
-    /// @param symbols the program's symbol table
-    /// @returns the name for this type that closely resembles how it would be
-    /// declared in WGSL.
-    std::string FriendlyName(const SymbolTable& symbols) const override;
+    /// Reflect the fields of this class so that it can be used by tint::ForeachField()
+    TINT_REFLECT(plane_1, params);
 };
 
-}  // namespace tint::sem
+/// BindingsMap is a map where the key is the binding location of a
+/// texture_external and the value is a struct containing the desired
+/// locations for new bindings expanded from the texture_external instance.
+using BindingsMap = std::unordered_map<BindingPoint, BindingPoints>;
+
+}  // namespace tint::sem::external_texture
 
 #endif  // SRC_TINT_SEM_EXTERNAL_TEXTURE_H_

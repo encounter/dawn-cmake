@@ -1,10 +1,13 @@
 SKIP: FAILED
 
+RWByteAddressBuffer prevent_dce : register(u0, space2);
+
 void smoothstep_c43ebd() {
-  vector<float16_t, 4> arg_0 = (float16_t(0.0h)).xxxx;
-  vector<float16_t, 4> arg_1 = (float16_t(0.0h)).xxxx;
-  vector<float16_t, 4> arg_2 = (float16_t(0.0h)).xxxx;
+  vector<float16_t, 4> arg_0 = (float16_t(2.0h)).xxxx;
+  vector<float16_t, 4> arg_1 = (float16_t(4.0h)).xxxx;
+  vector<float16_t, 4> arg_2 = (float16_t(3.0h)).xxxx;
   vector<float16_t, 4> res = smoothstep(arg_0, arg_1, arg_2);
+  prevent_dce.Store<vector<float16_t, 4> >(0u, res);
 }
 
 struct tint_symbol {
@@ -33,9 +36,3 @@ void compute_main() {
   smoothstep_c43ebd();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001EE5BEB1170(2,10-18): error X3000: syntax error: unexpected token 'float16_t'
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001EE5BEB1170(3,10-18): error X3000: syntax error: unexpected token 'float16_t'
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001EE5BEB1170(4,10-18): error X3000: syntax error: unexpected token 'float16_t'
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001EE5BEB1170(5,10-18): error X3000: syntax error: unexpected token 'float16_t'
-

@@ -1,10 +1,13 @@
-SKIP: FAILED
-
 #version 310 es
 
-uniform highp sampler1D arg_0_1;
+uniform highp sampler2D arg_0_1;
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec4 inner;
+} prevent_dce;
+
 void textureLoad_81c381() {
-  vec4 res = texelFetch(arg_0_1, 1, 0);
+  vec4 res = texelFetch(arg_0_1, ivec2(1, 0), 1);
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -20,19 +23,17 @@ void main() {
   gl_Position.z = ((2.0f * gl_Position.z) - gl_Position.w);
   return;
 }
-Error parsing GLSL shader:
-ERROR: 0:3: 'sampler1D' : Reserved word. 
-ERROR: 0:3: '' : compilation terminated 
-ERROR: 2 compilation errors.  No code generated.
-
-
-
 #version 310 es
-precision mediump float;
+precision highp float;
 
-uniform highp sampler1D arg_0_1;
+uniform highp sampler2D arg_0_1;
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec4 inner;
+} prevent_dce;
+
 void textureLoad_81c381() {
-  vec4 res = texelFetch(arg_0_1, 1, 0);
+  vec4 res = texelFetch(arg_0_1, ivec2(1, 0), 1);
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -43,18 +44,16 @@ void main() {
   fragment_main();
   return;
 }
-Error parsing GLSL shader:
-ERROR: 0:4: 'sampler1D' : Reserved word. 
-ERROR: 0:4: '' : compilation terminated 
-ERROR: 2 compilation errors.  No code generated.
-
-
-
 #version 310 es
 
-uniform highp sampler1D arg_0_1;
+uniform highp sampler2D arg_0_1;
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec4 inner;
+} prevent_dce;
+
 void textureLoad_81c381() {
-  vec4 res = texelFetch(arg_0_1, 1, 0);
+  vec4 res = texelFetch(arg_0_1, ivec2(1, 0), 1);
+  prevent_dce.inner = res;
 }
 
 void compute_main() {
@@ -66,10 +65,3 @@ void main() {
   compute_main();
   return;
 }
-Error parsing GLSL shader:
-ERROR: 0:3: 'sampler1D' : Reserved word. 
-ERROR: 0:3: '' : compilation terminated 
-ERROR: 2 compilation errors.  No code generated.
-
-
-

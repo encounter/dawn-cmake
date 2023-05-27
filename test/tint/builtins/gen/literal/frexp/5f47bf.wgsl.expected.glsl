@@ -2,19 +2,13 @@
 #extension GL_AMD_gpu_shader_half_float : require
 
 struct frexp_result_vec2_f16 {
-  f16vec2 sig;
+  f16vec2 fract;
   ivec2 exp;
 };
 
-frexp_result_vec2_f16 tint_frexp(f16vec2 param_0) {
-  frexp_result_vec2_f16 result;
-  result.sig = frexp(param_0, result.exp);
-  return result;
-}
-
 
 void frexp_5f47bf() {
-  frexp_result_vec2_f16 res = tint_frexp(f16vec2(0.0hf));
+  frexp_result_vec2_f16 res = frexp_result_vec2_f16(f16vec2(0.5hf), ivec2(1));
 }
 
 vec4 vertex_main() {
@@ -32,22 +26,16 @@ void main() {
 }
 #version 310 es
 #extension GL_AMD_gpu_shader_half_float : require
-precision mediump float;
+precision highp float;
 
 struct frexp_result_vec2_f16 {
-  f16vec2 sig;
+  f16vec2 fract;
   ivec2 exp;
 };
 
-frexp_result_vec2_f16 tint_frexp(f16vec2 param_0) {
-  frexp_result_vec2_f16 result;
-  result.sig = frexp(param_0, result.exp);
-  return result;
-}
-
 
 void frexp_5f47bf() {
-  frexp_result_vec2_f16 res = tint_frexp(f16vec2(0.0hf));
+  frexp_result_vec2_f16 res = frexp_result_vec2_f16(f16vec2(0.5hf), ivec2(1));
 }
 
 void fragment_main() {
@@ -62,19 +50,13 @@ void main() {
 #extension GL_AMD_gpu_shader_half_float : require
 
 struct frexp_result_vec2_f16 {
-  f16vec2 sig;
+  f16vec2 fract;
   ivec2 exp;
 };
 
-frexp_result_vec2_f16 tint_frexp(f16vec2 param_0) {
-  frexp_result_vec2_f16 result;
-  result.sig = frexp(param_0, result.exp);
-  return result;
-}
-
 
 void frexp_5f47bf() {
-  frexp_result_vec2_f16 res = tint_frexp(f16vec2(0.0hf));
+  frexp_result_vec2_f16 res = frexp_result_vec2_f16(f16vec2(0.5hf), ivec2(1));
 }
 
 void compute_main() {

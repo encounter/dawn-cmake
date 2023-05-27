@@ -20,7 +20,7 @@ struct S2_atomic {
 static uint local_invocation_index_1 = 0u;
 groupshared S2_atomic wg;
 
-void compute_main_inner(uint local_invocation_index) {
+void compute_main_inner(uint local_invocation_index_2) {
   wg.x = 0;
   wg.y = 0;
   wg.z = 0;
@@ -39,7 +39,8 @@ void compute_main_inner(uint local_invocation_index) {
 }
 
 void compute_main_1() {
-  compute_main_inner(local_invocation_index_1);
+  const uint x_44 = local_invocation_index_1;
+  compute_main_inner(x_44);
   return;
 }
 

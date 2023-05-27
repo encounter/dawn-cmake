@@ -23,19 +23,27 @@ bool IsFeatureSupported(WGPUFeatureName feature) {
         case WGPUFeatureName_Undefined:
         case WGPUFeatureName_Force32:
         case WGPUFeatureName_DawnNative:
+        case WGPUFeatureName_DawnShaderFloat16:  // Deprecated
+        case WGPUFeatureName_ImplicitDeviceSynchronization:
+        case WGPUFeatureName_SurfaceCapabilities:
             return false;
         case WGPUFeatureName_Depth32FloatStencil8:
         case WGPUFeatureName_TimestampQuery:
+        case WGPUFeatureName_TimestampQueryInsidePasses:
         case WGPUFeatureName_PipelineStatisticsQuery:
         case WGPUFeatureName_TextureCompressionBC:
         case WGPUFeatureName_TextureCompressionETC2:
         case WGPUFeatureName_TextureCompressionASTC:
         case WGPUFeatureName_IndirectFirstInstance:
         case WGPUFeatureName_DepthClipControl:
-        case WGPUFeatureName_DawnShaderFloat16:
         case WGPUFeatureName_DawnInternalUsages:
         case WGPUFeatureName_DawnMultiPlanarFormats:
         case WGPUFeatureName_ChromiumExperimentalDp4a:
+        case WGPUFeatureName_ShaderF16:
+        case WGPUFeatureName_RG11B10UfloatRenderable:
+        case WGPUFeatureName_BGRA8UnormStorage:
+        case WGPUFeatureName_TransientAttachments:
+        case WGPUFeatureName_Float32Filterable:
             return true;
     }
 

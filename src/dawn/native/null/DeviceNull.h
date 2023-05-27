@@ -18,7 +18,6 @@
 #include <memory>
 #include <vector>
 
-#include "dawn/native/Adapter.h"
 #include "dawn/native/BindGroup.h"
 #include "dawn/native/BindGroupLayout.h"
 #include "dawn/native/Buffer.h"
@@ -26,6 +25,7 @@
 #include "dawn/native/CommandEncoder.h"
 #include "dawn/native/ComputePipeline.h"
 #include "dawn/native/Device.h"
+#include "dawn/native/PhysicalDevice.h"
 #include "dawn/native/PipelineLayout.h"
 #include "dawn/native/QuerySet.h"
 #include "dawn/native/Queue.h"
@@ -33,7 +33,6 @@
 #include "dawn/native/RingBufferAllocator.h"
 #include "dawn/native/Sampler.h"
 #include "dawn/native/ShaderModule.h"
-#include "dawn/native/StagingBuffer.h"
 #include "dawn/native/SwapChain.h"
 #include "dawn/native/Texture.h"
 #include "dawn/native/ToBackend.h"
@@ -41,13 +40,13 @@
 
 namespace dawn::native::null {
 
-class Adapter;
 class BindGroup;
 class BindGroupLayout;
 class Buffer;
 class CommandBuffer;
 class ComputePipeline;
 class Device;
+class PhysicalDevice;
 using PipelineLayout = PipelineLayoutBase;
 class QuerySet;
 class Queue;
@@ -59,13 +58,13 @@ class Texture;
 using TextureView = TextureViewBase;
 
 struct NullBackendTraits {
-    using AdapterType = Adapter;
     using BindGroupType = BindGroup;
     using BindGroupLayoutType = BindGroupLayout;
     using BufferType = Buffer;
     using CommandBufferType = CommandBuffer;
     using ComputePipelineType = ComputePipeline;
     using DeviceType = Device;
+    using PhysicalDeviceType = PhysicalDevice;
     using PipelineLayoutType = PipelineLayout;
     using QuerySetType = QuerySet;
     using QueueType = Queue;
@@ -89,7 +88,9 @@ struct PendingOperation {
 
 class Device final : public DeviceBase {
   public:
-    static ResultOrError<Ref<Device>> Create(Adapter* adapter, const DeviceDescriptor* descriptor);
+    static ResultOrError<Ref<Device>> Create(AdapterBase* adapter,
+                                             const DeviceDescriptor* descriptor,
+                                             const TogglesState& deviceToggles);
     ~Device() override;
 
     MaybeError Initialize(const DeviceDescriptor* descriptor);
@@ -103,16 +104,15 @@ class Device final : public DeviceBase {
     void AddPendingOperation(std::unique_ptr<PendingOperation> operation);
     MaybeError SubmitPendingOperations();
 
-    ResultOrError<std::unique_ptr<StagingBufferBase>> CreateStagingBuffer(size_t size) override;
-    MaybeError CopyFromStagingToBuffer(StagingBufferBase* source,
-                                       uint64_t sourceOffset,
-                                       BufferBase* destination,
-                                       uint64_t destinationOffset,
-                                       uint64_t size) override;
-    MaybeError CopyFromStagingToTexture(const StagingBufferBase* source,
-                                        const TextureDataLayout& src,
-                                        TextureCopy* dst,
-                                        const Extent3D& copySizePixels) override;
+    MaybeError CopyFromStagingToBufferImpl(BufferBase* source,
+                                           uint64_t sourceOffset,
+                                           BufferBase* destination,
+                                           uint64_t destinationOffset,
+                                           uint64_t size) override;
+    MaybeError CopyFromStagingToTextureImpl(const BufferBase* source,
+                                            const TextureDataLayout& src,
+                                            const TextureCopy& dst,
+                                            const Extent3D& copySizePixels) override;
 
     MaybeError IncrementMemoryUsage(uint64_t bytes);
     void DecrementMemoryUsage(uint64_t bytes);
@@ -121,6 +121,8 @@ class Device final : public DeviceBase {
     uint64_t GetOptimalBufferToTextureCopyOffsetAlignment() const override;
 
     float GetTimestampPeriodInNS() const override;
+
+    void ForceEventualFlushOfCommands() override;
 
   private:
     using DeviceBase::DeviceBase;
@@ -145,20 +147,22 @@ class Device final : public DeviceBase {
         ShaderModuleParseResult* parseResult,
         OwnedCompilationMessages* compilationMessages) override;
     ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
-        const SwapChainDescriptor* descriptor) override;
-    ResultOrError<Ref<NewSwapChainBase>> CreateSwapChainImpl(
         Surface* surface,
-        NewSwapChainBase* previousSwapChain,
+        SwapChainBase* previousSwapChain,
         const SwapChainDescriptor* descriptor) override;
     ResultOrError<Ref<TextureBase>> CreateTextureImpl(const TextureDescriptor* descriptor) override;
     ResultOrError<Ref<TextureViewBase>> CreateTextureViewImpl(
         TextureBase* texture,
         const TextureViewDescriptor* descriptor) override;
 
+    ResultOrError<wgpu::TextureUsage> GetSupportedSurfaceUsageImpl(
+        const Surface* surface) const override;
+
     ResultOrError<ExecutionSerial> CheckAndUpdateCompletedSerials() override;
 
     void DestroyImpl() override;
     MaybeError WaitForIdleForDestruction() override;
+    bool HasPendingCommands() const override;
 
     std::vector<std::unique_ptr<PendingOperation>> mPendingOperations;
 
@@ -166,23 +170,33 @@ class Device final : public DeviceBase {
     size_t mMemoryUsage = 0;
 };
 
-class Adapter : public AdapterBase {
+class PhysicalDevice : public PhysicalDeviceBase {
   public:
-    explicit Adapter(InstanceBase* instance);
-    ~Adapter() override;
+    // Create null adapter without providing toggles state for testing, only inherit instance's
+    // toggles state
+    explicit PhysicalDevice(InstanceBase* instance);
+    ~PhysicalDevice() override;
 
-    // AdapterBase Implementation
+    // PhysicalDeviceBase Implementation
     bool SupportsExternalImages() const override;
 
+    bool SupportsFeatureLevel(FeatureLevel featureLevel) const override;
+
     // Used for the tests that intend to use an adapter without all features enabled.
-    void SetSupportedFeatures(const std::vector<wgpu::FeatureName>& requiredFeatures);
+    using PhysicalDeviceBase::SetSupportedFeaturesForTesting;
 
   private:
     MaybeError InitializeImpl() override;
-    MaybeError InitializeSupportedFeaturesImpl() override;
+    void InitializeSupportedFeaturesImpl() override;
     MaybeError InitializeSupportedLimitsImpl(CombinedLimits* limits) override;
 
-    ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(const DeviceDescriptor* descriptor) override;
+    MaybeError ValidateFeatureSupportedWithTogglesImpl(wgpu::FeatureName feature,
+                                                       const TogglesState& toggles) const override;
+
+    void SetupBackendDeviceToggles(TogglesState* deviceToggles) const override;
+    ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(AdapterBase* adapter,
+                                                    const DeviceDescriptor* descriptor,
+                                                    const TogglesState& deviceToggles) override;
 };
 
 // Helper class so |BindGroup| can allocate memory for its binding data,
@@ -219,7 +233,7 @@ class Buffer final : public BufferBase {
   public:
     Buffer(Device* device, const BufferDescriptor* descriptor);
 
-    void CopyFromStaging(StagingBufferBase* staging,
+    void CopyFromStaging(BufferBase* staging,
                          uint64_t sourceOffset,
                          uint64_t destinationOffset,
                          uint64_t size);
@@ -232,7 +246,7 @@ class Buffer final : public BufferBase {
     void DestroyImpl() override;
     bool IsCPUWritableAtCreation() const override;
     MaybeError MapAtCreationImpl() override;
-    void* GetMappedPointerImpl() override;
+    void* GetMappedPointer() override;
 
     std::unique_ptr<uint8_t[]> mBackingData;
 };
@@ -282,57 +296,23 @@ class ShaderModule final : public ShaderModuleBase {
                           OwnedCompilationMessages* compilationMessages);
 };
 
-class SwapChain final : public NewSwapChainBase {
+class SwapChain final : public SwapChainBase {
   public:
     static ResultOrError<Ref<SwapChain>> Create(Device* device,
                                                 Surface* surface,
-                                                NewSwapChainBase* previousSwapChain,
+                                                SwapChainBase* previousSwapChain,
                                                 const SwapChainDescriptor* descriptor);
     ~SwapChain() override;
 
   private:
-    using NewSwapChainBase::NewSwapChainBase;
-    MaybeError Initialize(NewSwapChainBase* previousSwapChain);
+    using SwapChainBase::SwapChainBase;
+    MaybeError Initialize(SwapChainBase* previousSwapChain);
 
     Ref<Texture> mTexture;
 
     MaybeError PresentImpl() override;
-    ResultOrError<Ref<TextureViewBase>> GetCurrentTextureViewImpl() override;
+    ResultOrError<Ref<TextureBase>> GetCurrentTextureImpl() override;
     void DetachFromSurfaceImpl() override;
-};
-
-class OldSwapChain final : public OldSwapChainBase {
-  public:
-    OldSwapChain(Device* device, const SwapChainDescriptor* descriptor);
-
-  protected:
-    ~OldSwapChain() override;
-    TextureBase* GetNextTextureImpl(const TextureDescriptor* descriptor) override;
-    MaybeError OnBeforePresent(TextureViewBase*) override;
-};
-
-class NativeSwapChainImpl {
-  public:
-    using WSIContext = struct {};
-    void Init(WSIContext* context);
-    DawnSwapChainError Configure(WGPUTextureFormat format,
-                                 WGPUTextureUsage,
-                                 uint32_t width,
-                                 uint32_t height);
-    DawnSwapChainError GetNextTexture(DawnSwapChainNextTexture* nextTexture);
-    DawnSwapChainError Present();
-    wgpu::TextureFormat GetPreferredFormat() const;
-};
-
-class StagingBuffer : public StagingBufferBase {
-  public:
-    StagingBuffer(size_t size, Device* device);
-    ~StagingBuffer() override;
-    MaybeError Initialize() override;
-
-  private:
-    Device* mDevice;
-    std::unique_ptr<uint8_t[]> mBuffer;
 };
 
 class Texture : public TextureBase {

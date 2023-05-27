@@ -19,11 +19,11 @@
 #include <unordered_set>
 
 #include "src/tint/ast/function.h"
+#include "src/tint/constant/manager.h"
 #include "src/tint/program_id.h"
-#include "src/tint/sem/constant.h"
 #include "src/tint/sem/info.h"
-#include "src/tint/sem/type_manager.h"
 #include "src/tint/symbol_table.h"
+#include "src/tint/type/manager.h"
 
 // Forward Declarations
 namespace tint {
@@ -43,9 +43,6 @@ class Program {
 
     /// SemNodeAllocator is an alias to BlockAllocator<sem::Node>
     using SemNodeAllocator = utils::BlockAllocator<sem::Node>;
-
-    /// ConstantAllocator is an alias to BlockAllocator<sem::Constant>
-    using ConstantAllocator = utils::BlockAllocator<sem::Constant>;
 
     /// Constructor
     Program();
@@ -72,10 +69,16 @@ class Program {
     /// @returns the last allocated (numerically highest) AST node identifier.
     ast::NodeID HighestASTNodeID() const { return highest_node_id_; }
 
-    /// @returns a reference to the program's types
-    const sem::Manager& Types() const {
+    /// @returns a reference to the program's constants
+    const constant::Manager& Constants() const {
         AssertNotMoved();
-        return types_;
+        return constants_;
+    }
+
+    /// @returns a reference to the program's types
+    const type::Manager& Types() const {
+        AssertNotMoved();
+        return constants_.types;
     }
 
     /// @returns a reference to the program's AST nodes storage
@@ -136,20 +139,20 @@ class Program {
     /// @param expr the AST expression
     /// @return the resolved semantic type for the expression, or nullptr if the
     /// expression has no resolved type.
-    const sem::Type* TypeOf(const ast::Expression* expr) const;
+    const type::Type* TypeOf(const ast::Expression* expr) const;
 
-    /// Helper for returning the resolved semantic type of the AST type `type`.
-    /// @param type the AST type
-    /// @return the resolved semantic type for the type, or nullptr if the type
-    /// has no resolved type.
-    const sem::Type* TypeOf(const ast::Type* type) const;
+    /// Helper for returning the resolved semantic type of the variable `var`.
+    /// @param var the AST variable
+    /// @return the resolved semantic type for the variable, or nullptr if the
+    /// variable has no resolved type.
+    const type::Type* TypeOf(const ast::Variable* var) const;
 
     /// Helper for returning the resolved semantic type of the AST type
     /// declaration `type_decl`.
     /// @param type_decl the AST type declaration
     /// @return the resolved semantic type for the type declaration, or nullptr if
     /// the type declaration has no resolved type.
-    const sem::Type* TypeOf(const ast::TypeDecl* type_decl) const;
+    const type::Type* TypeOf(const ast::TypeDecl* type_decl) const;
 
     /// A function that can be used to print a program
     using Printer = std::string (*)(const Program*);
@@ -165,10 +168,9 @@ class Program {
 
     ProgramID id_;
     ast::NodeID highest_node_id_;
-    sem::Manager types_;
+    constant::Manager constants_;
     ASTNodeAllocator ast_nodes_;
     SemNodeAllocator sem_nodes_;
-    ConstantAllocator constant_nodes_;
     ast::Module* ast_ = nullptr;
     sem::Info sem_;
     SymbolTable symbols_{id_};

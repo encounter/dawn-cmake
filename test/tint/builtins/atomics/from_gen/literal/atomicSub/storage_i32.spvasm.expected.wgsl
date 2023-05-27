@@ -1,16 +1,18 @@
 struct SB_RW_atomic {
+  /* @offset(0) */
   arg_0 : atomic<i32>,
 }
 
 struct SB_RW {
+  /* @offset(0) */
   arg_0 : i32,
 }
 
 @group(0) @binding(0) var<storage, read_write> sb_rw : SB_RW_atomic;
 
 fn atomicSub_051100() {
-  var res : i32 = 0i;
-  let x_9 : i32 = atomicSub(&(sb_rw.arg_0), 1i);
+  var res = 0i;
+  let x_9 = atomicSub(&(sb_rw.arg_0), 1i);
   res = x_9;
   return;
 }

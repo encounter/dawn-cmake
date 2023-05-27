@@ -12,10 +12,111 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "src/tint/ast/test_helper.h"
+#include "src/tint/builtin/builtin_value.h"
 #include "src/tint/reader/wgsl/parser_impl_test_helper.h"
 
 namespace tint::reader::wgsl {
 namespace {
+
+TEST_F(ParserImplTest, Attribute_Id) {
+    auto p = parser("id(4)");
+    auto attr = p->attribute();
+    EXPECT_TRUE(attr.matched);
+    EXPECT_FALSE(attr.errored);
+    ASSERT_NE(attr.value, nullptr);
+    auto* var_attr = attr.value->As<ast::Attribute>();
+    ASSERT_NE(var_attr, nullptr);
+    ASSERT_FALSE(p->has_error());
+    ASSERT_TRUE(var_attr->Is<ast::IdAttribute>());
+
+    auto* loc = var_attr->As<ast::IdAttribute>();
+    ASSERT_TRUE(loc->expr->Is<ast::IntLiteralExpression>());
+    auto* exp = loc->expr->As<ast::IntLiteralExpression>();
+    EXPECT_EQ(exp->value, 4u);
+}
+
+TEST_F(ParserImplTest, Attribute_Id_Expression) {
+    auto p = parser("id(4 + 5)");
+    auto attr = p->attribute();
+    EXPECT_TRUE(attr.matched);
+    EXPECT_FALSE(attr.errored);
+    ASSERT_NE(attr.value, nullptr);
+    auto* var_attr = attr.value->As<ast::Attribute>();
+    ASSERT_NE(var_attr, nullptr);
+    ASSERT_FALSE(p->has_error());
+    ASSERT_TRUE(var_attr->Is<ast::IdAttribute>());
+
+    auto* loc = var_attr->As<ast::IdAttribute>();
+    ASSERT_TRUE(loc->expr->Is<ast::BinaryExpression>());
+    auto* expr = loc->expr->As<ast::BinaryExpression>();
+
+    EXPECT_EQ(ast::BinaryOp::kAdd, expr->op);
+    auto* v = expr->lhs->As<ast::IntLiteralExpression>();
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(v->value, 4u);
+
+    v = expr->rhs->As<ast::IntLiteralExpression>();
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(v->value, 5u);
+}
+
+TEST_F(ParserImplTest, Attribute_Id_TrailingComma) {
+    auto p = parser("id(4,)");
+    auto attr = p->attribute();
+    EXPECT_TRUE(attr.matched);
+    EXPECT_FALSE(attr.errored);
+    ASSERT_NE(attr.value, nullptr);
+    auto* var_attr = attr.value->As<ast::Attribute>();
+    ASSERT_NE(var_attr, nullptr);
+    ASSERT_FALSE(p->has_error());
+    ASSERT_TRUE(var_attr->Is<ast::IdAttribute>());
+
+    auto* loc = var_attr->As<ast::IdAttribute>();
+    ASSERT_TRUE(loc->expr->Is<ast::IntLiteralExpression>());
+    auto* exp = loc->expr->As<ast::IntLiteralExpression>();
+    EXPECT_EQ(exp->value, 4u);
+}
+
+TEST_F(ParserImplTest, Attribute_Id_MissingLeftParen) {
+    auto p = parser("id 4)");
+    auto attr = p->attribute();
+    EXPECT_FALSE(attr.matched);
+    EXPECT_TRUE(attr.errored);
+    EXPECT_EQ(attr.value, nullptr);
+    EXPECT_TRUE(p->has_error());
+    EXPECT_EQ(p->error(), "1:4: expected '(' for id attribute");
+}
+
+TEST_F(ParserImplTest, Attribute_Id_MissingRightParen) {
+    auto p = parser("id(4");
+    auto attr = p->attribute();
+    EXPECT_FALSE(attr.matched);
+    EXPECT_TRUE(attr.errored);
+    EXPECT_EQ(attr.value, nullptr);
+    EXPECT_TRUE(p->has_error());
+    EXPECT_EQ(p->error(), "1:5: expected ')' for id attribute");
+}
+
+TEST_F(ParserImplTest, Attribute_Id_MissingValue) {
+    auto p = parser("id()");
+    auto attr = p->attribute();
+    EXPECT_FALSE(attr.matched);
+    EXPECT_TRUE(attr.errored);
+    EXPECT_EQ(attr.value, nullptr);
+    EXPECT_TRUE(p->has_error());
+    EXPECT_EQ(p->error(), "1:1: id expects 1 argument");
+}
+
+TEST_F(ParserImplTest, Attribute_Id_MissingInvalid) {
+    auto p = parser("id(if)");
+    auto attr = p->attribute();
+    EXPECT_FALSE(attr.matched);
+    EXPECT_TRUE(attr.errored);
+    EXPECT_EQ(attr.value, nullptr);
+    EXPECT_TRUE(p->has_error());
+    EXPECT_EQ(p->error(), "1:4: expected expression for id");
+}
 
 TEST_F(ParserImplTest, Attribute_Location) {
     auto p = parser("location(4)");
@@ -29,7 +130,34 @@ TEST_F(ParserImplTest, Attribute_Location) {
     ASSERT_TRUE(var_attr->Is<ast::LocationAttribute>());
 
     auto* loc = var_attr->As<ast::LocationAttribute>();
-    EXPECT_EQ(loc->value, 4u);
+    ASSERT_TRUE(loc->expr->Is<ast::IntLiteralExpression>());
+    auto* exp = loc->expr->As<ast::IntLiteralExpression>();
+    EXPECT_EQ(exp->value, 4u);
+}
+
+TEST_F(ParserImplTest, Attribute_Location_Expression) {
+    auto p = parser("location(4 + 5)");
+    auto attr = p->attribute();
+    EXPECT_TRUE(attr.matched);
+    EXPECT_FALSE(attr.errored);
+    ASSERT_NE(attr.value, nullptr);
+    auto* var_attr = attr.value->As<ast::Attribute>();
+    ASSERT_NE(var_attr, nullptr);
+    ASSERT_FALSE(p->has_error());
+    ASSERT_TRUE(var_attr->Is<ast::LocationAttribute>());
+
+    auto* loc = var_attr->As<ast::LocationAttribute>();
+    ASSERT_TRUE(loc->expr->Is<ast::BinaryExpression>());
+    auto* expr = loc->expr->As<ast::BinaryExpression>();
+
+    EXPECT_EQ(ast::BinaryOp::kAdd, expr->op);
+    auto* v = expr->lhs->As<ast::IntLiteralExpression>();
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(v->value, 4u);
+
+    v = expr->rhs->As<ast::IntLiteralExpression>();
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(v->value, 5u);
 }
 
 TEST_F(ParserImplTest, Attribute_Location_TrailingComma) {
@@ -44,7 +172,9 @@ TEST_F(ParserImplTest, Attribute_Location_TrailingComma) {
     ASSERT_TRUE(var_attr->Is<ast::LocationAttribute>());
 
     auto* loc = var_attr->As<ast::LocationAttribute>();
-    EXPECT_EQ(loc->value, 4u);
+    ASSERT_TRUE(loc->expr->Is<ast::IntLiteralExpression>());
+    auto* exp = loc->expr->As<ast::IntLiteralExpression>();
+    EXPECT_EQ(exp->value, 4u);
 }
 
 TEST_F(ParserImplTest, Attribute_Location_MissingLeftParen) {
@@ -74,33 +204,24 @@ TEST_F(ParserImplTest, Attribute_Location_MissingValue) {
     EXPECT_TRUE(attr.errored);
     EXPECT_EQ(attr.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:10: expected signed integer literal for location attribute");
+    EXPECT_EQ(p->error(), "1:1: location expects 1 argument");
 }
 
 TEST_F(ParserImplTest, Attribute_Location_MissingInvalid) {
-    auto p = parser("location(nan)");
+    auto p = parser("location(if)");
     auto attr = p->attribute();
     EXPECT_FALSE(attr.matched);
     EXPECT_TRUE(attr.errored);
     EXPECT_EQ(attr.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:10: expected signed integer literal for location attribute");
+    EXPECT_EQ(p->error(), "1:10: expected expression for location");
 }
 
-struct BuiltinData {
-    const char* input;
-    ast::BuiltinValue result;
-};
-inline std::ostream& operator<<(std::ostream& out, BuiltinData data) {
-    out << std::string(data.input);
-    return out;
-}
-
-class BuiltinTest : public ParserImplTestWithParam<BuiltinData> {};
+class BuiltinTest : public ParserImplTestWithParam<builtin::BuiltinValue> {};
 
 TEST_P(BuiltinTest, Attribute_Builtin) {
-    auto params = GetParam();
-    auto p = parser(std::string("builtin(") + params.input + ")");
+    auto str = utils::ToString(GetParam());
+    auto p = parser("builtin(" + str + ")");
 
     auto attr = p->attribute();
     EXPECT_TRUE(attr.matched);
@@ -112,11 +233,11 @@ TEST_P(BuiltinTest, Attribute_Builtin) {
     ASSERT_TRUE(var_attr->Is<ast::BuiltinAttribute>());
 
     auto* builtin = var_attr->As<ast::BuiltinAttribute>();
-    EXPECT_EQ(builtin->builtin, params.result);
+    ast::CheckIdentifier(builtin->builtin, str);
 }
 TEST_P(BuiltinTest, Attribute_Builtin_TrailingComma) {
-    auto params = GetParam();
-    auto p = parser(std::string("builtin(") + params.input + ",)");
+    auto str = utils::ToString(GetParam());
+    auto p = parser("builtin(" + str + ",)");
 
     auto attr = p->attribute();
     EXPECT_TRUE(attr.matched);
@@ -128,23 +249,22 @@ TEST_P(BuiltinTest, Attribute_Builtin_TrailingComma) {
     ASSERT_TRUE(var_attr->Is<ast::BuiltinAttribute>());
 
     auto* builtin = var_attr->As<ast::BuiltinAttribute>();
-    EXPECT_EQ(builtin->builtin, params.result);
+    ast::CheckIdentifier(builtin->builtin, str);
 }
-INSTANTIATE_TEST_SUITE_P(
-    ParserImplTest,
-    BuiltinTest,
-    testing::Values(BuiltinData{"position", ast::BuiltinValue::kPosition},
-                    BuiltinData{"vertex_index", ast::BuiltinValue::kVertexIndex},
-                    BuiltinData{"instance_index", ast::BuiltinValue::kInstanceIndex},
-                    BuiltinData{"front_facing", ast::BuiltinValue::kFrontFacing},
-                    BuiltinData{"frag_depth", ast::BuiltinValue::kFragDepth},
-                    BuiltinData{"local_invocation_id", ast::BuiltinValue::kLocalInvocationId},
-                    BuiltinData{"local_invocation_index", ast::BuiltinValue::kLocalInvocationIndex},
-                    BuiltinData{"global_invocation_id", ast::BuiltinValue::kGlobalInvocationId},
-                    BuiltinData{"workgroup_id", ast::BuiltinValue::kWorkgroupId},
-                    BuiltinData{"num_workgroups", ast::BuiltinValue::kNumWorkgroups},
-                    BuiltinData{"sample_index", ast::BuiltinValue::kSampleIndex},
-                    BuiltinData{"sample_mask", ast::BuiltinValue::kSampleMask}));
+INSTANTIATE_TEST_SUITE_P(ParserImplTest,
+                         BuiltinTest,
+                         testing::Values(builtin::BuiltinValue::kPosition,
+                                         builtin::BuiltinValue::kVertexIndex,
+                                         builtin::BuiltinValue::kInstanceIndex,
+                                         builtin::BuiltinValue::kFrontFacing,
+                                         builtin::BuiltinValue::kFragDepth,
+                                         builtin::BuiltinValue::kLocalInvocationId,
+                                         builtin::BuiltinValue::kLocalInvocationIndex,
+                                         builtin::BuiltinValue::kGlobalInvocationId,
+                                         builtin::BuiltinValue::kWorkgroupId,
+                                         builtin::BuiltinValue::kNumWorkgroups,
+                                         builtin::BuiltinValue::kSampleIndex,
+                                         builtin::BuiltinValue::kSampleMask));
 
 TEST_F(ParserImplTest, Attribute_Builtin_MissingLeftParen) {
     auto p = parser("builtin position)");
@@ -173,27 +293,7 @@ TEST_F(ParserImplTest, Attribute_Builtin_MissingValue) {
     EXPECT_TRUE(attr.errored);
     EXPECT_EQ(attr.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:9: expected identifier for builtin");
-}
-
-TEST_F(ParserImplTest, Attribute_Builtin_InvalidValue) {
-    auto p = parser("builtin(other_thingy)");
-    auto attr = p->attribute();
-    EXPECT_FALSE(attr.matched);
-    EXPECT_TRUE(attr.errored);
-    EXPECT_EQ(attr.value, nullptr);
-    EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:9: invalid value for builtin attribute");
-}
-
-TEST_F(ParserImplTest, Attribute_Builtin_MissingInvalid) {
-    auto p = parser("builtin(3)");
-    auto attr = p->attribute();
-    EXPECT_FALSE(attr.matched);
-    EXPECT_TRUE(attr.errored);
-    EXPECT_EQ(attr.value, nullptr);
-    EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:9: expected identifier for builtin");
+    EXPECT_EQ(p->error(), "1:1: builtin expects 1 argument");
 }
 
 TEST_F(ParserImplTest, Attribute_Interpolate_Flat) {
@@ -208,8 +308,8 @@ TEST_F(ParserImplTest, Attribute_Interpolate_Flat) {
     ASSERT_TRUE(var_attr->Is<ast::InterpolateAttribute>());
 
     auto* interp = var_attr->As<ast::InterpolateAttribute>();
-    EXPECT_EQ(interp->type, ast::InterpolationType::kFlat);
-    EXPECT_EQ(interp->sampling, ast::InterpolationSampling::kNone);
+    ast::CheckIdentifier(interp->type, "flat");
+    EXPECT_EQ(interp->sampling, nullptr);
 }
 
 TEST_F(ParserImplTest, Attribute_Interpolate_Single_TrailingComma) {
@@ -224,8 +324,8 @@ TEST_F(ParserImplTest, Attribute_Interpolate_Single_TrailingComma) {
     ASSERT_TRUE(var_attr->Is<ast::InterpolateAttribute>());
 
     auto* interp = var_attr->As<ast::InterpolateAttribute>();
-    EXPECT_EQ(interp->type, ast::InterpolationType::kFlat);
-    EXPECT_EQ(interp->sampling, ast::InterpolationSampling::kNone);
+    ast::CheckIdentifier(interp->type, "flat");
+    EXPECT_EQ(interp->sampling, nullptr);
 }
 
 TEST_F(ParserImplTest, Attribute_Interpolate_Single_DoubleTrailingComma) {
@@ -235,7 +335,7 @@ TEST_F(ParserImplTest, Attribute_Interpolate_Single_DoubleTrailingComma) {
     EXPECT_TRUE(attr.errored);
     EXPECT_EQ(attr.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:18: expected identifier for interpolation sample name");
+    EXPECT_EQ(p->error(), "1:18: expected expression for interpolate");
 }
 
 TEST_F(ParserImplTest, Attribute_Interpolate_Perspective_Center) {
@@ -250,8 +350,8 @@ TEST_F(ParserImplTest, Attribute_Interpolate_Perspective_Center) {
     ASSERT_TRUE(var_attr->Is<ast::InterpolateAttribute>());
 
     auto* interp = var_attr->As<ast::InterpolateAttribute>();
-    EXPECT_EQ(interp->type, ast::InterpolationType::kPerspective);
-    EXPECT_EQ(interp->sampling, ast::InterpolationSampling::kCenter);
+    ast::CheckIdentifier(interp->type, "perspective");
+    ast::CheckIdentifier(interp->sampling, "center");
 }
 
 TEST_F(ParserImplTest, Attribute_Interpolate_Double_TrailingComma) {
@@ -266,8 +366,8 @@ TEST_F(ParserImplTest, Attribute_Interpolate_Double_TrailingComma) {
     ASSERT_TRUE(var_attr->Is<ast::InterpolateAttribute>());
 
     auto* interp = var_attr->As<ast::InterpolateAttribute>();
-    EXPECT_EQ(interp->type, ast::InterpolationType::kPerspective);
-    EXPECT_EQ(interp->sampling, ast::InterpolationSampling::kCenter);
+    ast::CheckIdentifier(interp->type, "perspective");
+    ast::CheckIdentifier(interp->sampling, "center");
 }
 
 TEST_F(ParserImplTest, Attribute_Interpolate_Perspective_Centroid) {
@@ -282,8 +382,8 @@ TEST_F(ParserImplTest, Attribute_Interpolate_Perspective_Centroid) {
     ASSERT_TRUE(var_attr->Is<ast::InterpolateAttribute>());
 
     auto* interp = var_attr->As<ast::InterpolateAttribute>();
-    EXPECT_EQ(interp->type, ast::InterpolationType::kPerspective);
-    EXPECT_EQ(interp->sampling, ast::InterpolationSampling::kCentroid);
+    ast::CheckIdentifier(interp->type, "perspective");
+    ast::CheckIdentifier(interp->sampling, "centroid");
 }
 
 TEST_F(ParserImplTest, Attribute_Interpolate_Linear_Sample) {
@@ -298,8 +398,8 @@ TEST_F(ParserImplTest, Attribute_Interpolate_Linear_Sample) {
     ASSERT_TRUE(var_attr->Is<ast::InterpolateAttribute>());
 
     auto* interp = var_attr->As<ast::InterpolateAttribute>();
-    EXPECT_EQ(interp->type, ast::InterpolationType::kLinear);
-    EXPECT_EQ(interp->sampling, ast::InterpolationSampling::kSample);
+    ast::CheckIdentifier(interp->type, "linear");
+    ast::CheckIdentifier(interp->sampling, "sample");
 }
 
 TEST_F(ParserImplTest, Attribute_Interpolate_MissingLeftParen) {
@@ -329,27 +429,7 @@ TEST_F(ParserImplTest, Attribute_Interpolate_MissingFirstValue) {
     EXPECT_TRUE(attr.errored);
     EXPECT_EQ(attr.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:13: expected identifier for interpolation type name");
-}
-
-TEST_F(ParserImplTest, Attribute_Interpolate_InvalidFirstValue) {
-    auto p = parser("interpolate(other_thingy)");
-    auto attr = p->attribute();
-    EXPECT_FALSE(attr.matched);
-    EXPECT_TRUE(attr.errored);
-    EXPECT_EQ(attr.value, nullptr);
-    EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:13: invalid interpolation type");
-}
-
-TEST_F(ParserImplTest, Attribute_Interpolate_InvalidSecondValue) {
-    auto p = parser("interpolate(perspective, nope)");
-    auto attr = p->attribute();
-    EXPECT_FALSE(attr.matched);
-    EXPECT_TRUE(attr.errored);
-    EXPECT_EQ(attr.value, nullptr);
-    EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:26: invalid interpolation sampling");
+    EXPECT_EQ(p->error(), "1:1: interpolate expects at least 1 argument");
 }
 
 TEST_F(ParserImplTest, Attribute_Binding) {
@@ -364,7 +444,35 @@ TEST_F(ParserImplTest, Attribute_Binding) {
     ASSERT_TRUE(var_attr->Is<ast::BindingAttribute>());
 
     auto* binding = var_attr->As<ast::BindingAttribute>();
-    EXPECT_EQ(binding->value, 4u);
+    ASSERT_TRUE(binding->expr->Is<ast::IntLiteralExpression>());
+    auto* expr = binding->expr->As<ast::IntLiteralExpression>();
+    EXPECT_EQ(expr->value, 4);
+    EXPECT_EQ(expr->suffix, ast::IntLiteralExpression::Suffix::kNone);
+}
+
+TEST_F(ParserImplTest, Attribute_Binding_Expression) {
+    auto p = parser("binding(4 + 5)");
+    auto attr = p->attribute();
+    EXPECT_TRUE(attr.matched);
+    EXPECT_FALSE(attr.errored);
+    ASSERT_NE(attr.value, nullptr);
+    auto* var_attr = attr.value->As<ast::Attribute>();
+    ASSERT_NE(var_attr, nullptr);
+    ASSERT_FALSE(p->has_error());
+    ASSERT_TRUE(var_attr->Is<ast::BindingAttribute>());
+
+    auto* binding = var_attr->As<ast::BindingAttribute>();
+    ASSERT_TRUE(binding->expr->Is<ast::BinaryExpression>());
+    auto* expr = binding->expr->As<ast::BinaryExpression>();
+
+    EXPECT_EQ(ast::BinaryOp::kAdd, expr->op);
+    auto* v = expr->lhs->As<ast::IntLiteralExpression>();
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(v->value, 4u);
+
+    v = expr->rhs->As<ast::IntLiteralExpression>();
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(v->value, 5u);
 }
 
 TEST_F(ParserImplTest, Attribute_Binding_TrailingComma) {
@@ -379,7 +487,10 @@ TEST_F(ParserImplTest, Attribute_Binding_TrailingComma) {
     ASSERT_TRUE(var_attr->Is<ast::BindingAttribute>());
 
     auto* binding = var_attr->As<ast::BindingAttribute>();
-    EXPECT_EQ(binding->value, 4u);
+    ASSERT_TRUE(binding->expr->Is<ast::IntLiteralExpression>());
+    auto* expr = binding->expr->As<ast::IntLiteralExpression>();
+    EXPECT_EQ(expr->value, 4);
+    EXPECT_EQ(expr->suffix, ast::IntLiteralExpression::Suffix::kNone);
 }
 
 TEST_F(ParserImplTest, Attribute_Binding_MissingLeftParen) {
@@ -409,17 +520,17 @@ TEST_F(ParserImplTest, Attribute_Binding_MissingValue) {
     EXPECT_TRUE(attr.errored);
     EXPECT_EQ(attr.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:9: expected signed integer literal for binding attribute");
+    EXPECT_EQ(p->error(), "1:1: binding expects 1 argument");
 }
 
 TEST_F(ParserImplTest, Attribute_Binding_MissingInvalid) {
-    auto p = parser("binding(nan)");
+    auto p = parser("binding(if)");
     auto attr = p->attribute();
     EXPECT_FALSE(attr.matched);
     EXPECT_TRUE(attr.errored);
     EXPECT_EQ(attr.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:9: expected signed integer literal for binding attribute");
+    EXPECT_EQ(p->error(), "1:9: expected expression for binding");
 }
 
 TEST_F(ParserImplTest, Attribute_group) {
@@ -434,7 +545,35 @@ TEST_F(ParserImplTest, Attribute_group) {
     ASSERT_TRUE(var_attr->Is<ast::GroupAttribute>());
 
     auto* group = var_attr->As<ast::GroupAttribute>();
-    EXPECT_EQ(group->value, 4u);
+    ASSERT_TRUE(group->expr->Is<ast::IntLiteralExpression>());
+    auto* expr = group->expr->As<ast::IntLiteralExpression>();
+    EXPECT_EQ(expr->value, 4);
+    EXPECT_EQ(expr->suffix, ast::IntLiteralExpression::Suffix::kNone);
+}
+
+TEST_F(ParserImplTest, Attribute_group_expression) {
+    auto p = parser("group(4 + 5)");
+    auto attr = p->attribute();
+    EXPECT_TRUE(attr.matched);
+    EXPECT_FALSE(attr.errored);
+    ASSERT_NE(attr.value, nullptr);
+    auto* var_attr = attr.value->As<ast::Attribute>();
+    ASSERT_FALSE(p->has_error());
+    ASSERT_NE(var_attr, nullptr);
+    ASSERT_TRUE(var_attr->Is<ast::GroupAttribute>());
+
+    auto* group = var_attr->As<ast::GroupAttribute>();
+    ASSERT_TRUE(group->expr->Is<ast::BinaryExpression>());
+    auto* expr = group->expr->As<ast::BinaryExpression>();
+
+    EXPECT_EQ(ast::BinaryOp::kAdd, expr->op);
+    auto* v = expr->lhs->As<ast::IntLiteralExpression>();
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(v->value, 4u);
+
+    v = expr->rhs->As<ast::IntLiteralExpression>();
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(v->value, 5u);
 }
 
 TEST_F(ParserImplTest, Attribute_group_TrailingComma) {
@@ -449,7 +588,10 @@ TEST_F(ParserImplTest, Attribute_group_TrailingComma) {
     ASSERT_TRUE(var_attr->Is<ast::GroupAttribute>());
 
     auto* group = var_attr->As<ast::GroupAttribute>();
-    EXPECT_EQ(group->value, 4u);
+    ASSERT_TRUE(group->expr->Is<ast::IntLiteralExpression>());
+    auto* expr = group->expr->As<ast::IntLiteralExpression>();
+    EXPECT_EQ(expr->value, 4);
+    EXPECT_EQ(expr->suffix, ast::IntLiteralExpression::Suffix::kNone);
 }
 
 TEST_F(ParserImplTest, Attribute_Group_MissingLeftParen) {
@@ -479,17 +621,17 @@ TEST_F(ParserImplTest, Attribute_Group_MissingValue) {
     EXPECT_TRUE(attr.errored);
     EXPECT_EQ(attr.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:7: expected signed integer literal for group attribute");
+    EXPECT_EQ(p->error(), "1:1: group expects 1 argument");
 }
 
 TEST_F(ParserImplTest, Attribute_Group_MissingInvalid) {
-    auto p = parser("group(nan)");
+    auto p = parser("group(if)");
     auto attr = p->attribute();
     EXPECT_FALSE(attr.matched);
     EXPECT_TRUE(attr.errored);
     EXPECT_EQ(attr.value, nullptr);
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:7: expected signed integer literal for group attribute");
+    EXPECT_EQ(p->error(), "1:7: expected expression for group");
 }
 
 }  // namespace

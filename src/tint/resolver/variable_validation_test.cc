@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "gmock/gmock.h"
 #include "src/tint/resolver/resolver.h"
 #include "src/tint/resolver/resolver_test_helper.h"
-
-#include "gmock/gmock.h"
+#include "src/tint/type/texture_dimension.h"
 
 using namespace tint::number_suffixes;  // NOLINT
 
@@ -58,14 +58,34 @@ TEST_F(ResolverVariableValidationTest, GlobalVarInitializerNoReturnValueBuiltin)
     EXPECT_EQ(r()->error(), "12:34 error: builtin 'storageBarrier' does not return a value");
 }
 
+TEST_F(ResolverVariableValidationTest, GlobalVarNoAddressSpace) {
+    // var a : i32;
+    GlobalVar(Source{{12, 34}}, "a", ty.i32());
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(
+        r()->error(),
+        R"(12:34 error: module-scope 'var' declarations that are not of texture or sampler types must provide an address space)");
+}
+
+TEST_F(ResolverVariableValidationTest, GlobalVarWithInitializerNoAddressSpace) {
+    // var a = 1;
+    GlobalVar(Source{{12, 34}}, "a", Expr(1_a));
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(
+        r()->error(),
+        R"(12:34 error: module-scope 'var' declarations that are not of texture or sampler types must provide an address space)");
+}
+
 TEST_F(ResolverVariableValidationTest, GlobalVarUsedAtModuleScope) {
     // var<private> a : i32;
     // var<private> b : i32 = a;
-    GlobalVar(Source{{12, 34}}, "a", ty.i32(), ast::StorageClass::kPrivate);
-    GlobalVar("b", ty.i32(), ast::StorageClass::kPrivate, Expr(Source{{56, 78}}, "a"));
+    GlobalVar(Source{{12, 34}}, "a", ty.i32(), builtin::AddressSpace::kPrivate);
+    GlobalVar("b", ty.i32(), builtin::AddressSpace::kPrivate, Expr(Source{{56, 78}}, "a"));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(56:78 error: var 'a' cannot not be referenced at module-scope
+    EXPECT_EQ(r()->error(), R"(56:78 error: var 'a' cannot be referenced at module-scope
 12:34 note: var 'a' declared here)");
 }
 
@@ -98,7 +118,7 @@ TEST_F(ResolverVariableValidationTest, OverrideExceedsIDLimit_LastReserved) {
     // ...
     // @id(N) override oN : i32;
     constexpr size_t kLimit = std::numeric_limits<decltype(OverrideId::value)>::max();
-    Override("reserved", ty.i32(), Id(kLimit));
+    Override("reserved", ty.i32(), Id(AInt(kLimit)));
     for (size_t i = 0; i < kLimit; i++) {
         Override("o" + std::to_string(i), ty.i32());
     }
@@ -112,8 +132,8 @@ TEST_F(ResolverVariableValidationTest, VarTypeNotConstructible) {
     // var i : i32;
     // var p : pointer<function, i32> = &v;
     auto* i = Var("i", ty.i32());
-    auto* p = Var("a", ty.pointer<i32>(Source{{56, 78}}, ast::StorageClass::kFunction),
-                  ast::StorageClass::kNone, AddressOf(Source{{12, 34}}, "i"));
+    auto* p = Var("a", ty.pointer<i32>(Source{{56, 78}}, builtin::AddressSpace::kFunction),
+                  builtin::AddressSpace::kUndefined, AddressOf(Source{{12, 34}}, "i"));
     WrapInFunction(i, p);
 
     EXPECT_FALSE(r()->Resolve());
@@ -123,8 +143,8 @@ TEST_F(ResolverVariableValidationTest, VarTypeNotConstructible) {
 TEST_F(ResolverVariableValidationTest, LetTypeNotConstructible) {
     // @group(0) @binding(0) var t1 : texture_2d<f32>;
     // let t2 : t1;
-    auto* t1 = GlobalVar("t1", ty.sampled_texture(ast::TextureDimension::k2d, ty.f32()), Group(0),
-                         Binding(0));
+    auto* t1 = GlobalVar("t1", ty.sampled_texture(type::TextureDimension::k2d, ty.f32()),
+                         Group(0_a), Binding(0_a));
     auto* t2 = Let(Source{{56, 78}}, "t2", Expr(t1));
     WrapInFunction(t2);
 
@@ -148,7 +168,7 @@ TEST_F(ResolverVariableValidationTest, OverrideInferedTypeNotScalar) {
     EXPECT_EQ(r()->error(), "56:78 error: vec3<f32> cannot be used as the type of a 'override'");
 }
 
-TEST_F(ResolverVariableValidationTest, ConstConstructorWrongType) {
+TEST_F(ResolverVariableValidationTest, ConstInitializerWrongType) {
     // const c : i32 = 2u
     WrapInFunction(Const(Source{{3, 3}}, "c", ty.i32(), Expr(2_u)));
 
@@ -157,7 +177,7 @@ TEST_F(ResolverVariableValidationTest, ConstConstructorWrongType) {
               R"(3:3 error: cannot initialize const of type 'i32' with value of type 'u32')");
 }
 
-TEST_F(ResolverVariableValidationTest, LetConstructorWrongType) {
+TEST_F(ResolverVariableValidationTest, LetInitializerWrongType) {
     // var v : i32 = 2u
     WrapInFunction(Let(Source{{3, 3}}, "v", ty.i32(), Expr(2_u)));
 
@@ -166,7 +186,7 @@ TEST_F(ResolverVariableValidationTest, LetConstructorWrongType) {
               R"(3:3 error: cannot initialize let of type 'i32' with value of type 'u32')");
 }
 
-TEST_F(ResolverVariableValidationTest, VarConstructorWrongType) {
+TEST_F(ResolverVariableValidationTest, VarInitializerWrongType) {
     // var v : i32 = 2u
     WrapInFunction(Var(Source{{3, 3}}, "v", ty.i32(), Expr(2_u)));
 
@@ -175,7 +195,7 @@ TEST_F(ResolverVariableValidationTest, VarConstructorWrongType) {
               R"(3:3 error: cannot initialize var of type 'i32' with value of type 'u32')");
 }
 
-TEST_F(ResolverVariableValidationTest, ConstConstructorWrongTypeViaAlias) {
+TEST_F(ResolverVariableValidationTest, ConstInitializerWrongTypeViaAlias) {
     auto* a = Alias("I32", ty.i32());
     WrapInFunction(Const(Source{{3, 3}}, "v", ty.Of(a), Expr(2_u)));
 
@@ -184,7 +204,7 @@ TEST_F(ResolverVariableValidationTest, ConstConstructorWrongTypeViaAlias) {
               R"(3:3 error: cannot initialize const of type 'i32' with value of type 'u32')");
 }
 
-TEST_F(ResolverVariableValidationTest, LetConstructorWrongTypeViaAlias) {
+TEST_F(ResolverVariableValidationTest, LetInitializerWrongTypeViaAlias) {
     auto* a = Alias("I32", ty.i32());
     WrapInFunction(Let(Source{{3, 3}}, "v", ty.Of(a), Expr(2_u)));
 
@@ -193,7 +213,7 @@ TEST_F(ResolverVariableValidationTest, LetConstructorWrongTypeViaAlias) {
               R"(3:3 error: cannot initialize let of type 'i32' with value of type 'u32')");
 }
 
-TEST_F(ResolverVariableValidationTest, VarConstructorWrongTypeViaAlias) {
+TEST_F(ResolverVariableValidationTest, VarInitializerWrongTypeViaAlias) {
     auto* a = Alias("I32", ty.i32());
     WrapInFunction(Var(Source{{3, 3}}, "v", ty.Of(a), Expr(2_u)));
 
@@ -205,7 +225,7 @@ TEST_F(ResolverVariableValidationTest, VarConstructorWrongTypeViaAlias) {
 TEST_F(ResolverVariableValidationTest, LetOfPtrConstructedWithRef) {
     // var a : f32;
     // let b : ptr<function,f32> = a;
-    const auto priv = ast::StorageClass::kFunction;
+    const auto priv = builtin::AddressSpace::kFunction;
     auto* var_a = Var("a", ty.f32(), priv);
     auto* var_b = Let(Source{{12, 34}}, "b", ty.pointer<f32>(priv), Expr("a"));
     WrapInFunction(var_a, var_b);
@@ -236,7 +256,7 @@ TEST_F(ResolverVariableValidationTest, GlobalVarRedeclaredAsLocal) {
     //   return 0;
     // }
 
-    GlobalVar("v", ty.f32(), ast::StorageClass::kPrivate, Expr(2.1_f));
+    GlobalVar("v", ty.f32(), builtin::AddressSpace::kPrivate, Expr(2.1_f));
 
     WrapInFunction(Var(Source{{12, 34}}, "v", ty.f32(), Expr(2_f)));
 
@@ -294,12 +314,13 @@ TEST_F(ResolverVariableValidationTest, InferredPtrStorageAccessMismatch) {
     auto* buf = Structure("S", utils::Vector{
                                    Member("inner", ty.Of(inner)),
                                });
-    auto* storage = GlobalVar("s", ty.Of(buf), ast::StorageClass::kStorage, Binding(0), Group(0));
+    auto* storage =
+        GlobalVar("s", ty.Of(buf), builtin::AddressSpace::kStorage, Binding(0_a), Group(0_a));
 
     auto* expr = IndexAccessor(MemberAccessor(MemberAccessor(storage, "inner"), "arr"), 2_i);
-    auto* ptr =
-        Let(Source{{12, 34}}, "p",
-            ty.pointer<i32>(ast::StorageClass::kStorage, ast::Access::kReadWrite), AddressOf(expr));
+    auto* ptr = Let(Source{{12, 34}}, "p",
+                    ty.pointer<i32>(builtin::AddressSpace::kStorage, builtin::Access::kReadWrite),
+                    AddressOf(expr));
 
     WrapInFunction(ptr);
 
@@ -320,16 +341,16 @@ TEST_F(ResolverVariableValidationTest, NonConstructibleType_Atomic) {
 
 TEST_F(ResolverVariableValidationTest, NonConstructibleType_RuntimeArray) {
     auto* s = Structure("S", utils::Vector{
-                                 Member(Source{{56, 78}}, "m", ty.array(ty.i32())),
+                                 Member(Source{{12, 34}}, "m", ty.array<i32>()),
                              });
-    auto* v = Var(Source{{12, 34}}, "v", ty.Of(s));
+    auto* v = Var(Source{{56, 78}}, "v", ty.Of(s));
     WrapInFunction(v);
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
-              R"(12:34 error: runtime-sized arrays can only be used in the <storage> storage class
-56:78 note: while analysing structure member S.m
-12:34 note: while instantiating 'var' v)");
+              R"(error: runtime-sized arrays can only be used in the <storage> address space
+12:34 note: while analyzing structure member S.m
+56:78 note: while instantiating 'var' v)");
 }
 
 TEST_F(ResolverVariableValidationTest, NonConstructibleType_Struct_WithAtomic) {
@@ -348,7 +369,7 @@ TEST_F(ResolverVariableValidationTest, NonConstructibleType_InferredType) {
     // fn foo() {
     //   var v = s;
     // }
-    GlobalVar("s", ty.sampler(ast::SamplerKind::kSampler), Group(0), Binding(0));
+    GlobalVar("s", ty.sampler(type::SamplerKind::kSampler), Group(0_a), Binding(0_a));
     auto* v = Var(Source{{12, 34}}, "v", Expr("s"));
     WrapInFunction(v);
 
@@ -356,91 +377,145 @@ TEST_F(ResolverVariableValidationTest, NonConstructibleType_InferredType) {
     EXPECT_EQ(r()->error(), "12:34 error: function-scope 'var' must have a constructible type");
 }
 
-TEST_F(ResolverVariableValidationTest, InvalidStorageClassForInitializer) {
+TEST_F(ResolverVariableValidationTest, InvalidAddressSpaceForInitializer) {
     // var<workgroup> v : f32 = 1.23;
-    GlobalVar(Source{{12, 34}}, "v", ty.f32(), ast::StorageClass::kWorkgroup, Expr(1.23_f));
+    GlobalVar(Source{{12, 34}}, "v", ty.f32(), builtin::AddressSpace::kWorkgroup, Expr(1.23_f));
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
-              "12:34 error: var of storage class 'workgroup' cannot have "
+              "12:34 error: var of address space 'workgroup' cannot have "
               "an initializer. var initializers are only supported for the "
-              "storage classes 'private' and 'function'");
+              "address spaces 'private' and 'function'");
 }
 
 TEST_F(ResolverVariableValidationTest, VectorConstNoType) {
-    // const a : mat3x3 = mat3x3<f32>();
-    WrapInFunction(Const("a", create<ast::Vector>(Source{{12, 34}}, nullptr, 3u), vec3<f32>()));
+    // const a vec3 = vec3<f32>();
+    WrapInFunction(Const("a", ty.vec3<Infer>(Source{{12, 34}}), vec3<f32>()));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 error: missing vector element type");
+    EXPECT_EQ(r()->error(), "12:34 error: expected '<' for 'vec3'");
 }
 
 TEST_F(ResolverVariableValidationTest, VectorLetNoType) {
-    // let a : mat3x3 = mat3x3<f32>();
-    WrapInFunction(Let("a", create<ast::Vector>(Source{{12, 34}}, nullptr, 3u), vec3<f32>()));
+    // let a : vec3 = vec3<f32>();
+    WrapInFunction(Let("a", ty.vec3<Infer>(Source{{12, 34}}), vec3<f32>()));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 error: missing vector element type");
+    EXPECT_EQ(r()->error(), "12:34 error: expected '<' for 'vec3'");
 }
 
 TEST_F(ResolverVariableValidationTest, VectorVarNoType) {
-    // var a : mat3x3;
-    WrapInFunction(Var("a", create<ast::Vector>(Source{{12, 34}}, nullptr, 3u)));
+    // var a : vec3;
+    WrapInFunction(Var("a", ty.vec3<Infer>(Source{{12, 34}})));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 error: missing vector element type");
+    EXPECT_EQ(r()->error(), "12:34 error: expected '<' for 'vec3'");
 }
 
 TEST_F(ResolverVariableValidationTest, MatrixConstNoType) {
     // const a : mat3x3 = mat3x3<f32>();
-    WrapInFunction(
-        Const("a", create<ast::Matrix>(Source{{12, 34}}, nullptr, 3u, 3u), mat3x3<f32>()));
+    WrapInFunction(Const("a", ty.mat3x3<Infer>(Source{{12, 34}}), mat3x3<f32>()));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 error: missing matrix element type");
+    EXPECT_EQ(r()->error(), "12:34 error: expected '<' for 'mat3x3'");
 }
 
 TEST_F(ResolverVariableValidationTest, MatrixLetNoType) {
     // let a : mat3x3 = mat3x3<f32>();
-    WrapInFunction(Let("a", create<ast::Matrix>(Source{{12, 34}}, nullptr, 3u, 3u), mat3x3<f32>()));
+    WrapInFunction(Let("a", ty.mat3x3<Infer>(Source{{12, 34}}), mat3x3<f32>()));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 error: missing matrix element type");
+    EXPECT_EQ(r()->error(), "12:34 error: expected '<' for 'mat3x3'");
 }
 
 TEST_F(ResolverVariableValidationTest, MatrixVarNoType) {
     // var a : mat3x3;
-    WrapInFunction(Var("a", create<ast::Matrix>(Source{{12, 34}}, nullptr, 3u, 3u)));
+    WrapInFunction(Var("a", ty.mat3x3<Infer>(Source{{12, 34}})));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 error: missing matrix element type");
+    EXPECT_EQ(r()->error(), "12:34 error: expected '<' for 'mat3x3'");
+}
+
+TEST_F(ResolverVariableValidationTest, GlobalConstWithRuntimeExpression) {
+    GlobalConst("c", Call(Source{{12, 34}}, "dpdx", 1._a));
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(
+        r()->error(),
+        R"(12:34 error: const initializer requires a const-expression, but expression is a runtime-expression)");
 }
 
 TEST_F(ResolverVariableValidationTest, ConstInitWithVar) {
     auto* v = Var("v", Expr(1_i));
     auto* c = Const("c", Expr(Source{{12, 34}}, v));
-    WrapInFunction(v, c);
+    WrapInFunction(v, Decl(Source{{56, 78}}, c));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(12:34 error: 'const' initializer must be constant expression)");
+    EXPECT_EQ(
+        r()->error(),
+        R"(12:34 error: const initializer requires a const-expression, but expression is a runtime-expression
+56:78 note: consider changing 'const' to 'let')");
 }
 
 TEST_F(ResolverVariableValidationTest, ConstInitWithOverride) {
     auto* o = Override("v", Expr(1_i));
     auto* c = Const("c", Expr(Source{{12, 34}}, o));
-    WrapInFunction(c);
+    WrapInFunction(Decl(Source{{56, 78}}, c));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(12:34 error: 'const' initializer must be constant expression)");
+    EXPECT_EQ(
+        r()->error(),
+        R"(12:34 error: const initializer requires a const-expression, but expression is an override-expression
+56:78 note: consider changing 'const' to 'let')");
 }
 
 TEST_F(ResolverVariableValidationTest, ConstInitWithLet) {
     auto* l = Let("v", Expr(1_i));
     auto* c = Const("c", Expr(Source{{12, 34}}, l));
-    WrapInFunction(l, c);
+    WrapInFunction(l, Decl(Source{{56, 78}}, c));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(12:34 error: 'const' initializer must be constant expression)");
+    EXPECT_EQ(
+        r()->error(),
+        R"(12:34 error: const initializer requires a const-expression, but expression is a runtime-expression
+56:78 note: consider changing 'const' to 'let')");
+}
+
+TEST_F(ResolverVariableValidationTest, ConstInitWithRuntimeExpr) {
+    // const c = clamp(2, dpdx(0.5), 3);
+    auto* c = Const("c", Call("clamp", 2_a, Call(Source{{12, 34}}, "dpdx", 0.5_a), 3_a));
+    WrapInFunction(Decl(Source{{56, 78}}, c));
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(
+        r()->error(),
+        R"(12:34 error: const initializer requires a const-expression, but expression is a runtime-expression
+56:78 note: consider changing 'const' to 'let')");
+}
+
+TEST_F(ResolverVariableValidationTest, ConstInitWithOverrideExpr) {
+    auto* o = Override("v", Expr(1_i));
+    auto* c = Const("c", Add(10_a, Expr(Source{{12, 34}}, o)));
+    WrapInFunction(Decl(Source{{56, 78}}, c));
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(
+        r()->error(),
+        R"(12:34 error: const initializer requires a const-expression, but expression is an override-expression
+56:78 note: consider changing 'const' to 'let')");
+}
+
+TEST_F(ResolverVariableValidationTest, GlobalVariable_PushConstantWithInitializer) {
+    // enable chromium_experimental_push_constant;
+    // var<push_constant> a : u32 = 0u;
+    Enable(builtin::Extension::kChromiumExperimentalPushConstant);
+    GlobalVar(Source{{1u, 2u}}, "a", ty.u32(), builtin::AddressSpace::kPushConstant,
+              Expr(Source{{3u, 4u}}, u32(0)));
+
+    ASSERT_FALSE(r()->Resolve());
+    EXPECT_EQ(
+        r()->error(),
+        R"(1:2 error: var of address space 'push_constant' cannot have an initializer. var initializers are only supported for the address spaces 'private' and 'function')");
 }
 
 }  // namespace

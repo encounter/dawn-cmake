@@ -1,10 +1,16 @@
 #version 310 es
 
-layout(binding = 1, std430) buffer SB_RO_1 {
+layout(binding = 1, std430) buffer SB_RO_ssbo {
   int arg_0[];
 } sb_ro;
+
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uint inner;
+} prevent_dce;
+
 void arrayLength_1588cd() {
   uint res = uint(sb_ro.arg_0.length());
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -21,13 +27,19 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-layout(binding = 1, std430) buffer SB_RO_1 {
+layout(binding = 1, std430) buffer SB_RO_ssbo {
   int arg_0[];
 } sb_ro;
+
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uint inner;
+} prevent_dce;
+
 void arrayLength_1588cd() {
   uint res = uint(sb_ro.arg_0.length());
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -40,11 +52,17 @@ void main() {
 }
 #version 310 es
 
-layout(binding = 1, std430) buffer SB_RO_1 {
+layout(binding = 1, std430) buffer SB_RO_ssbo {
   int arg_0[];
 } sb_ro;
+
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uint inner;
+} prevent_dce;
+
 void arrayLength_1588cd() {
   uint res = uint(sb_ro.arg_0.length());
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

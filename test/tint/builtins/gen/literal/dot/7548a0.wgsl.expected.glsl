@@ -1,11 +1,12 @@
 #version 310 es
 
-uint tint_int_dot(uvec3 a, uvec3 b) {
-  return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uint inner;
+} prevent_dce;
 
 void dot_7548a0() {
-  uint res = tint_int_dot(uvec3(1u), uvec3(1u));
+  uint res = 3u;
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -22,14 +23,15 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-uint tint_int_dot(uvec3 a, uvec3 b) {
-  return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uint inner;
+} prevent_dce;
 
 void dot_7548a0() {
-  uint res = tint_int_dot(uvec3(1u), uvec3(1u));
+  uint res = 3u;
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -42,12 +44,13 @@ void main() {
 }
 #version 310 es
 
-uint tint_int_dot(uvec3 a, uvec3 b) {
-  return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  uint inner;
+} prevent_dce;
 
 void dot_7548a0() {
-  uint res = tint_int_dot(uvec3(1u), uvec3(1u));
+  uint res = 3u;
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

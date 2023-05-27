@@ -19,6 +19,9 @@
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
 
+namespace dawn {
+namespace {
+
 // Test that rendering to a subresource of a texture works.
 class SubresourceRenderAttachmentTest : public DawnTest {
     constexpr static uint32_t kRTSize = 2;
@@ -165,10 +168,6 @@ TEST_P(SubresourceRenderAttachmentTest, StencilTexture) {
     // stencil.
     DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("disable_depth_stencil_read"));
 
-    // TODO(crbug.com/dawn/704): Readback after clear via stencil copy does not work
-    // on some Intel drivers.
-    DAWN_SUPPRESS_TEST_IF(IsMetal() && IsIntel());
-
     // TODO(crbug.com/dawn/1497): glReadPixels: GL error: HIGH: Invalid format and type combination.
     DAWN_SUPPRESS_TEST_IF(IsANGLE());
 
@@ -182,3 +181,6 @@ DAWN_INSTANTIATE_TEST(SubresourceRenderAttachmentTest,
                       OpenGLBackend(),
                       OpenGLESBackend(),
                       VulkanBackend());
+
+}  // anonymous namespace
+}  // namespace dawn

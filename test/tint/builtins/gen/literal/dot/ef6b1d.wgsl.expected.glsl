@@ -1,11 +1,12 @@
 #version 310 es
 
-int tint_int_dot(ivec4 a, ivec4 b) {
-  return a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  int inner;
+} prevent_dce;
 
 void dot_ef6b1d() {
-  int res = tint_int_dot(ivec4(1), ivec4(1));
+  int res = 4;
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -22,14 +23,15 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-int tint_int_dot(ivec4 a, ivec4 b) {
-  return a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  int inner;
+} prevent_dce;
 
 void dot_ef6b1d() {
-  int res = tint_int_dot(ivec4(1), ivec4(1));
+  int res = 4;
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -42,12 +44,13 @@ void main() {
 }
 #version 310 es
 
-int tint_int_dot(ivec4 a, ivec4 b) {
-  return a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
-}
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  int inner;
+} prevent_dce;
 
 void dot_ef6b1d() {
-  int res = tint_int_dot(ivec4(1), ivec4(1));
+  int res = 4;
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

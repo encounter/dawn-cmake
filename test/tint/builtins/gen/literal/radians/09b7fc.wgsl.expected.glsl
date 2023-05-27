@@ -1,12 +1,12 @@
 #version 310 es
 
-vec4 tint_radians(vec4 param_0) {
-  return param_0 * 0.017453292519943295474f;
-}
-
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec4 inner;
+} prevent_dce;
 
 void radians_09b7fc() {
-  vec4 res = tint_radians(vec4(1.0f));
+  vec4 res = vec4(0.01745329238474369049f);
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -23,15 +23,15 @@ void main() {
   return;
 }
 #version 310 es
-precision mediump float;
+precision highp float;
 
-vec4 tint_radians(vec4 param_0) {
-  return param_0 * 0.017453292519943295474f;
-}
-
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec4 inner;
+} prevent_dce;
 
 void radians_09b7fc() {
-  vec4 res = tint_radians(vec4(1.0f));
+  vec4 res = vec4(0.01745329238474369049f);
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -44,13 +44,13 @@ void main() {
 }
 #version 310 es
 
-vec4 tint_radians(vec4 param_0) {
-  return param_0 * 0.017453292519943295474f;
-}
-
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  vec4 inner;
+} prevent_dce;
 
 void radians_09b7fc() {
-  vec4 res = tint_radians(vec4(1.0f));
+  vec4 res = vec4(0.01745329238474369049f);
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

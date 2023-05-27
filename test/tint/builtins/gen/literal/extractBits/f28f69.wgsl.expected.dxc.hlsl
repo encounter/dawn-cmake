@@ -1,13 +1,8 @@
-uint2 tint_extract_bits(uint2 v, uint offset, uint count) {
-  const uint s = min(offset, 32u);
-  const uint e = min(32u, (s + count));
-  const uint shl = (32u - e);
-  const uint shr = (shl + s);
-  return ((v << uint2((shl).xx)) >> uint2((shr).xx));
-}
+RWByteAddressBuffer prevent_dce : register(u0, space2);
 
 void extractBits_f28f69() {
-  uint2 res = tint_extract_bits((1u).xx, 1u, 1u);
+  uint2 res = (0u).xx;
+  prevent_dce.Store2(0u, asuint(res));
 }
 
 struct tint_symbol {

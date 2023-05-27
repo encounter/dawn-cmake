@@ -7,7 +7,7 @@ void atomicStore_726882() {
   return;
 }
 
-void compute_main_inner(uint local_invocation_index) {
+void compute_main_inner(uint local_invocation_index_2) {
   uint atomic_result_1 = 0u;
   InterlockedExchange(arg_0, 0u, atomic_result_1);
   GroupMemoryBarrierWithGroupSync();
@@ -16,7 +16,8 @@ void compute_main_inner(uint local_invocation_index) {
 }
 
 void compute_main_1() {
-  compute_main_inner(local_invocation_index_1);
+  const uint x_28 = local_invocation_index_1;
+  compute_main_inner(x_28);
   return;
 }
 

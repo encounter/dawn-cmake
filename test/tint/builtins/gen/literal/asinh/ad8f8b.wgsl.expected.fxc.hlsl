@@ -1,11 +1,10 @@
 SKIP: FAILED
 
-vector<float16_t, 2> tint_sinh(vector<float16_t, 2> x) {
-  return log((x + sqrt(((x * x) + float16_t(1.0h)))));
-}
+RWByteAddressBuffer prevent_dce : register(u0, space2);
 
 void asinh_ad8f8b() {
-  vector<float16_t, 2> res = tint_sinh((float16_t(0.0h)).xx);
+  vector<float16_t, 2> res = (float16_t(0.88134765625h)).xx;
+  prevent_dce.Store<vector<float16_t, 2> >(0u, res);
 }
 
 struct tint_symbol {
@@ -34,6 +33,3 @@ void compute_main() {
   asinh_ad8f8b();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000002AC790D84D0(1,8-16): error X3000: syntax error: unexpected token 'float16_t'
-

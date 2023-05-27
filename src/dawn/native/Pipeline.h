@@ -40,8 +40,7 @@ MaybeError ValidateProgrammableStage(DeviceBase* device,
                                      const PipelineLayoutBase* layout,
                                      SingleShaderStage stage);
 
-// Use map to make sure constant keys are sorted for creating shader cache keys
-using PipelineConstantEntries = std::map<std::string, double>;
+WGPUCreatePipelineAsyncStatus CreatePipelineAsyncStatusFromErrorType(InternalErrorType error);
 
 struct ProgrammableStage {
     Ref<ShaderModuleBase> module;
@@ -62,6 +61,7 @@ class PipelineBase : public ApiObjectBase, public CachedObject {
     const RequiredBufferSizes& GetMinBufferSizes() const;
     const ProgrammableStage& GetStage(SingleShaderStage stage) const;
     const PerStage<ProgrammableStage>& GetAllStages() const;
+    bool HasStage(SingleShaderStage stage) const;
     wgpu::ShaderStage GetStageMask() const;
 
     ResultOrError<Ref<BindGroupLayoutBase>> GetBindGroupLayout(uint32_t groupIndex);
@@ -81,13 +81,10 @@ class PipelineBase : public ApiObjectBase, public CachedObject {
                  PipelineLayoutBase* layout,
                  const char* label,
                  std::vector<StageAndDescriptor> stages);
-    PipelineBase(DeviceBase* device, ObjectBase::ErrorTag tag);
-
-    // Constructor used only for mocking and testing.
-    explicit PipelineBase(DeviceBase* device);
+    PipelineBase(DeviceBase* device, ObjectBase::ErrorTag tag, const char* label);
 
   private:
-    MaybeError ValidateGetBindGroupLayout(uint32_t group);
+    MaybeError ValidateGetBindGroupLayout(BindGroupIndex group);
 
     wgpu::ShaderStage mStageMask = wgpu::ShaderStage::None;
     PerStage<ProgrammableStage> mStages;

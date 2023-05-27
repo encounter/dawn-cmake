@@ -14,22 +14,25 @@
 
 #include "src/tint/writer/wgsl/test_helper.h"
 
+#include "gmock/gmock.h"
+
 namespace tint::writer::wgsl {
 namespace {
 
 using WgslGeneratorImplTest = TestHelper;
 
 TEST_F(WgslGeneratorImplTest, Emit_Block) {
-    auto* b = Block(create<ast::DiscardStatement>());
+    auto* b = Block(Return());
     WrapInFunction(b);
 
     GeneratorImpl& gen = Build();
 
     gen.increment_indent();
 
-    ASSERT_TRUE(gen.EmitStatement(b)) << gen.error();
+    gen.EmitStatement(b);
+    EXPECT_THAT(gen.Diagnostics(), testing::IsEmpty());
     EXPECT_EQ(gen.result(), R"(  {
-    discard;
+    return;
   }
 )");
 }

@@ -21,12 +21,14 @@
 #include <utility>
 #include <vector>
 
-#include "src/tint/castable.h"
 #include "src/tint/debug.h"
 #include "src/tint/program_id.h"
 #include "src/tint/symbol.h"
-#include "src/tint/traits.h"
+#include "src/tint/utils/castable.h"
+#include "src/tint/utils/compiler_macros.h"
 #include "src/tint/utils/hashmap.h"
+#include "src/tint/utils/hashset.h"
+#include "src/tint/utils/traits.h"
 #include "src/tint/utils/vector.h"
 
 // Forward declarations
@@ -38,6 +40,7 @@ class ProgramBuilder;
 namespace tint::ast {
 class FunctionList;
 class Node;
+struct Type;
 }  // namespace tint::ast
 
 namespace tint {
@@ -46,7 +49,7 @@ ProgramID ProgramIDOf(const Program*);
 ProgramID ProgramIDOf(const ProgramBuilder*);
 
 /// Cloneable is the base class for all objects that can be cloned
-class Cloneable : public Castable<Cloneable> {
+class Cloneable : public utils::Castable<Cloneable> {
   public:
     /// Constructor
     Cloneable();
@@ -71,8 +74,8 @@ class CloneContext {
     /// ParamTypeIsPtrOf<F, T> is true iff the first parameter of
     /// F is a pointer of (or derives from) type T.
     template <typename F, typename T>
-    static constexpr bool ParamTypeIsPtrOf =
-        traits::IsTypeOrDerived<typename std::remove_pointer<traits::ParameterType<F, 0>>::type, T>;
+    static constexpr bool ParamTypeIsPtrOf = utils::traits::
+        IsTypeOrDerived<typename std::remove_pointer<utils::traits::ParameterType<F, 0>>::type, T>;
 
   public:
     /// SymbolTransform is a function that takes a symbol and returns a new
@@ -92,14 +95,14 @@ class CloneContext {
     /// Destructor
     ~CloneContext();
 
-    /// Clones the Node or sem::Type `a` into the ProgramBuilder #dst if `a` is
+    /// Clones the Node or type::Type `a` into the ProgramBuilder #dst if `a` is
     /// not null. If `a` is null, then Clone() returns null.
     ///
     /// Clone() may use a function registered with ReplaceAll() to create a
     /// transformed version of the object. See ReplaceAll() for more information.
     ///
     /// If the CloneContext is cloning from a Program to a ProgramBuilder, then
-    /// the Node or sem::Type `a` must be owned by the Program #src.
+    /// the Node or type::Type `a` must be owned by the Program #src.
     ///
     /// @param object the type deriving from Cloneable to clone
     /// @return the cloned node
@@ -116,14 +119,14 @@ class CloneContext {
         return nullptr;
     }
 
-    /// Clones the Node or sem::Type `a` into the ProgramBuilder #dst if `a` is
+    /// Clones the Node or type::Type `a` into the ProgramBuilder #dst if `a` is
     /// not null. If `a` is null, then Clone() returns null.
     ///
     /// Unlike Clone(), this method does not invoke or use any transformations
     /// registered by ReplaceAll().
     ///
     /// If the CloneContext is cloning from a Program to a ProgramBuilder, then
-    /// the Node or sem::Type `a` must be owned by the Program #src.
+    /// the Node or type::Type `a` must be owned by the Program #src.
     ///
     /// @param a the type deriving from Cloneable to clone
     /// @return the cloned node
@@ -139,6 +142,11 @@ class CloneContext {
         auto* c = a->Clone(this);
         return CheckedCast<T>(c);
     }
+
+    /// Clones the ast::Type `ty` into the ProgramBuilder #dst
+    /// @param ty the AST type.
+    /// @return the cloned node
+    ast::Type Clone(const ast::Type& ty);
 
     /// Clones the Source `s` into #dst
     /// TODO(bclayton) - Currently this 'clone' is a shallow copy. If/when
@@ -203,26 +211,26 @@ class CloneContext {
         auto transforms = list_transforms_.Find(&from);
 
         if (transforms) {
-            for (auto* o : transforms->insert_front_) {
-                to.Push(CheckedCast<T>(o));
+            for (auto& builder : transforms->insert_front_) {
+                to.Push(CheckedCast<T>(builder()));
             }
             for (auto& el : from) {
-                if (auto* insert_before = transforms->insert_before_.Find(el)) {
-                    for (auto insert : *insert_before) {
-                        to.Push(CheckedCast<T>(insert));
+                if (auto insert_before = transforms->insert_before_.Find(el)) {
+                    for (auto& builder : *insert_before) {
+                        to.Push(CheckedCast<T>(builder()));
                     }
                 }
                 if (!transforms->remove_.Contains(el)) {
                     to.Push(Clone(el));
                 }
-                if (auto* insert_after = transforms->insert_after_.Find(el)) {
-                    for (auto insert : *insert_after) {
-                        to.Push(CheckedCast<T>(insert));
+                if (auto insert_after = transforms->insert_after_.Find(el)) {
+                    for (auto& builder : *insert_after) {
+                        to.Push(CheckedCast<T>(builder()));
                     }
                 }
             }
-            for (auto* o : transforms->insert_back_) {
-                to.Push(CheckedCast<T>(o));
+            for (auto& builder : transforms->insert_back_) {
+                to.Push(CheckedCast<T>(builder()));
             }
         } else {
             for (auto& el : from) {
@@ -231,9 +239,9 @@ class CloneContext {
                 // Clone(el) may have updated the transformation list, adding an `insert_after`
                 // transform for `from`.
                 if (transforms) {
-                    if (auto* insert_after = transforms->insert_after_.Find(el)) {
-                        for (auto insert : *insert_after) {
-                            to.Push(CheckedCast<T>(insert));
+                    if (auto insert_after = transforms->insert_after_.Find(el)) {
+                        for (auto& builder : *insert_after) {
+                            to.Push(CheckedCast<T>(builder()));
                         }
                     }
                 }
@@ -242,8 +250,8 @@ class CloneContext {
             // Clone(el) may have updated the transformation list, adding an `insert_back_`
             // transform for `from`.
             if (transforms) {
-                for (auto* o : transforms->insert_back_) {
-                    to.Push(CheckedCast<T>(o));
+                for (auto& builder : transforms->insert_back_) {
+                    to.Push(CheckedCast<T>(builder()));
                 }
             }
         }
@@ -295,21 +303,23 @@ class CloneContext {
     ///        `T* (T*)`, where `T` derives from Cloneable
     /// @returns this CloneContext so calls can be chained
     template <typename F>
-    traits::EnableIf<ParamTypeIsPtrOf<F, Cloneable>, CloneContext>& ReplaceAll(F&& replacer) {
-        using TPtr = traits::ParameterType<F, 0>;
+    utils::traits::EnableIf<ParamTypeIsPtrOf<F, Cloneable>, CloneContext>& ReplaceAll(
+        F&& replacer) {
+        using TPtr = utils::traits::ParameterType<F, 0>;
         using T = typename std::remove_pointer<TPtr>::type;
         for (auto& transform : transforms_) {
-            if (transform.typeinfo->Is(&TypeInfo::Of<T>()) ||
-                TypeInfo::Of<T>().Is(transform.typeinfo)) {
-                TINT_ICE(Clone, Diagnostics())
-                    << "ReplaceAll() called with a handler for type " << TypeInfo::Of<T>().name
-                    << " that is already handled by a handler for type "
-                    << transform.typeinfo->name;
+            bool already_registered = transform.typeinfo->Is(&utils::TypeInfo::Of<T>()) ||
+                                      utils::TypeInfo::Of<T>().Is(transform.typeinfo);
+            if (TINT_UNLIKELY(already_registered)) {
+                TINT_ICE(Clone, Diagnostics()) << "ReplaceAll() called with a handler for type "
+                                               << utils::TypeInfo::Of<T>().name
+                                               << " that is already handled by a handler for type "
+                                               << transform.typeinfo->name;
                 return *this;
             }
         }
         CloneableTransform transform;
-        transform.typeinfo = &TypeInfo::Of<T>();
+        transform.typeinfo = &utils::TypeInfo::Of<T>();
         transform.function = [=](const Cloneable* in) { return replacer(in->As<T>()); };
         transforms_.Push(std::move(transform));
         return *this;
@@ -325,7 +335,7 @@ class CloneContext {
     /// register a SymbolTransform more than once will result in an ICE.
     /// @returns this CloneContext so calls can be chained
     CloneContext& ReplaceAll(const SymbolTransform& replacer) {
-        if (symbol_transform_) {
+        if (TINT_UNLIKELY(symbol_transform_)) {
             TINT_ICE(Clone, Diagnostics()) << "ReplaceAll(const SymbolTransform&) called "
                                               "multiple times on the same CloneContext";
             return *this;
@@ -346,11 +356,13 @@ class CloneContext {
     /// references of the original object. A type mismatch will result in an
     /// assertion in debug builds, and undefined behavior in release builds.
     /// @returns this CloneContext so calls can be chained
-    template <typename WHAT, typename WITH, typename = traits::EnableIfIsType<WITH, Cloneable>>
+    template <typename WHAT,
+              typename WITH,
+              typename = utils::traits::EnableIfIsType<WITH, Cloneable>>
     CloneContext& Replace(const WHAT* what, const WITH* with) {
         TINT_ASSERT_PROGRAM_IDS_EQUAL_IF_VALID(Clone, src, what);
         TINT_ASSERT_PROGRAM_IDS_EQUAL_IF_VALID(Clone, dst, with);
-        replacements_.Add(what, [with]() -> const Cloneable* { return with; });
+        replacements_.Replace(what, [with]() -> const Cloneable* { return with; });
         return *this;
     }
 
@@ -370,11 +382,11 @@ class CloneContext {
     template <typename WHAT, typename WITH, typename = std::invoke_result_t<WITH>>
     CloneContext& Replace(const WHAT* what, WITH&& with) {
         TINT_ASSERT_PROGRAM_IDS_EQUAL_IF_VALID(Clone, src, what);
-        replacements_.Add(what, with);
+        replacements_.Replace(what, with);
         return *this;
     }
 
-    /// Removes `object` from the cloned copy of `vector`.
+    /// Removes @p object from the cloned copy of @p vector.
     /// @param vector the vector in #src
     /// @param object a pointer to the object in #src that will be omitted from
     /// the cloned vector.
@@ -382,17 +394,17 @@ class CloneContext {
     template <typename T, size_t N, typename OBJECT>
     CloneContext& Remove(const utils::Vector<T, N>& vector, OBJECT* object) {
         TINT_ASSERT_PROGRAM_IDS_EQUAL_IF_VALID(Clone, src, object);
-        if (std::find(vector.begin(), vector.end(), object) == vector.end()) {
+        if (TINT_UNLIKELY((std::find(vector.begin(), vector.end(), object) == vector.end()))) {
             TINT_ICE(Clone, Diagnostics())
                 << "CloneContext::Remove() vector does not contain object";
             return *this;
         }
 
-        list_transforms_.Edit(&vector).remove_.Add(object);
+        list_transforms_.GetOrZero(&vector)->remove_.Add(object);
         return *this;
     }
 
-    /// Inserts `object` before any other objects of `vector`, when it is cloned.
+    /// Inserts @p object before any other objects of @p vector, when the vector is cloned.
     /// @param vector the vector in #src
     /// @param object a pointer to the object in #dst that will be inserted at the
     /// front of the vector
@@ -400,11 +412,21 @@ class CloneContext {
     template <typename T, size_t N, typename OBJECT>
     CloneContext& InsertFront(const utils::Vector<T, N>& vector, OBJECT* object) {
         TINT_ASSERT_PROGRAM_IDS_EQUAL_IF_VALID(Clone, dst, object);
-        list_transforms_.Edit(&vector).insert_front_.Push(object);
+        return InsertFront(vector, [object] { return object; });
+    }
+
+    /// Inserts a lazily built object before any other objects of @p vector, when the vector is
+    /// cloned.
+    /// @param vector the vector in #src
+    /// @param builder a builder of the object that will be inserted at the front of the vector.
+    /// @returns this CloneContext so calls can be chained
+    template <typename T, size_t N, typename BUILDER>
+    CloneContext& InsertFront(const utils::Vector<T, N>& vector, BUILDER&& builder) {
+        list_transforms_.GetOrZero(&vector)->insert_front_.Push(std::forward<BUILDER>(builder));
         return *this;
     }
 
-    /// Inserts `object` after any other objects of `vector`, when it is cloned.
+    /// Inserts @p object after any other objects of @p vector, when the vector is cloned.
     /// @param vector the vector in #src
     /// @param object a pointer to the object in #dst that will be inserted at the
     /// end of the vector
@@ -412,15 +434,26 @@ class CloneContext {
     template <typename T, size_t N, typename OBJECT>
     CloneContext& InsertBack(const utils::Vector<T, N>& vector, OBJECT* object) {
         TINT_ASSERT_PROGRAM_IDS_EQUAL_IF_VALID(Clone, dst, object);
-        list_transforms_.Edit(&vector).insert_back_.Push(object);
+        return InsertBack(vector, [object] { return object; });
+    }
+
+    /// Inserts a lazily built object after any other objects of @p vector, when the vector is
+    /// cloned.
+    /// @param vector the vector in #src
+    /// @param builder the builder of the object in #dst that will be inserted at the end of the
+    /// vector.
+    /// @returns this CloneContext so calls can be chained
+    template <typename T, size_t N, typename BUILDER>
+    CloneContext& InsertBack(const utils::Vector<T, N>& vector, BUILDER&& builder) {
+        list_transforms_.GetOrZero(&vector)->insert_back_.Push(std::forward<BUILDER>(builder));
         return *this;
     }
 
-    /// Inserts `object` before `before` whenever `vector` is cloned.
+    /// Inserts @p object before @p before whenever @p vector is cloned.
     /// @param vector the vector in #src
     /// @param before a pointer to the object in #src
     /// @param object a pointer to the object in #dst that will be inserted before
-    /// any occurrence of the clone of `before`
+    /// any occurrence of the clone of @p before
     /// @returns this CloneContext so calls can be chained
     template <typename T, size_t N, typename BEFORE, typename OBJECT>
     CloneContext& InsertBefore(const utils::Vector<T, N>& vector,
@@ -428,21 +461,41 @@ class CloneContext {
                                const OBJECT* object) {
         TINT_ASSERT_PROGRAM_IDS_EQUAL_IF_VALID(Clone, src, before);
         TINT_ASSERT_PROGRAM_IDS_EQUAL_IF_VALID(Clone, dst, object);
-        if (std::find(vector.begin(), vector.end(), before) == vector.end()) {
+        if (TINT_UNLIKELY((std::find(vector.begin(), vector.end(), before) == vector.end()))) {
             TINT_ICE(Clone, Diagnostics())
                 << "CloneContext::InsertBefore() vector does not contain before";
             return *this;
         }
 
-        list_transforms_.Edit(&vector).insert_before_.GetOrZero(before).Push(object);
+        list_transforms_.GetOrZero(&vector)->insert_before_.GetOrZero(before)->Push(
+            [object] { return object; });
         return *this;
     }
 
-    /// Inserts `object` after `after` whenever `vector` is cloned.
+    /// Inserts a lazily created object before @p before whenever @p vector is cloned.
+    /// @param vector the vector in #src
+    /// @param before a pointer to the object in #src
+    /// @param builder the builder of the object in #dst that will be inserted before any occurrence
+    /// of the clone of @p before
+    /// @returns this CloneContext so calls can be chained
+    template <typename T,
+              size_t N,
+              typename BEFORE,
+              typename BUILDER,
+              typename _ = std::enable_if_t<!std::is_pointer_v<std::decay_t<BUILDER>>>>
+    CloneContext& InsertBefore(const utils::Vector<T, N>& vector,
+                               const BEFORE* before,
+                               BUILDER&& builder) {
+        list_transforms_.GetOrZero(&vector)->insert_before_.GetOrZero(before)->Push(
+            std::forward<BUILDER>(builder));
+        return *this;
+    }
+
+    /// Inserts @p object after @p after whenever @p vector is cloned.
     /// @param vector the vector in #src
     /// @param after a pointer to the object in #src
     /// @param object a pointer to the object in #dst that will be inserted after
-    /// any occurrence of the clone of `after`
+    /// any occurrence of the clone of @p after
     /// @returns this CloneContext so calls can be chained
     template <typename T, size_t N, typename AFTER, typename OBJECT>
     CloneContext& InsertAfter(const utils::Vector<T, N>& vector,
@@ -450,13 +503,33 @@ class CloneContext {
                               const OBJECT* object) {
         TINT_ASSERT_PROGRAM_IDS_EQUAL_IF_VALID(Clone, src, after);
         TINT_ASSERT_PROGRAM_IDS_EQUAL_IF_VALID(Clone, dst, object);
-        if (std::find(vector.begin(), vector.end(), after) == vector.end()) {
+        if (TINT_UNLIKELY((std::find(vector.begin(), vector.end(), after) == vector.end()))) {
             TINT_ICE(Clone, Diagnostics())
                 << "CloneContext::InsertAfter() vector does not contain after";
             return *this;
         }
 
-        list_transforms_.Edit(&vector).insert_after_.GetOrZero(after).Push(object);
+        list_transforms_.GetOrZero(&vector)->insert_after_.GetOrZero(after)->Push(
+            [object] { return object; });
+        return *this;
+    }
+
+    /// Inserts a lazily created object after @p after whenever @p vector is cloned.
+    /// @param vector the vector in #src
+    /// @param after a pointer to the object in #src
+    /// @param builder the builder of the object in #dst that will be inserted after any occurrence
+    /// of the clone of @p after
+    /// @returns this CloneContext so calls can be chained
+    template <typename T,
+              size_t N,
+              typename AFTER,
+              typename BUILDER,
+              typename _ = std::enable_if_t<!std::is_pointer_v<std::decay_t<BUILDER>>>>
+    CloneContext& InsertAfter(const utils::Vector<T, N>& vector,
+                              const AFTER* after,
+                              BUILDER&& builder) {
+        list_transforms_.GetOrZero(&vector)->insert_after_.GetOrZero(after)->Push(
+            std::forward<BUILDER>(builder));
         return *this;
     }
 
@@ -481,13 +554,13 @@ class CloneContext {
         /// Destructor
         ~CloneableTransform();
 
-        // TypeInfo of the Cloneable that the transform operates on
-        const TypeInfo* typeinfo;
+        // utils::TypeInfo of the Cloneable that the transform operates on
+        const utils::TypeInfo* typeinfo;
         std::function<const Cloneable*(const Cloneable*)> function;
     };
 
     /// A vector of const Cloneable*
-    using CloneableList = utils::Vector<const Cloneable*, 4>;
+    using CloneableBuilderList = utils::Vector<std::function<const Cloneable*()>, 4>;
 
     /// Transformations to be applied to a list (vector)
     struct ListTransforms {
@@ -495,20 +568,20 @@ class CloneContext {
         utils::Hashset<const Cloneable*, 4> remove_;
 
         /// A list of objects in #dst to insert before any others when the vector is cloned.
-        CloneableList insert_front_;
+        CloneableBuilderList insert_front_;
 
         /// A list of objects in #dst to insert after all others when the vector is cloned.
-        CloneableList insert_back_;
+        CloneableBuilderList insert_back_;
 
         /// A map of object in #src to the list of cloned objects in #dst.
         /// Clone(const utils::Vector<T*>& v) will use this to insert the map-value
         /// list into the target vector before cloning and inserting the map-key.
-        utils::Hashmap<const Cloneable*, CloneableList, 4> insert_before_;
+        utils::Hashmap<const Cloneable*, CloneableBuilderList, 4> insert_before_;
 
         /// A map of object in #src to the list of cloned objects in #dst.
         /// Clone(const utils::Vector<T*>& v) will use this to insert the map-value
         /// list into the target vector after cloning and inserting the map-key.
-        utils::Hashmap<const Cloneable*, CloneableList, 4> insert_after_;
+        utils::Hashmap<const Cloneable*, CloneableBuilderList, 4> insert_after_;
     };
 
     CloneContext(const CloneContext&) = delete;
@@ -521,10 +594,11 @@ class CloneContext {
         if (obj == nullptr) {
             return nullptr;
         }
-        if (const TO* cast = obj->template As<TO>()) {
+        const TO* cast = obj->template As<TO>();
+        if (TINT_LIKELY(cast)) {
             return cast;
         }
-        CheckedCastFailure(obj, TypeInfo::Of<TO>());
+        CheckedCastFailure(obj, utils::TypeInfo::Of<TO>());
         return nullptr;
     }
 
@@ -534,71 +608,10 @@ class CloneContext {
 
     /// Adds an error diagnostic to Diagnostics() that the cloned object was not
     /// of the expected type.
-    void CheckedCastFailure(const Cloneable* got, const TypeInfo& expected);
+    void CheckedCastFailure(const Cloneable* got, const utils::TypeInfo& expected);
 
     /// @returns the diagnostic list of #dst
     diag::List& Diagnostics() const;
-
-    /// VectorListTransforms is a map of utils::Vector pointer to transforms for that list
-    struct VectorListTransforms {
-        /// An accessor to the VectorListTransforms map.
-        /// Index caches the last map lookup, and will only re-search the map if the transform map
-        /// was modified since the last lookup.
-        struct Index {
-            /// @returns true if the map now holds a value for the index
-            operator bool() {
-                Update();
-                return cached_;
-            }
-
-            /// @returns a pointer to the indexed map entry
-            const ListTransforms* operator->() {
-                Update();
-                return cached_;
-            }
-
-          private:
-            friend VectorListTransforms;
-
-            Index(const void* list,
-                  VectorListTransforms& vlt,
-                  uint32_t generation,
-                  const ListTransforms* cached)
-                : list_(list), vlt_(vlt), generation_(generation), cached_(cached) {}
-
-            void Update() {
-                if (vlt_.generation_ != generation_) {
-                    cached_ = vlt_.map_.Find(list_);
-                    generation_ = vlt_.generation_;
-                }
-            }
-
-            const void* list_;
-            VectorListTransforms& vlt_;
-            uint32_t generation_;
-            const ListTransforms* cached_;
-        };
-
-        /// Edit returns a reference to the ListTransforms for the given vector pointer and
-        /// increments #list_transform_generation_ signalling that the list transforms have been
-        /// modified.
-        inline ListTransforms& Edit(const void* list) {
-            generation_++;
-            return map_.GetOrZero(list);
-        }
-
-        /// @returns an Index to the transforms for the given list.
-        inline Index Find(const void* list) {
-            return Index{list, *this, generation_, map_.Find(list)};
-        }
-
-      private:
-        /// The map of vector pointer to ListTransforms
-        utils::Hashmap<const void*, ListTransforms, 4> map_;
-
-        /// A counter that's incremented each time list transforms are modified.
-        uint32_t generation_ = 0;
-    };
 
     /// A map of object in #src to functions that create their replacement in #dst
     utils::Hashmap<const Cloneable*, std::function<const Cloneable*()>, 8> replacements_;
@@ -610,7 +623,7 @@ class CloneContext {
     utils::Vector<CloneableTransform, 8> transforms_;
 
     /// Transformations to apply to vectors
-    VectorListTransforms list_transforms_;
+    utils::Hashmap<const void*, ListTransforms, 4> list_transforms_;
 
     /// Symbol transform registered with ReplaceAll()
     SymbolTransform symbol_transform_;

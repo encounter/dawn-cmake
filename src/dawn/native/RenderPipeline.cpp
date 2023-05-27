@@ -16,10 +16,10 @@
 
 #include <algorithm>
 #include <cmath>
-#include <sstream>
 
 #include "dawn/common/BitSetIterator.h"
 #include "dawn/native/ChainUtils_autogen.h"
+#include "dawn/native/CommandValidation.h"
 #include "dawn/native/Commands.h"
 #include "dawn/native/Device.h"
 #include "dawn/native/InternalPipelineStore.h"
@@ -115,20 +115,32 @@ MaybeError ValidateVertexBufferLayout(
 
 MaybeError ValidateVertexState(DeviceBase* device,
                                const VertexState* descriptor,
-                               const PipelineLayoutBase* layout) {
+                               const PipelineLayoutBase* layout,
+                               wgpu::PrimitiveTopology primitiveTopology) {
     DAWN_INVALID_IF(descriptor->nextInChain != nullptr, "nextInChain must be nullptr.");
 
-    DAWN_INVALID_IF(descriptor->bufferCount > kMaxVertexBuffers,
+    const CombinedLimits& limits = device->GetLimits();
+
+    DAWN_INVALID_IF(descriptor->bufferCount > limits.v1.maxVertexBuffers,
                     "Vertex buffer count (%u) exceeds the maximum number of vertex buffers (%u).",
-                    descriptor->bufferCount, kMaxVertexBuffers);
+                    descriptor->bufferCount, limits.v1.maxVertexBuffers);
 
     DAWN_TRY_CONTEXT(ValidateProgrammableStage(device, descriptor->module, descriptor->entryPoint,
                                                descriptor->constantCount, descriptor->constants,
                                                layout, SingleShaderStage::Vertex),
-                     "validating vertex stage (module: %s, entryPoint: %s).", descriptor->module,
+                     "validating vertex stage (%s, entryPoint: %s).", descriptor->module,
                      descriptor->entryPoint);
     const EntryPointMetadata& vertexMetadata =
         descriptor->module->GetEntryPoint(descriptor->entryPoint);
+    if (primitiveTopology == wgpu::PrimitiveTopology::PointList) {
+        DAWN_INVALID_IF(
+            vertexMetadata.totalInterStageShaderComponents + 1 >
+                limits.v1.maxInterStageShaderComponents,
+            "Total vertex output components count (%u) exceeds the maximum (%u) when primitive "
+            "topology is %s as another component is implicitly used for the point size.",
+            vertexMetadata.totalInterStageShaderComponents,
+            limits.v1.maxInterStageShaderComponents - 1, primitiveTopology);
+    }
 
     ityp::bitset<VertexAttributeLocation, kMaxVertexAttributes> attributesSetMask;
     uint32_t totalAttributesNum = 0;
@@ -145,9 +157,20 @@ MaybeError ValidateVertexState(DeviceBase* device,
     // attribute number never exceed kMaxVertexAttributes.
     ASSERT(totalAttributesNum <= kMaxVertexAttributes);
 
-    // TODO(dawn:563): Specify which inputs were not used in error message.
-    DAWN_INVALID_IF(!IsSubset(vertexMetadata.usedVertexInputs, attributesSetMask),
-                    "Pipeline vertex stage uses vertex buffers not in the vertex state");
+    // Validate that attributes used by the VertexState are in the shader using bitmask operations
+    // but try to be helpful by finding one missing attribute to surface in the error message
+    if (!IsSubset(vertexMetadata.usedVertexInputs, attributesSetMask)) {
+        const ityp::bitset<VertexAttributeLocation, kMaxVertexAttributes> missingAttributes =
+            vertexMetadata.usedVertexInputs & ~attributesSetMask;
+        ASSERT(missingAttributes.any());
+
+        VertexAttributeLocation firstMissing = ityp::Sub(
+            GetHighestBitIndexPlusOne(missingAttributes), VertexAttributeLocation(uint8_t(1)));
+        return DAWN_VALIDATION_ERROR(
+            "Vertex attribute slot %u used in (%s, entryPoint: %s) is not present in the "
+            "VertexState.",
+            uint8_t(firstMissing), descriptor->module, descriptor->entryPoint);
+    }
 
     return {};
 }
@@ -156,7 +179,7 @@ MaybeError ValidatePrimitiveState(const DeviceBase* device, const PrimitiveState
     DAWN_TRY(ValidateSingleSType(descriptor->nextInChain, wgpu::SType::PrimitiveDepthClipControl));
     const PrimitiveDepthClipControl* depthClipControl = nullptr;
     FindInChain(descriptor->nextInChain, &depthClipControl);
-    DAWN_INVALID_IF(depthClipControl && !device->IsFeatureEnabled(Feature::DepthClipControl),
+    DAWN_INVALID_IF(depthClipControl && !device->HasFeature(Feature::DepthClipControl),
                     "%s is not supported", wgpu::FeatureName::DepthClipControl);
     DAWN_TRY(ValidatePrimitiveTopology(descriptor->topology));
     DAWN_TRY(ValidateIndexFormat(descriptor->stripIndexFormat));
@@ -177,19 +200,26 @@ MaybeError ValidatePrimitiveState(const DeviceBase* device, const PrimitiveState
 
 MaybeError ValidateDepthStencilState(const DeviceBase* device,
                                      const DepthStencilState* descriptor) {
-    if (descriptor->nextInChain != nullptr) {
-        return DAWN_VALIDATION_ERROR("nextInChain must be nullptr");
-    }
+    DAWN_INVALID_IF(descriptor->nextInChain != nullptr, "nextInChain is not nullptr.");
 
-    DAWN_TRY(ValidateCompareFunction(descriptor->depthCompare));
-    DAWN_TRY(ValidateCompareFunction(descriptor->stencilFront.compare));
-    DAWN_TRY(ValidateStencilOperation(descriptor->stencilFront.failOp));
-    DAWN_TRY(ValidateStencilOperation(descriptor->stencilFront.depthFailOp));
-    DAWN_TRY(ValidateStencilOperation(descriptor->stencilFront.passOp));
-    DAWN_TRY(ValidateCompareFunction(descriptor->stencilBack.compare));
-    DAWN_TRY(ValidateStencilOperation(descriptor->stencilBack.failOp));
-    DAWN_TRY(ValidateStencilOperation(descriptor->stencilBack.depthFailOp));
-    DAWN_TRY(ValidateStencilOperation(descriptor->stencilBack.passOp));
+    DAWN_TRY_CONTEXT(ValidateCompareFunction(descriptor->depthCompare),
+                     "validating depth compare function");
+    DAWN_TRY_CONTEXT(ValidateCompareFunction(descriptor->stencilFront.compare),
+                     "validating stencil front compare function");
+    DAWN_TRY_CONTEXT(ValidateStencilOperation(descriptor->stencilFront.failOp),
+                     "validating stencil front fail operation");
+    DAWN_TRY_CONTEXT(ValidateStencilOperation(descriptor->stencilFront.depthFailOp),
+                     "validating stencil front depth fail operation");
+    DAWN_TRY_CONTEXT(ValidateStencilOperation(descriptor->stencilFront.passOp),
+                     "validating stencil front pass operation");
+    DAWN_TRY_CONTEXT(ValidateCompareFunction(descriptor->stencilBack.compare),
+                     "validating stencil back compare function");
+    DAWN_TRY_CONTEXT(ValidateStencilOperation(descriptor->stencilBack.failOp),
+                     "validating stencil back fail operation");
+    DAWN_TRY_CONTEXT(ValidateStencilOperation(descriptor->stencilBack.depthFailOp),
+                     "validating stencil back depth fail operation");
+    DAWN_TRY_CONTEXT(ValidateStencilOperation(descriptor->stencilBack.passOp),
+                     "validating stencil back pass operation");
 
     const Format* format;
     DAWN_TRY_ASSIGN(format, device->GetInternalFormat(descriptor->format));
@@ -322,16 +352,72 @@ MaybeError ValidateColorTargetState(
     return {};
 }
 
+MaybeError ValidateCompatibilityColorTargetState(
+    const uint8_t firstColorTargetIndex,
+    const ColorTargetState* const firstColorTargetState,
+    const uint8_t targetIndex,
+    const ColorTargetState* target) {
+    DAWN_INVALID_IF(firstColorTargetState->writeMask != target->writeMask,
+                    "targets[%u].writeMask (%s) does not match targets[%u].writeMask (%s).",
+                    targetIndex, target->writeMask, firstColorTargetIndex,
+                    firstColorTargetState->writeMask);
+    if (!firstColorTargetState->blend) {
+        DAWN_INVALID_IF(target->blend,
+                        "targets[%u].blend has a blend state but targets[%u].blend does not.",
+                        targetIndex, firstColorTargetIndex);
+    } else {
+        DAWN_INVALID_IF(!target->blend,
+                        "targets[%u].blend has a blend state but targets[%u].blend does not.",
+                        firstColorTargetIndex, targetIndex);
+
+        const BlendState& currBlendState = *target->blend;
+        const BlendState& firstBlendState = *firstColorTargetState->blend;
+
+        DAWN_INVALID_IF(
+            firstBlendState.color.operation != currBlendState.color.operation,
+            "targets[%u].color.operation (%s) does not match targets[%u].color.operation (%s).",
+            firstColorTargetIndex, firstBlendState.color.operation, targetIndex,
+            currBlendState.color.operation);
+        DAWN_INVALID_IF(
+            firstBlendState.color.srcFactor != currBlendState.color.srcFactor,
+            "targets[%u].color.srcFactor (%s) does not match targets[%u].color.srcFactor (%s).",
+            firstColorTargetIndex, firstBlendState.color.srcFactor, targetIndex,
+            currBlendState.color.srcFactor);
+        DAWN_INVALID_IF(
+            firstBlendState.color.dstFactor != currBlendState.color.dstFactor,
+            "targets[%u].color.dstFactor (%s) does not match targets[%u].color.dstFactor (%s).",
+            firstColorTargetIndex, firstBlendState.color.dstFactor, targetIndex,
+            currBlendState.color.dstFactor);
+        DAWN_INVALID_IF(
+            firstBlendState.alpha.operation != currBlendState.alpha.operation,
+            "targets[%u].alpha.operation (%s) does not match targets[%u].alpha.operation (%s).",
+            firstColorTargetIndex, firstBlendState.alpha.operation, targetIndex,
+            currBlendState.alpha.operation);
+        DAWN_INVALID_IF(
+            firstBlendState.alpha.srcFactor != currBlendState.alpha.srcFactor,
+            "targets[%u].alpha.srcFactor (%s) does not match targets[%u].alpha.srcFactor (%s).",
+            firstColorTargetIndex, firstBlendState.alpha.srcFactor, targetIndex,
+            currBlendState.alpha.srcFactor);
+        DAWN_INVALID_IF(
+            firstBlendState.alpha.dstFactor != currBlendState.alpha.dstFactor,
+            "targets[%u].alpha.dstFactor (%s) does not match targets[%u].alpha.dstFactor (%s).",
+            firstColorTargetIndex, firstBlendState.alpha.dstFactor, targetIndex,
+            currBlendState.alpha.dstFactor);
+    }
+    return {};
+}
+
 MaybeError ValidateFragmentState(DeviceBase* device,
                                  const FragmentState* descriptor,
                                  const PipelineLayoutBase* layout,
+                                 const DepthStencilState* depthStencil,
                                  bool alphaToCoverageEnabled) {
     DAWN_INVALID_IF(descriptor->nextInChain != nullptr, "nextInChain must be nullptr.");
 
     DAWN_TRY_CONTEXT(ValidateProgrammableStage(device, descriptor->module, descriptor->entryPoint,
                                                descriptor->constantCount, descriptor->constants,
                                                layout, SingleShaderStage::Fragment),
-                     "validating fragment stage (module: %s, entryPoint: %s).", descriptor->module,
+                     "validating fragment stage (%s, entryPoint: %s).", descriptor->module,
                      descriptor->entryPoint);
 
     uint32_t maxColorAttachments = device->GetLimits().v1.maxColorAttachments;
@@ -341,25 +427,73 @@ MaybeError ValidateFragmentState(DeviceBase* device,
 
     const EntryPointMetadata& fragmentMetadata =
         descriptor->module->GetEntryPoint(descriptor->entryPoint);
-    for (ColorAttachmentIndex i(uint8_t(0));
-         i < ColorAttachmentIndex(static_cast<uint8_t>(descriptor->targetCount)); ++i) {
-        const ColorTargetState* target = &descriptor->targets[static_cast<uint8_t>(i)];
-        if (target->format != wgpu::TextureFormat::Undefined) {
-            DAWN_TRY_CONTEXT(
-                ValidateColorTargetState(device, target, fragmentMetadata.fragmentOutputsWritten[i],
-                                         fragmentMetadata.fragmentOutputVariables[i]),
-                "validating targets[%u].", static_cast<uint8_t>(i));
-        } else {
-            DAWN_INVALID_IF(target->blend,
-                            "Color target[%u] blend state is set when the format is undefined.",
-                            static_cast<uint8_t>(i));
-        }
+
+    if (fragmentMetadata.usesFragDepth) {
+        DAWN_INVALID_IF(
+            depthStencil == nullptr,
+            "Depth stencil state is not present when fragment stage (%s, entryPoint: %s) is "
+            "writing to frag_depth.",
+            descriptor->module, descriptor->entryPoint);
+        const Format* depthStencilFormat;
+        DAWN_TRY_ASSIGN(depthStencilFormat, device->GetInternalFormat(depthStencil->format));
+        DAWN_INVALID_IF(!depthStencilFormat->HasDepth(),
+                        "Depth stencil state format (%s) has no depth aspect when fragment stage "
+                        "(%s, entryPoint: %s) is "
+                        "writing to frag_depth.",
+                        depthStencil->format, descriptor->module, descriptor->entryPoint);
     }
 
-    DAWN_INVALID_IF(fragmentMetadata.usesSampleMaskOutput && alphaToCoverageEnabled,
-                    "alphaToCoverageEnabled is true when the sample_mask builtin is a "
-                    "pipeline output of fragment stage of %s.",
-                    descriptor->module);
+    uint8_t firstColorTargetIndex = 0;
+    const ColorTargetState* firstColorTargetState = nullptr;
+    ColorAttachmentFormats colorAttachmentFormats;
+
+    for (ColorAttachmentIndex attachmentIndex(uint8_t(0));
+         attachmentIndex < ColorAttachmentIndex(static_cast<uint8_t>(descriptor->targetCount));
+         ++attachmentIndex) {
+        const uint8_t i = static_cast<uint8_t>(attachmentIndex);
+        const ColorTargetState* target = &descriptor->targets[i];
+
+        if (target->format != wgpu::TextureFormat::Undefined) {
+            DAWN_TRY_CONTEXT(
+                ValidateColorTargetState(device, target,
+                                         fragmentMetadata.fragmentOutputsWritten[attachmentIndex],
+                                         fragmentMetadata.fragmentOutputVariables[attachmentIndex]),
+                "validating targets[%u].", i);
+            colorAttachmentFormats->push_back(&device->GetValidInternalFormat(target->format));
+            if (device->IsCompatibilityMode()) {
+                if (!firstColorTargetState) {
+                    firstColorTargetState = target;
+                    firstColorTargetIndex = i;
+                } else {
+                    DAWN_TRY_CONTEXT(ValidateCompatibilityColorTargetState(
+                                         firstColorTargetIndex, firstColorTargetState, i, target),
+                                     "validating targets[%u] in compatibility mode.", i);
+                }
+            }
+        } else {
+            DAWN_INVALID_IF(target->blend,
+                            "Color target[%u] blend state is set when the format is undefined.", i);
+        }
+    }
+    DAWN_TRY(ValidateColorAttachmentBytesPerSample(device, colorAttachmentFormats));
+
+    if (alphaToCoverageEnabled) {
+        DAWN_INVALID_IF(fragmentMetadata.usesSampleMaskOutput,
+                        "alphaToCoverageEnabled is true when the sample_mask builtin is a "
+                        "pipeline output of fragment stage of %s.",
+                        descriptor->module);
+
+        DAWN_INVALID_IF(descriptor->targetCount == 0 ||
+                            descriptor->targets[0].format == wgpu::TextureFormat::Undefined,
+                        "alphaToCoverageEnabled is true when color target[0] is not present.");
+
+        const Format* format;
+        DAWN_TRY_ASSIGN(format, device->GetInternalFormat(descriptor->targets[0].format));
+        DAWN_INVALID_IF(
+            !format->HasAlphaChannel(),
+            "alphaToCoverageEnabled is true when target[0].format (%s) has no alpha channel.",
+            format->format);
+    }
 
     return {};
 }
@@ -372,13 +506,24 @@ MaybeError ValidateInterStageMatching(DeviceBase* device,
     const EntryPointMetadata& fragmentMetadata =
         fragmentState.module->GetEntryPoint(fragmentState.entryPoint);
 
-    // TODO(dawn:563): Can this message give more details?
-    DAWN_INVALID_IF(
-        vertexMetadata.usedInterStageVariables != fragmentMetadata.usedInterStageVariables,
-        "One or more fragment inputs and vertex outputs are not one-to-one matching");
+    if (DAWN_UNLIKELY(
+            (vertexMetadata.usedInterStageVariables | fragmentMetadata.usedInterStageVariables) !=
+            vertexMetadata.usedInterStageVariables)) {
+        for (size_t i : IterateBitSet(fragmentMetadata.usedInterStageVariables)) {
+            if (!vertexMetadata.usedInterStageVariables.test(i)) {
+                return DAWN_VALIDATION_ERROR(
+                    "The fragment input at location %u doesn't have a corresponding vertex output.",
+                    i);
+            }
+        }
+        UNREACHABLE();
+    }
 
-    // TODO(dawn:802): Validate interpolation types and interpolition sampling types
     for (size_t i : IterateBitSet(vertexMetadata.usedInterStageVariables)) {
+        if (!fragmentMetadata.usedInterStageVariables.test(i)) {
+            // It is valid that fragment output is a subset of vertex input
+            continue;
+        }
         const auto& vertexOutputInfo = vertexMetadata.interStageVariables[i];
         const auto& fragmentInputInfo = fragmentMetadata.interStageVariables[i];
         DAWN_INVALID_IF(
@@ -436,7 +581,8 @@ MaybeError ValidateRenderPipelineDescriptor(DeviceBase* device,
         DAWN_TRY(device->ValidateObject(descriptor->layout));
     }
 
-    DAWN_TRY_CONTEXT(ValidateVertexState(device, &descriptor->vertex, descriptor->layout),
+    DAWN_TRY_CONTEXT(ValidateVertexState(device, &descriptor->vertex, descriptor->layout,
+                                         descriptor->primitive.topology),
                      "validating vertex state.");
 
     DAWN_TRY_CONTEXT(ValidatePrimitiveState(device, &descriptor->primitive),
@@ -450,8 +596,13 @@ MaybeError ValidateRenderPipelineDescriptor(DeviceBase* device,
     DAWN_TRY_CONTEXT(ValidateMultisampleState(&descriptor->multisample),
                      "validating multisample state.");
 
+    DAWN_INVALID_IF(
+        descriptor->multisample.alphaToCoverageEnabled && descriptor->fragment == nullptr,
+        "alphaToCoverageEnabled is true when fragment state is not present.");
+
     if (descriptor->fragment != nullptr) {
         DAWN_TRY_CONTEXT(ValidateFragmentState(device, descriptor->fragment, descriptor->layout,
+                                               descriptor->depthStencil,
                                                descriptor->multisample.alphaToCoverageEnabled),
                          "validating fragment state.");
 
@@ -618,19 +769,21 @@ RenderPipelineBase::RenderPipelineBase(DeviceBase* device,
         }
     }
 
+    if (HasStage(SingleShaderStage::Fragment)) {
+        mUsesFragDepth = GetStage(SingleShaderStage::Fragment).metadata->usesFragDepth;
+    }
+
     SetContentHash(ComputeContentHash());
-    TrackInDevice();
+    GetObjectTrackingList()->Track(this);
 
     // Initialize the cache key to include the cache type and device information.
     StreamIn(&mCacheKey, CacheKey::Type::RenderPipeline, device->GetCacheKey());
 }
 
-RenderPipelineBase::RenderPipelineBase(DeviceBase* device) : PipelineBase(device) {
-    TrackInDevice();
-}
-
-RenderPipelineBase::RenderPipelineBase(DeviceBase* device, ObjectBase::ErrorTag tag)
-    : PipelineBase(device, tag) {}
+RenderPipelineBase::RenderPipelineBase(DeviceBase* device,
+                                       ObjectBase::ErrorTag tag,
+                                       const char* label)
+    : PipelineBase(device, tag, label) {}
 
 RenderPipelineBase::~RenderPipelineBase() = default;
 
@@ -646,11 +799,11 @@ void RenderPipelineBase::DestroyImpl() {
 }
 
 // static
-RenderPipelineBase* RenderPipelineBase::MakeError(DeviceBase* device) {
+RenderPipelineBase* RenderPipelineBase::MakeError(DeviceBase* device, const char* label) {
     class ErrorRenderPipeline final : public RenderPipelineBase {
       public:
-        explicit ErrorRenderPipeline(DeviceBase* device)
-            : RenderPipelineBase(device, ObjectBase::kError) {}
+        explicit ErrorRenderPipeline(DeviceBase* device, const char* label)
+            : RenderPipelineBase(device, ObjectBase::kError, label) {}
 
         MaybeError Initialize() override {
             UNREACHABLE();
@@ -658,7 +811,7 @@ RenderPipelineBase* RenderPipelineBase::MakeError(DeviceBase* device) {
         }
     };
 
-    return new ErrorRenderPipeline(device);
+    return new ErrorRenderPipeline(device, label);
 }
 
 ObjectType RenderPipelineBase::GetType() const {
@@ -804,20 +957,22 @@ bool RenderPipelineBase::IsAlphaToCoverageEnabled() const {
 
 const AttachmentState* RenderPipelineBase::GetAttachmentState() const {
     ASSERT(!IsError());
-
     return mAttachmentState.Get();
 }
 
 bool RenderPipelineBase::WritesDepth() const {
     ASSERT(!IsError());
-
     return mWritesDepth;
 }
 
 bool RenderPipelineBase::WritesStencil() const {
     ASSERT(!IsError());
-
     return mWritesStencil;
+}
+
+bool RenderPipelineBase::UsesFragDepth() const {
+    ASSERT(!IsError());
+    return mUsesFragDepth;
 }
 
 size_t RenderPipelineBase::ComputeContentHash() {

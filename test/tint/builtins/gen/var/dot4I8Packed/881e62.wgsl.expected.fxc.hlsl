@@ -5,10 +5,13 @@ int tint_dot4I8Packed(uint param_0, uint param_1) {
   return dot4add_i8packed(param_0, param_1, accumulator);
 }
 
+RWByteAddressBuffer prevent_dce : register(u0, space2);
+
 void dot4I8Packed_881e62() {
   uint arg_0 = 1u;
   uint arg_1 = 1u;
   int res = tint_dot4I8Packed(arg_0, arg_1);
+  prevent_dce.Store(0u, asuint(res));
 }
 
 struct tint_symbol {
@@ -37,6 +40,3 @@ void compute_main() {
   dot4I8Packed_881e62();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000001A416C12830(3,10-56): error X3004: undeclared identifier 'dot4add_i8packed'
-

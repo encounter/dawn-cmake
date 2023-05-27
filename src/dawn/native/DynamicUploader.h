@@ -18,19 +18,22 @@
 #include <memory>
 #include <vector>
 
+#include "dawn/common/RefCounted.h"
+#include "dawn/native/Error.h"
 #include "dawn/native/Forward.h"
 #include "dawn/native/IntegerTypes.h"
 #include "dawn/native/RingBufferAllocator.h"
-#include "dawn/native/StagingBuffer.h"
 
 // DynamicUploader is the front-end implementation used to manage multiple ring buffers for upload
 // usage.
 namespace dawn::native {
 
+class BufferBase;
+
 struct UploadHandle {
     uint8_t* mappedBuffer = nullptr;
     uint64_t startOffset = 0;
-    StagingBufferBase* stagingBuffer = nullptr;
+    BufferBase* stagingBuffer = nullptr;
 };
 
 class DynamicUploader {
@@ -42,25 +45,28 @@ class DynamicUploader {
     // currently no place to track the allocated staging buffers such that they're freed after
     // pending commands are finished. This should be changed when better resource allocation is
     // implemented.
-    void ReleaseStagingBuffer(std::unique_ptr<StagingBufferBase> stagingBuffer);
+    void ReleaseStagingBuffer(Ref<BufferBase> stagingBuffer);
 
     ResultOrError<UploadHandle> Allocate(uint64_t allocationSize,
                                          ExecutionSerial serial,
                                          uint64_t offsetAlignment);
     void Deallocate(ExecutionSerial lastCompletedSerial);
 
+    bool ShouldFlush();
+
   private:
     static constexpr uint64_t kRingBufferSize = 4 * 1024 * 1024;
+    uint64_t GetTotalAllocatedSize();
 
     struct RingBuffer {
-        std::unique_ptr<StagingBufferBase> mStagingBuffer;
+        Ref<BufferBase> mStagingBuffer;
         RingBufferAllocator mAllocator;
     };
 
     ResultOrError<UploadHandle> AllocateInternal(uint64_t allocationSize, ExecutionSerial serial);
 
     std::vector<std::unique_ptr<RingBuffer>> mRingBuffers;
-    SerialQueue<ExecutionSerial, std::unique_ptr<StagingBufferBase>> mReleasedStagingBuffers;
+    SerialQueue<ExecutionSerial, Ref<BufferBase>> mReleasedStagingBuffers;
     DeviceBase* mDevice;
 };
 }  // namespace dawn::native

@@ -7,26 +7,26 @@ static bool x_8 = false;
 void main_1() {
   const bool x_101 = x_7;
   const bool x_102 = x_8;
-  [loop] while (true) {
-    uint x_2_phi = 0u;
+  while (true) {
+    uint x_2 = 0u;
     if (x_101) {
       break;
     }
-    x_2_phi = 0u;
+    x_2 = 0u;
     if (x_102) {
-      x_2_phi = 1u;
+      x_2 = 1u;
       {
-        x_1 = x_2_phi;
+        x_1 = x_2;
       }
       continue;
     } else {
       {
-        x_1 = x_2_phi;
+        x_1 = x_2;
       }
       continue;
     }
     {
-      x_1 = x_2_phi;
+      x_1 = x_2;
     }
   }
   return;

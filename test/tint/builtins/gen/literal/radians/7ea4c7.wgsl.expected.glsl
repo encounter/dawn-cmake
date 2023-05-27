@@ -1,13 +1,13 @@
 #version 310 es
 #extension GL_AMD_gpu_shader_half_float : require
 
-f16vec3 tint_radians(f16vec3 param_0) {
-  return param_0 * 0.017453292519943295474hf;
-}
-
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  f16vec3 inner;
+} prevent_dce;
 
 void radians_7ea4c7() {
-  f16vec3 res = tint_radians(f16vec3(0.0hf));
+  f16vec3 res = f16vec3(0.0174407958984375hf);
+  prevent_dce.inner = res;
 }
 
 vec4 vertex_main() {
@@ -25,15 +25,15 @@ void main() {
 }
 #version 310 es
 #extension GL_AMD_gpu_shader_half_float : require
-precision mediump float;
+precision highp float;
 
-f16vec3 tint_radians(f16vec3 param_0) {
-  return param_0 * 0.017453292519943295474hf;
-}
-
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  f16vec3 inner;
+} prevent_dce;
 
 void radians_7ea4c7() {
-  f16vec3 res = tint_radians(f16vec3(0.0hf));
+  f16vec3 res = f16vec3(0.0174407958984375hf);
+  prevent_dce.inner = res;
 }
 
 void fragment_main() {
@@ -47,13 +47,13 @@ void main() {
 #version 310 es
 #extension GL_AMD_gpu_shader_half_float : require
 
-f16vec3 tint_radians(f16vec3 param_0) {
-  return param_0 * 0.017453292519943295474hf;
-}
-
+layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+  f16vec3 inner;
+} prevent_dce;
 
 void radians_7ea4c7() {
-  f16vec3 res = tint_radians(f16vec3(0.0hf));
+  f16vec3 res = f16vec3(0.0174407958984375hf);
+  prevent_dce.inner = res;
 }
 
 void compute_main() {

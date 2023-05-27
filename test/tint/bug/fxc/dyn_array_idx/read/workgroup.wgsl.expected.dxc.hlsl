@@ -1,4 +1,4 @@
-cbuffer cbuffer_ubo : register(b0, space0) {
+cbuffer cbuffer_ubo : register(b0) {
   uint4 ubo[1];
 };
 
@@ -6,7 +6,7 @@ struct S {
   int data[64];
 };
 
-RWByteAddressBuffer result : register(u1, space0);
+RWByteAddressBuffer result : register(u1);
 groupshared S s;
 
 struct tint_symbol_2 {
@@ -15,7 +15,7 @@ struct tint_symbol_2 {
 
 void f_inner(uint local_invocation_index) {
   {
-    [loop] for(uint idx = local_invocation_index; (idx < 64u); idx = (idx + 1u)) {
+    for(uint idx = local_invocation_index; (idx < 64u); idx = (idx + 1u)) {
       const uint i = idx;
       s.data[i] = 0;
     }

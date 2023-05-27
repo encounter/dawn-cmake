@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { globalTestConfig } from '../third_party/webgpu-cts/src/common/framework/test_config.js';
+import { dataCache } from '../third_party/webgpu-cts/src/common/framework/data_cache.js';
 import { DefaultTestFileLoader } from '../third_party/webgpu-cts/src/common/internal/file_loader.js';
 import { prettyPrintLog } from '../third_party/webgpu-cts/src/common/internal/logging/log_message.js';
 import { Logger } from '../third_party/webgpu-cts/src/common/internal/logging/logger.js';
@@ -37,9 +38,8 @@ function rateLimited(fn, intervalMs) {
   let last = undefined;
   let timer = undefined;
   const wrappedFn = (...args) => {
-    if (timer !== undefined || last === undefined) {
-      // If there is already a fn call scheduled, or the function is
-      // not enabled, return.
+    if (last === undefined) {
+      // If the function is not enabled, return.
       return;
     }
     // Get the current time as a number.
@@ -91,6 +91,9 @@ function byteSize(s) {
 
 async function setupWebsocket(port) {
   socket = new WebSocket('ws://127.0.0.1:' + port)
+  socket.addEventListener('open', () => {
+    socket.send('{"type":"CONNECTION_ACK"}');
+  });
   socket.addEventListener('message', runCtsTestViaSocket);
 }
 
@@ -98,6 +101,12 @@ async function runCtsTestViaSocket(event) {
   let input = JSON.parse(event.data);
   runCtsTest(input['q'], input['w']);
 }
+
+dataCache.setStore({
+  load: async (path) => {
+    return await (await fetch(`/third_party/webgpu-cts/cache/data/${path}`)).text();
+  }
+});
 
 // Make a rate-limited version `sendMessageTestHeartbeat` that executes
 // at most once every 500 ms.
@@ -129,9 +138,18 @@ wrapPromiseWithHeartbeat(GPUDevice.prototype, 'createComputePipelineAsync');
 wrapPromiseWithHeartbeat(GPUDevice.prototype, 'popErrorScope');
 wrapPromiseWithHeartbeat(GPUQueue.prototype, 'onSubmittedWorkDone');
 wrapPromiseWithHeartbeat(GPUBuffer.prototype, 'mapAsync');
-wrapPromiseWithHeartbeat(GPUShaderModule.prototype, 'compilationInfo');
+wrapPromiseWithHeartbeat(GPUShaderModule.prototype, 'getCompilationInfo');
 
 globalTestConfig.testHeartbeatCallback = sendHeartbeat;
+globalTestConfig.noRaceWithRejectOnTimeout = true;
+
+// FXC is very slow to compile unrolled const-eval loops, where the metal shader
+// compiler (Intel GPU) is very slow to compile rolled loops. Intel drivers for
+// linux may also suffer the same performance issues, so unroll const-eval loops
+// if we're not running on Windows.
+if (navigator.userAgent.indexOf("Windows") !== -1) {
+  globalTestConfig.unrollConstEvalLoops = true;
+}
 
 async function runCtsTest(query, use_worker) {
   const workerEnabled = use_worker;
@@ -201,9 +219,11 @@ function sendMessageTestHeartbeat() {
 }
 
 function sendMessageTestStatus(status, jsDurationMs) {
-  socket.send(JSON.stringify({'type': 'TEST_STATUS',
-                              'status': status,
-                              'js_duration_ms': jsDurationMs}));
+  socket.send(JSON.stringify({
+    'type': 'TEST_STATUS',
+    'status': status,
+    'js_duration_ms': jsDurationMs
+  }));
 }
 
 function sendMessageTestLog(logs) {

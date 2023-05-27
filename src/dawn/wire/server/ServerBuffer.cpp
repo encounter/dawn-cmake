@@ -80,8 +80,12 @@ bool Server::DoBufferMapAsync(ObjectId bufferId,
     // WGPU_WHOLE_MAP_SIZE, which is by definition std::numeric_limits<size_t>::max(). Since
     // client does the default size computation, we should always have a valid actual size here
     // in server. All other invalid actual size can be caught by dawn native side validation.
-    if (offset64 > std::numeric_limits<size_t>::max() || size64 >= WGPU_WHOLE_MAP_SIZE) {
-        OnBufferMapAsyncCallback(userdata.get(), WGPUBufferMapAsyncStatus_Error);
+    if (offset64 > std::numeric_limits<size_t>::max()) {
+        OnBufferMapAsyncCallback(userdata.get(), WGPUBufferMapAsyncStatus_OffsetOutOfRange);
+        return true;
+    }
+    if (size64 >= WGPU_WHOLE_MAP_SIZE) {
+        OnBufferMapAsyncCallback(userdata.get(), WGPUBufferMapAsyncStatus_SizeOutOfRange);
         return true;
     }
 
@@ -110,7 +114,7 @@ bool Server::DoDeviceCreateBuffer(ObjectId deviceId,
     }
 
     // Create and register the buffer object.
-    auto* resultData = BufferObjects().Allocate(bufferResult.id);
+    auto* resultData = BufferObjects().Allocate(bufferResult);
     if (resultData == nullptr) {
         return false;
     }
@@ -237,12 +241,14 @@ void Server::OnBufferMapAsyncCallback(MapUserdata* data, WGPUBufferMapAsyncStatu
     cmd.readDataUpdateInfo = nullptr;
 
     const void* readData = nullptr;
+    size_t readDataUpdateInfoLength = 0;
     if (isSuccess) {
         if (isRead) {
             // Get the serialization size of the message to initialize ReadHandle data.
             readData = mProcs.bufferGetConstMappedRange(data->bufferObj, data->offset, data->size);
-            cmd.readDataUpdateInfoLength =
+            readDataUpdateInfoLength =
                 bufferData->readHandle->SizeOfSerializeDataUpdate(data->offset, data->size);
+            cmd.readDataUpdateInfoLength = readDataUpdateInfoLength;
         } else {
             ASSERT(data->mode & WGPUMapMode_Write);
             // The in-flight map request returned successfully.
@@ -259,16 +265,15 @@ void Server::OnBufferMapAsyncCallback(MapUserdata* data, WGPUBufferMapAsyncStatu
         }
     }
 
-    SerializeCommand(cmd, cmd.readDataUpdateInfoLength, [&](SerializeBuffer* serializeBuffer) {
-        if (isSuccess && isRead) {
-            char* readHandleBuffer;
-            WIRE_TRY(serializeBuffer->NextN(cmd.readDataUpdateInfoLength, &readHandleBuffer));
-            // The in-flight map request returned successfully.
-            bufferData->readHandle->SerializeDataUpdate(readData, data->offset, data->size,
-                                                        readHandleBuffer);
-        }
-        return WireResult::Success;
-    });
+    SerializeCommand(cmd, CommandExtension{readDataUpdateInfoLength, [&](char* readHandleBuffer) {
+                                               if (isSuccess && isRead) {
+                                                   // The in-flight map request returned
+                                                   // successfully.
+                                                   bufferData->readHandle->SerializeDataUpdate(
+                                                       readData, data->offset, data->size,
+                                                       readHandleBuffer);
+                                               }
+                                           }});
 }
 
 }  // namespace dawn::wire::server

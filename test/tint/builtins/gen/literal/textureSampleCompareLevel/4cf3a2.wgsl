@@ -1,4 +1,4 @@
-// Copyright 2021 The Tint Authors.
+// Copyright 2022 The Tint Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,8 +25,10 @@
 
 // fn textureSampleCompareLevel(texture: texture_depth_cube_array, sampler: sampler_comparison, coords: vec3<f32>, array_index: i32, depth_ref: f32) -> f32
 fn textureSampleCompareLevel_4cf3a2() {
-  var res: f32 = textureSampleCompareLevel(arg_0, arg_1, vec3<f32>(), 1, 1.f);
+  var res: f32 = textureSampleCompareLevel(arg_0, arg_1, vec3<f32>(1.f), 1i, 1.f);
+  prevent_dce = res;
 }
+@group(2) @binding(0) var<storage, read_write> prevent_dce : f32;
 
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {

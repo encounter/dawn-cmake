@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "src/tint/ast/test_helper.h"
 #include "src/tint/reader/wgsl/parser_impl_test_helper.h"
 
 namespace tint::reader::wgsl {
 namespace {
 
-TEST_F(ParserImplTest, GlobalVariableDecl_WithoutConstructor) {
+TEST_F(ParserImplTest, GlobalVariableDecl_WithoutInitializer) {
     auto p = parser("var<private> a : f32");
     auto attrs = p->attribute_list();
     EXPECT_FALSE(attrs.errored);
@@ -29,19 +30,19 @@ TEST_F(ParserImplTest, GlobalVariableDecl_WithoutConstructor) {
     auto* var = e.value->As<ast::Var>();
     ASSERT_NE(var, nullptr);
 
-    EXPECT_EQ(var->symbol, p->builder().Symbols().Get("a"));
-    EXPECT_TRUE(var->type->Is<ast::F32>());
-    EXPECT_EQ(var->declared_storage_class, ast::StorageClass::kPrivate);
+    ast::CheckIdentifier(var->name, "a");
+    ast::CheckIdentifier(var->type, "f32");
+    ast::CheckIdentifier(var->declared_address_space, "private");
 
     EXPECT_EQ(var->source.range.begin.line, 1u);
     EXPECT_EQ(var->source.range.begin.column, 14u);
     EXPECT_EQ(var->source.range.end.line, 1u);
     EXPECT_EQ(var->source.range.end.column, 15u);
 
-    ASSERT_EQ(var->constructor, nullptr);
+    ASSERT_EQ(var->initializer, nullptr);
 }
 
-TEST_F(ParserImplTest, GlobalVariableDecl_WithConstructor) {
+TEST_F(ParserImplTest, GlobalVariableDecl_WithInitializer) {
     auto p = parser("var<private> a : f32 = 1.");
     auto attrs = p->attribute_list();
     EXPECT_FALSE(attrs.errored);
@@ -53,17 +54,17 @@ TEST_F(ParserImplTest, GlobalVariableDecl_WithConstructor) {
     auto* var = e.value->As<ast::Var>();
     ASSERT_NE(var, nullptr);
 
-    EXPECT_EQ(var->symbol, p->builder().Symbols().Get("a"));
-    EXPECT_TRUE(var->type->Is<ast::F32>());
-    EXPECT_EQ(var->declared_storage_class, ast::StorageClass::kPrivate);
+    ast::CheckIdentifier(var->name, "a");
+    ast::CheckIdentifier(var->type, "f32");
+    ast::CheckIdentifier(var->declared_address_space, "private");
 
     EXPECT_EQ(var->source.range.begin.line, 1u);
     EXPECT_EQ(var->source.range.begin.column, 14u);
     EXPECT_EQ(var->source.range.end.line, 1u);
     EXPECT_EQ(var->source.range.end.column, 15u);
 
-    ASSERT_NE(var->constructor, nullptr);
-    ASSERT_TRUE(var->constructor->Is<ast::FloatLiteralExpression>());
+    ASSERT_NE(var->initializer, nullptr);
+    ASSERT_TRUE(var->initializer->Is<ast::FloatLiteralExpression>());
 }
 
 TEST_F(ParserImplTest, GlobalVariableDecl_WithAttribute) {
@@ -78,17 +79,16 @@ TEST_F(ParserImplTest, GlobalVariableDecl_WithAttribute) {
     auto* var = e.value->As<ast::Var>();
     ASSERT_NE(var, nullptr);
 
-    EXPECT_EQ(var->symbol, p->builder().Symbols().Get("a"));
-    ASSERT_NE(var->type, nullptr);
-    EXPECT_TRUE(var->type->Is<ast::F32>());
-    EXPECT_EQ(var->declared_storage_class, ast::StorageClass::kUniform);
+    ast::CheckIdentifier(var->name, "a");
+    ast::CheckIdentifier(var->type, "f32");
+    ast::CheckIdentifier(var->declared_address_space, "uniform");
 
     EXPECT_EQ(var->source.range.begin.line, 1u);
     EXPECT_EQ(var->source.range.begin.column, 36u);
     EXPECT_EQ(var->source.range.end.line, 1u);
     EXPECT_EQ(var->source.range.end.column, 37u);
 
-    ASSERT_EQ(var->constructor, nullptr);
+    ASSERT_EQ(var->initializer, nullptr);
 
     auto& attributes = var->attributes;
     ASSERT_EQ(attributes.Length(), 2u);
@@ -109,17 +109,16 @@ TEST_F(ParserImplTest, GlobalVariableDecl_WithAttribute_MulitpleGroups) {
     auto* var = e.value->As<ast::Var>();
     ASSERT_NE(var, nullptr);
 
-    EXPECT_EQ(var->symbol, p->builder().Symbols().Get("a"));
-    ASSERT_NE(var->type, nullptr);
-    EXPECT_TRUE(var->type->Is<ast::F32>());
-    EXPECT_EQ(var->declared_storage_class, ast::StorageClass::kUniform);
+    ast::CheckIdentifier(var->name, "a");
+    ast::CheckIdentifier(var->type, "f32");
+    ast::CheckIdentifier(var->declared_address_space, "uniform");
 
     EXPECT_EQ(var->source.range.begin.line, 1u);
     EXPECT_EQ(var->source.range.begin.column, 36u);
     EXPECT_EQ(var->source.range.end.line, 1u);
     EXPECT_EQ(var->source.range.end.column, 37u);
 
-    ASSERT_EQ(var->constructor, nullptr);
+    ASSERT_EQ(var->initializer, nullptr);
 
     auto& attributes = var->attributes;
     ASSERT_EQ(attributes.Length(), 2u);
@@ -139,7 +138,7 @@ TEST_F(ParserImplTest, GlobalVariableDecl_InvalidAttribute) {
     EXPECT_NE(e.value, nullptr);
 
     EXPECT_TRUE(p->has_error());
-    EXPECT_EQ(p->error(), "1:10: expected signed integer literal for binding attribute");
+    EXPECT_EQ(p->error(), "1:2: binding expects 1 argument");
 }
 
 TEST_F(ParserImplTest, GlobalVariableDecl_InvalidConstExpr) {
@@ -153,19 +152,6 @@ TEST_F(ParserImplTest, GlobalVariableDecl_InvalidConstExpr) {
     EXPECT_FALSE(e.matched);
     EXPECT_EQ(e.value, nullptr);
     EXPECT_EQ(p->error(), "1:24: missing initializer for 'var' declaration");
-}
-
-TEST_F(ParserImplTest, GlobalVariableDecl_InvalidVariableDecl) {
-    auto p = parser("var<invalid> a : f32;");
-    auto attrs = p->attribute_list();
-    EXPECT_FALSE(attrs.errored);
-    EXPECT_FALSE(attrs.matched);
-    auto e = p->global_variable_decl(attrs.value);
-    EXPECT_TRUE(p->has_error());
-    EXPECT_TRUE(e.errored);
-    EXPECT_FALSE(e.matched);
-    EXPECT_EQ(e.value, nullptr);
-    EXPECT_EQ(p->error(), "1:5: invalid storage class for variable declaration");
 }
 
 }  // namespace

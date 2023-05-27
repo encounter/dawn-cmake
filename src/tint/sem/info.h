@@ -20,15 +20,22 @@
 #include <unordered_map>
 #include <vector>
 
+#include "src/tint/ast/diagnostic_control.h"
 #include "src/tint/ast/node.h"
 #include "src/tint/debug.h"
 #include "src/tint/sem/node.h"
 #include "src/tint/sem/type_mappings.h"
+#include "src/tint/utils/unique_vector.h"
 
 // Forward declarations
 namespace tint::sem {
 class Module;
+class ValueExpression;
 }  // namespace tint::sem
+namespace tint::type {
+class Node;
+class Type;
+}  // namespace tint::type
 
 namespace tint::sem {
 
@@ -43,6 +50,9 @@ class Info {
     template <typename SEM, typename AST>
     using GetResultType =
         std::conditional_t<std::is_same<SEM, InferFromAST>::value, SemanticNodeTypeFor<AST>, SEM>;
+
+    /// Alias to a unique vector of transitively referenced global variables
+    using TransitivelyReferenced = utils::UniqueVector<const GlobalVariable*, 4>;
 
     /// Constructor
     Info();
@@ -67,13 +77,24 @@ class Info {
     /// @param ast_node the AST node
     /// @returns a pointer to the semantic node if found, otherwise nullptr
     template <typename SEM = InferFromAST,
-              typename AST = CastableBase,
+              typename AST = utils::CastableBase,
               typename RESULT = GetResultType<SEM, AST>>
     const RESULT* Get(const AST* ast_node) const {
+        static_assert(std::is_same_v<SEM, InferFromAST> ||
+                          !utils::traits::IsTypeOrDerived<SemanticNodeTypeFor<AST>, SEM>,
+                      "explicit template argument is unnecessary");
         if (ast_node && ast_node->node_id.value < nodes_.size()) {
             return As<RESULT>(nodes_[ast_node->node_id.value]);
         }
         return nullptr;
+    }
+
+    /// Convenience function that's an alias for Get<ValueExpression>()
+    /// @param ast_node the AST node
+    /// @returns a pointer to the semantic node if found, otherwise nullptr
+    template <typename AST>
+    const sem::ValueExpression* GetVal(const AST* ast_node) const {
+        return Get<ValueExpression>(ast_node);
     }
 
     /// Add registers the semantic node `sem_node` for the AST node `ast_node`.
@@ -117,9 +138,39 @@ class Info {
     /// @returns the semantic module.
     const sem::Module* Module() const { return module_; }
 
+    /// Records that this variable (transitively) references the given override variable.
+    /// @param from the item the variable is referenced from
+    /// @param var the module-scope override variable
+    void AddTransitivelyReferencedOverride(const utils::CastableBase* from,
+                                           const GlobalVariable* var) {
+        if (referenced_overrides_.count(from) == 0) {
+            referenced_overrides_.insert({from, TransitivelyReferenced{}});
+        }
+        referenced_overrides_[from].Add(var);
+    }
+
+    /// @param from the key to look up
+    /// @returns all transitively referenced override variables or nullptr if none set
+    const TransitivelyReferenced* TransitivelyReferencedOverrides(
+        const utils::CastableBase* from) const {
+        if (referenced_overrides_.count(from) == 0) {
+            return nullptr;
+        }
+        return &referenced_overrides_.at(from);
+    }
+
+    /// Determines the severity of a filterable diagnostic rule for the AST node `ast_node`.
+    /// @param ast_node the AST node
+    /// @param rule the diagnostic rule
+    /// @returns the severity of the rule for that AST node
+    builtin::DiagnosticSeverity DiagnosticSeverity(const ast::Node* ast_node,
+                                                   builtin::DiagnosticRule rule) const;
+
   private:
     // AST node index to semantic node
-    std::vector<const sem::Node*> nodes_;
+    std::vector<const utils::CastableBase*> nodes_;
+    // Lists transitively referenced overrides for the given item
+    std::unordered_map<const utils::CastableBase*, TransitivelyReferenced> referenced_overrides_;
     // The semantic module
     sem::Module* module_ = nullptr;
 };

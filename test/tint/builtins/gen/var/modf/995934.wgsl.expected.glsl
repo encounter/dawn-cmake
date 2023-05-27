@@ -14,7 +14,7 @@ modf_result_vec4_f16 tint_modf(f16vec4 param_0) {
 
 
 void modf_995934() {
-  f16vec4 arg_0 = f16vec4(0.0hf);
+  f16vec4 arg_0 = f16vec4(-1.5hf);
   modf_result_vec4_f16 res = tint_modf(arg_0);
 }
 
@@ -33,7 +33,7 @@ void main() {
 }
 #version 310 es
 #extension GL_AMD_gpu_shader_half_float : require
-precision mediump float;
+precision highp float;
 
 struct modf_result_vec4_f16 {
   f16vec4 fract;
@@ -48,7 +48,7 @@ modf_result_vec4_f16 tint_modf(f16vec4 param_0) {
 
 
 void modf_995934() {
-  f16vec4 arg_0 = f16vec4(0.0hf);
+  f16vec4 arg_0 = f16vec4(-1.5hf);
   modf_result_vec4_f16 res = tint_modf(arg_0);
 }
 
@@ -76,7 +76,7 @@ modf_result_vec4_f16 tint_modf(f16vec4 param_0) {
 
 
 void modf_995934() {
-  f16vec4 arg_0 = f16vec4(0.0hf);
+  f16vec4 arg_0 = f16vec4(-1.5hf);
   modf_result_vec4_f16 res = tint_modf(arg_0);
 }
 

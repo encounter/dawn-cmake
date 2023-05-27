@@ -23,9 +23,8 @@
 
 // fn atan2(vec<4, fa>, vec<4, fa>) -> vec<4, fa>
 fn atan2_c4be45() {
-  var res = atan2(vec4(1), vec4(1));
+  var res = atan2(vec4(1.), vec4(1.));
 }
-
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {
   atan2_c4be45();

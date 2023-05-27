@@ -328,6 +328,26 @@ int InitVulkan(void) {
         reinterpret_cast<PFN_vkCreateDisplayPlaneSurfaceKHR>(dlsym(libvulkan, "vkCreateDisplayPlaneSurfaceKHR"));
     vkCreateSharedSwapchainsKHR =
         reinterpret_cast<PFN_vkCreateSharedSwapchainsKHR>(dlsym(libvulkan, "vkCreateSharedSwapchainsKHR"));
+    vkGetPhysicalDeviceVideoCapabilitiesKHR =
+        reinterpret_cast<PFN_vkGetPhysicalDeviceVideoCapabilitiesKHR>(dlsym(libvulkan, "vkGetPhysicalDeviceVideoCapabilitiesKHR"));
+    vkGetPhysicalDeviceVideoFormatPropertiesKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceVideoFormatPropertiesKHR>(
+        dlsym(libvulkan, "vkGetPhysicalDeviceVideoFormatPropertiesKHR"));
+    vkCreateVideoSessionKHR = reinterpret_cast<PFN_vkCreateVideoSessionKHR>(dlsym(libvulkan, "vkCreateVideoSessionKHR"));
+    vkDestroyVideoSessionKHR = reinterpret_cast<PFN_vkDestroyVideoSessionKHR>(dlsym(libvulkan, "vkDestroyVideoSessionKHR"));
+    vkGetVideoSessionMemoryRequirementsKHR =
+        reinterpret_cast<PFN_vkGetVideoSessionMemoryRequirementsKHR>(dlsym(libvulkan, "vkGetVideoSessionMemoryRequirementsKHR"));
+    vkBindVideoSessionMemoryKHR =
+        reinterpret_cast<PFN_vkBindVideoSessionMemoryKHR>(dlsym(libvulkan, "vkBindVideoSessionMemoryKHR"));
+    vkCreateVideoSessionParametersKHR =
+        reinterpret_cast<PFN_vkCreateVideoSessionParametersKHR>(dlsym(libvulkan, "vkCreateVideoSessionParametersKHR"));
+    vkUpdateVideoSessionParametersKHR =
+        reinterpret_cast<PFN_vkUpdateVideoSessionParametersKHR>(dlsym(libvulkan, "vkUpdateVideoSessionParametersKHR"));
+    vkDestroyVideoSessionParametersKHR =
+        reinterpret_cast<PFN_vkDestroyVideoSessionParametersKHR>(dlsym(libvulkan, "vkDestroyVideoSessionParametersKHR"));
+    vkCmdBeginVideoCodingKHR = reinterpret_cast<PFN_vkCmdBeginVideoCodingKHR>(dlsym(libvulkan, "vkCmdBeginVideoCodingKHR"));
+    vkCmdEndVideoCodingKHR = reinterpret_cast<PFN_vkCmdEndVideoCodingKHR>(dlsym(libvulkan, "vkCmdEndVideoCodingKHR"));
+    vkCmdControlVideoCodingKHR = reinterpret_cast<PFN_vkCmdControlVideoCodingKHR>(dlsym(libvulkan, "vkCmdControlVideoCodingKHR"));
+    vkCmdDecodeVideoKHR = reinterpret_cast<PFN_vkCmdDecodeVideoKHR>(dlsym(libvulkan, "vkCmdDecodeVideoKHR"));
     vkCmdBeginRenderingKHR = reinterpret_cast<PFN_vkCmdBeginRenderingKHR>(dlsym(libvulkan, "vkCmdBeginRenderingKHR"));
     vkCmdEndRenderingKHR = reinterpret_cast<PFN_vkCmdEndRenderingKHR>(dlsym(libvulkan, "vkCmdEndRenderingKHR"));
     vkGetPhysicalDeviceFeatures2KHR =
@@ -444,6 +464,8 @@ int InitVulkan(void) {
         reinterpret_cast<PFN_vkGetPipelineExecutableStatisticsKHR>(dlsym(libvulkan, "vkGetPipelineExecutableStatisticsKHR"));
     vkGetPipelineExecutableInternalRepresentationsKHR = reinterpret_cast<PFN_vkGetPipelineExecutableInternalRepresentationsKHR>(
         dlsym(libvulkan, "vkGetPipelineExecutableInternalRepresentationsKHR"));
+    vkMapMemory2KHR = reinterpret_cast<PFN_vkMapMemory2KHR>(dlsym(libvulkan, "vkMapMemory2KHR"));
+    vkUnmapMemory2KHR = reinterpret_cast<PFN_vkUnmapMemory2KHR>(dlsym(libvulkan, "vkUnmapMemory2KHR"));
     vkCmdSetEvent2KHR = reinterpret_cast<PFN_vkCmdSetEvent2KHR>(dlsym(libvulkan, "vkCmdSetEvent2KHR"));
     vkCmdResetEvent2KHR = reinterpret_cast<PFN_vkCmdResetEvent2KHR>(dlsym(libvulkan, "vkCmdResetEvent2KHR"));
     vkCmdWaitEvents2KHR = reinterpret_cast<PFN_vkCmdWaitEvents2KHR>(dlsym(libvulkan, "vkCmdWaitEvents2KHR"));
@@ -554,32 +576,6 @@ int InitVulkan(void) {
     vkCreateXlibSurfaceKHR = reinterpret_cast<PFN_vkCreateXlibSurfaceKHR>(dlsym(libvulkan, "vkCreateXlibSurfaceKHR"));
     vkGetPhysicalDeviceXlibPresentationSupportKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceXlibPresentationSupportKHR>(
         dlsym(libvulkan, "vkGetPhysicalDeviceXlibPresentationSupportKHR"));
-#endif
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-    vkGetPhysicalDeviceVideoCapabilitiesKHR =
-        reinterpret_cast<PFN_vkGetPhysicalDeviceVideoCapabilitiesKHR>(dlsym(libvulkan, "vkGetPhysicalDeviceVideoCapabilitiesKHR"));
-    vkGetPhysicalDeviceVideoFormatPropertiesKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceVideoFormatPropertiesKHR>(
-        dlsym(libvulkan, "vkGetPhysicalDeviceVideoFormatPropertiesKHR"));
-    vkCreateVideoSessionKHR = reinterpret_cast<PFN_vkCreateVideoSessionKHR>(dlsym(libvulkan, "vkCreateVideoSessionKHR"));
-    vkDestroyVideoSessionKHR = reinterpret_cast<PFN_vkDestroyVideoSessionKHR>(dlsym(libvulkan, "vkDestroyVideoSessionKHR"));
-    vkGetVideoSessionMemoryRequirementsKHR =
-        reinterpret_cast<PFN_vkGetVideoSessionMemoryRequirementsKHR>(dlsym(libvulkan, "vkGetVideoSessionMemoryRequirementsKHR"));
-    vkBindVideoSessionMemoryKHR =
-        reinterpret_cast<PFN_vkBindVideoSessionMemoryKHR>(dlsym(libvulkan, "vkBindVideoSessionMemoryKHR"));
-    vkCreateVideoSessionParametersKHR =
-        reinterpret_cast<PFN_vkCreateVideoSessionParametersKHR>(dlsym(libvulkan, "vkCreateVideoSessionParametersKHR"));
-    vkUpdateVideoSessionParametersKHR =
-        reinterpret_cast<PFN_vkUpdateVideoSessionParametersKHR>(dlsym(libvulkan, "vkUpdateVideoSessionParametersKHR"));
-    vkDestroyVideoSessionParametersKHR =
-        reinterpret_cast<PFN_vkDestroyVideoSessionParametersKHR>(dlsym(libvulkan, "vkDestroyVideoSessionParametersKHR"));
-    vkCmdBeginVideoCodingKHR = reinterpret_cast<PFN_vkCmdBeginVideoCodingKHR>(dlsym(libvulkan, "vkCmdBeginVideoCodingKHR"));
-    vkCmdEndVideoCodingKHR = reinterpret_cast<PFN_vkCmdEndVideoCodingKHR>(dlsym(libvulkan, "vkCmdEndVideoCodingKHR"));
-    vkCmdControlVideoCodingKHR = reinterpret_cast<PFN_vkCmdControlVideoCodingKHR>(dlsym(libvulkan, "vkCmdControlVideoCodingKHR"));
-#endif
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-    vkCmdDecodeVideoKHR = reinterpret_cast<PFN_vkCmdDecodeVideoKHR>(dlsym(libvulkan, "vkCmdDecodeVideoKHR"));
 #endif
 
 #ifdef VK_ENABLE_BETA_EXTENSIONS
@@ -826,6 +822,19 @@ PFN_vkCreateDisplayModeKHR vkCreateDisplayModeKHR;
 PFN_vkGetDisplayPlaneCapabilitiesKHR vkGetDisplayPlaneCapabilitiesKHR;
 PFN_vkCreateDisplayPlaneSurfaceKHR vkCreateDisplayPlaneSurfaceKHR;
 PFN_vkCreateSharedSwapchainsKHR vkCreateSharedSwapchainsKHR;
+PFN_vkGetPhysicalDeviceVideoCapabilitiesKHR vkGetPhysicalDeviceVideoCapabilitiesKHR;
+PFN_vkGetPhysicalDeviceVideoFormatPropertiesKHR vkGetPhysicalDeviceVideoFormatPropertiesKHR;
+PFN_vkCreateVideoSessionKHR vkCreateVideoSessionKHR;
+PFN_vkDestroyVideoSessionKHR vkDestroyVideoSessionKHR;
+PFN_vkGetVideoSessionMemoryRequirementsKHR vkGetVideoSessionMemoryRequirementsKHR;
+PFN_vkBindVideoSessionMemoryKHR vkBindVideoSessionMemoryKHR;
+PFN_vkCreateVideoSessionParametersKHR vkCreateVideoSessionParametersKHR;
+PFN_vkUpdateVideoSessionParametersKHR vkUpdateVideoSessionParametersKHR;
+PFN_vkDestroyVideoSessionParametersKHR vkDestroyVideoSessionParametersKHR;
+PFN_vkCmdBeginVideoCodingKHR vkCmdBeginVideoCodingKHR;
+PFN_vkCmdEndVideoCodingKHR vkCmdEndVideoCodingKHR;
+PFN_vkCmdControlVideoCodingKHR vkCmdControlVideoCodingKHR;
+PFN_vkCmdDecodeVideoKHR vkCmdDecodeVideoKHR;
 PFN_vkCmdBeginRenderingKHR vkCmdBeginRenderingKHR;
 PFN_vkCmdEndRenderingKHR vkCmdEndRenderingKHR;
 PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR;
@@ -896,6 +905,8 @@ PFN_vkDeferredOperationJoinKHR vkDeferredOperationJoinKHR;
 PFN_vkGetPipelineExecutablePropertiesKHR vkGetPipelineExecutablePropertiesKHR;
 PFN_vkGetPipelineExecutableStatisticsKHR vkGetPipelineExecutableStatisticsKHR;
 PFN_vkGetPipelineExecutableInternalRepresentationsKHR vkGetPipelineExecutableInternalRepresentationsKHR;
+PFN_vkMapMemory2KHR vkMapMemory2KHR;
+PFN_vkUnmapMemory2KHR vkUnmapMemory2KHR;
 PFN_vkCmdSetEvent2KHR vkCmdSetEvent2KHR;
 PFN_vkCmdResetEvent2KHR vkCmdResetEvent2KHR;
 PFN_vkCmdWaitEvents2KHR vkCmdWaitEvents2KHR;
@@ -951,6 +962,8 @@ PFN_vkGetSwapchainCounterEXT vkGetSwapchainCounterEXT;
 PFN_vkGetRefreshCycleDurationGOOGLE vkGetRefreshCycleDurationGOOGLE;
 PFN_vkGetPastPresentationTimingGOOGLE vkGetPastPresentationTimingGOOGLE;
 PFN_vkCmdSetDiscardRectangleEXT vkCmdSetDiscardRectangleEXT;
+PFN_vkCmdSetDiscardRectangleEnableEXT vkCmdSetDiscardRectangleEnableEXT;
+PFN_vkCmdSetDiscardRectangleModeEXT vkCmdSetDiscardRectangleModeEXT;
 PFN_vkSetHdrMetadataEXT vkSetHdrMetadataEXT;
 PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT;
 PFN_vkSetDebugUtilsObjectTagEXT vkSetDebugUtilsObjectTagEXT;
@@ -993,6 +1006,7 @@ PFN_vkGetCalibratedTimestampsEXT vkGetCalibratedTimestampsEXT;
 PFN_vkCmdDrawMeshTasksNV vkCmdDrawMeshTasksNV;
 PFN_vkCmdDrawMeshTasksIndirectNV vkCmdDrawMeshTasksIndirectNV;
 PFN_vkCmdDrawMeshTasksIndirectCountNV vkCmdDrawMeshTasksIndirectCountNV;
+PFN_vkCmdSetExclusiveScissorEnableNV vkCmdSetExclusiveScissorEnableNV;
 PFN_vkCmdSetExclusiveScissorNV vkCmdSetExclusiveScissorNV;
 PFN_vkCmdSetCheckpointNV vkCmdSetCheckpointNV;
 PFN_vkGetQueueCheckpointDataNV vkGetQueueCheckpointDataNV;
@@ -1026,6 +1040,7 @@ PFN_vkCmdSetDepthCompareOpEXT vkCmdSetDepthCompareOpEXT;
 PFN_vkCmdSetDepthBoundsTestEnableEXT vkCmdSetDepthBoundsTestEnableEXT;
 PFN_vkCmdSetStencilTestEnableEXT vkCmdSetStencilTestEnableEXT;
 PFN_vkCmdSetStencilOpEXT vkCmdSetStencilOpEXT;
+PFN_vkReleaseSwapchainImagesEXT vkReleaseSwapchainImagesEXT;
 PFN_vkGetGeneratedCommandsMemoryRequirementsNV vkGetGeneratedCommandsMemoryRequirementsNV;
 PFN_vkCmdPreprocessGeneratedCommandsNV vkCmdPreprocessGeneratedCommandsNV;
 PFN_vkCmdExecuteGeneratedCommandsNV vkCmdExecuteGeneratedCommandsNV;
@@ -1038,10 +1053,20 @@ PFN_vkCreatePrivateDataSlotEXT vkCreatePrivateDataSlotEXT;
 PFN_vkDestroyPrivateDataSlotEXT vkDestroyPrivateDataSlotEXT;
 PFN_vkSetPrivateDataEXT vkSetPrivateDataEXT;
 PFN_vkGetPrivateDataEXT vkGetPrivateDataEXT;
+PFN_vkGetDescriptorSetLayoutSizeEXT vkGetDescriptorSetLayoutSizeEXT;
+PFN_vkGetDescriptorSetLayoutBindingOffsetEXT vkGetDescriptorSetLayoutBindingOffsetEXT;
+PFN_vkGetDescriptorEXT vkGetDescriptorEXT;
+PFN_vkCmdBindDescriptorBuffersEXT vkCmdBindDescriptorBuffersEXT;
+PFN_vkCmdSetDescriptorBufferOffsetsEXT vkCmdSetDescriptorBufferOffsetsEXT;
+PFN_vkCmdBindDescriptorBufferEmbeddedSamplersEXT vkCmdBindDescriptorBufferEmbeddedSamplersEXT;
+PFN_vkGetBufferOpaqueCaptureDescriptorDataEXT vkGetBufferOpaqueCaptureDescriptorDataEXT;
+PFN_vkGetImageOpaqueCaptureDescriptorDataEXT vkGetImageOpaqueCaptureDescriptorDataEXT;
+PFN_vkGetImageViewOpaqueCaptureDescriptorDataEXT vkGetImageViewOpaqueCaptureDescriptorDataEXT;
+PFN_vkGetSamplerOpaqueCaptureDescriptorDataEXT vkGetSamplerOpaqueCaptureDescriptorDataEXT;
+PFN_vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT;
 PFN_vkCmdSetFragmentShadingRateEnumNV vkCmdSetFragmentShadingRateEnumNV;
 PFN_vkGetImageSubresourceLayout2EXT vkGetImageSubresourceLayout2EXT;
-PFN_vkAcquireWinrtDisplayNV vkAcquireWinrtDisplayNV;
-PFN_vkGetWinrtDisplayNV vkGetWinrtDisplayNV;
+PFN_vkGetDeviceFaultInfoEXT vkGetDeviceFaultInfoEXT;
 PFN_vkCmdSetVertexInputEXT vkCmdSetVertexInputEXT;
 PFN_vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI;
 PFN_vkCmdSubpassShadingHUAWEI vkCmdSubpassShadingHUAWEI;
@@ -1056,13 +1081,74 @@ PFN_vkCmdSetPrimitiveRestartEnableEXT vkCmdSetPrimitiveRestartEnableEXT;
 PFN_vkCmdSetColorWriteEnableEXT vkCmdSetColorWriteEnableEXT;
 PFN_vkCmdDrawMultiEXT vkCmdDrawMultiEXT;
 PFN_vkCmdDrawMultiIndexedEXT vkCmdDrawMultiIndexedEXT;
+PFN_vkCreateMicromapEXT vkCreateMicromapEXT;
+PFN_vkDestroyMicromapEXT vkDestroyMicromapEXT;
+PFN_vkCmdBuildMicromapsEXT vkCmdBuildMicromapsEXT;
+PFN_vkBuildMicromapsEXT vkBuildMicromapsEXT;
+PFN_vkCopyMicromapEXT vkCopyMicromapEXT;
+PFN_vkCopyMicromapToMemoryEXT vkCopyMicromapToMemoryEXT;
+PFN_vkCopyMemoryToMicromapEXT vkCopyMemoryToMicromapEXT;
+PFN_vkWriteMicromapsPropertiesEXT vkWriteMicromapsPropertiesEXT;
+PFN_vkCmdCopyMicromapEXT vkCmdCopyMicromapEXT;
+PFN_vkCmdCopyMicromapToMemoryEXT vkCmdCopyMicromapToMemoryEXT;
+PFN_vkCmdCopyMemoryToMicromapEXT vkCmdCopyMemoryToMicromapEXT;
+PFN_vkCmdWriteMicromapsPropertiesEXT vkCmdWriteMicromapsPropertiesEXT;
+PFN_vkGetDeviceMicromapCompatibilityEXT vkGetDeviceMicromapCompatibilityEXT;
+PFN_vkGetMicromapBuildSizesEXT vkGetMicromapBuildSizesEXT;
+PFN_vkCmdDrawClusterHUAWEI vkCmdDrawClusterHUAWEI;
+PFN_vkCmdDrawClusterIndirectHUAWEI vkCmdDrawClusterIndirectHUAWEI;
 PFN_vkSetDeviceMemoryPriorityEXT vkSetDeviceMemoryPriorityEXT;
 PFN_vkGetDescriptorSetLayoutHostMappingInfoVALVE vkGetDescriptorSetLayoutHostMappingInfoVALVE;
 PFN_vkGetDescriptorSetHostMappingVALVE vkGetDescriptorSetHostMappingVALVE;
+PFN_vkCmdCopyMemoryIndirectNV vkCmdCopyMemoryIndirectNV;
+PFN_vkCmdCopyMemoryToImageIndirectNV vkCmdCopyMemoryToImageIndirectNV;
+PFN_vkCmdDecompressMemoryNV vkCmdDecompressMemoryNV;
+PFN_vkCmdDecompressMemoryIndirectCountNV vkCmdDecompressMemoryIndirectCountNV;
+PFN_vkCmdSetTessellationDomainOriginEXT vkCmdSetTessellationDomainOriginEXT;
+PFN_vkCmdSetDepthClampEnableEXT vkCmdSetDepthClampEnableEXT;
+PFN_vkCmdSetPolygonModeEXT vkCmdSetPolygonModeEXT;
+PFN_vkCmdSetRasterizationSamplesEXT vkCmdSetRasterizationSamplesEXT;
+PFN_vkCmdSetSampleMaskEXT vkCmdSetSampleMaskEXT;
+PFN_vkCmdSetAlphaToCoverageEnableEXT vkCmdSetAlphaToCoverageEnableEXT;
+PFN_vkCmdSetAlphaToOneEnableEXT vkCmdSetAlphaToOneEnableEXT;
+PFN_vkCmdSetLogicOpEnableEXT vkCmdSetLogicOpEnableEXT;
+PFN_vkCmdSetColorBlendEnableEXT vkCmdSetColorBlendEnableEXT;
+PFN_vkCmdSetColorBlendEquationEXT vkCmdSetColorBlendEquationEXT;
+PFN_vkCmdSetColorWriteMaskEXT vkCmdSetColorWriteMaskEXT;
+PFN_vkCmdSetRasterizationStreamEXT vkCmdSetRasterizationStreamEXT;
+PFN_vkCmdSetConservativeRasterizationModeEXT vkCmdSetConservativeRasterizationModeEXT;
+PFN_vkCmdSetExtraPrimitiveOverestimationSizeEXT vkCmdSetExtraPrimitiveOverestimationSizeEXT;
+PFN_vkCmdSetDepthClipEnableEXT vkCmdSetDepthClipEnableEXT;
+PFN_vkCmdSetSampleLocationsEnableEXT vkCmdSetSampleLocationsEnableEXT;
+PFN_vkCmdSetColorBlendAdvancedEXT vkCmdSetColorBlendAdvancedEXT;
+PFN_vkCmdSetProvokingVertexModeEXT vkCmdSetProvokingVertexModeEXT;
+PFN_vkCmdSetLineRasterizationModeEXT vkCmdSetLineRasterizationModeEXT;
+PFN_vkCmdSetLineStippleEnableEXT vkCmdSetLineStippleEnableEXT;
+PFN_vkCmdSetDepthClipNegativeOneToOneEXT vkCmdSetDepthClipNegativeOneToOneEXT;
+PFN_vkCmdSetViewportWScalingEnableNV vkCmdSetViewportWScalingEnableNV;
+PFN_vkCmdSetViewportSwizzleNV vkCmdSetViewportSwizzleNV;
+PFN_vkCmdSetCoverageToColorEnableNV vkCmdSetCoverageToColorEnableNV;
+PFN_vkCmdSetCoverageToColorLocationNV vkCmdSetCoverageToColorLocationNV;
+PFN_vkCmdSetCoverageModulationModeNV vkCmdSetCoverageModulationModeNV;
+PFN_vkCmdSetCoverageModulationTableEnableNV vkCmdSetCoverageModulationTableEnableNV;
+PFN_vkCmdSetCoverageModulationTableNV vkCmdSetCoverageModulationTableNV;
+PFN_vkCmdSetShadingRateImageEnableNV vkCmdSetShadingRateImageEnableNV;
+PFN_vkCmdSetRepresentativeFragmentTestEnableNV vkCmdSetRepresentativeFragmentTestEnableNV;
+PFN_vkCmdSetCoverageReductionModeNV vkCmdSetCoverageReductionModeNV;
 PFN_vkGetShaderModuleIdentifierEXT vkGetShaderModuleIdentifierEXT;
 PFN_vkGetShaderModuleCreateInfoIdentifierEXT vkGetShaderModuleCreateInfoIdentifierEXT;
+PFN_vkGetPhysicalDeviceOpticalFlowImageFormatsNV vkGetPhysicalDeviceOpticalFlowImageFormatsNV;
+PFN_vkCreateOpticalFlowSessionNV vkCreateOpticalFlowSessionNV;
+PFN_vkDestroyOpticalFlowSessionNV vkDestroyOpticalFlowSessionNV;
+PFN_vkBindOpticalFlowSessionImageNV vkBindOpticalFlowSessionImageNV;
+PFN_vkCmdOpticalFlowExecuteNV vkCmdOpticalFlowExecuteNV;
+PFN_vkCreateShadersEXT vkCreateShadersEXT;
+PFN_vkDestroyShaderEXT vkDestroyShaderEXT;
+PFN_vkGetShaderBinaryDataEXT vkGetShaderBinaryDataEXT;
+PFN_vkCmdBindShadersEXT vkCmdBindShadersEXT;
 PFN_vkGetFramebufferTilePropertiesQCOM vkGetFramebufferTilePropertiesQCOM;
 PFN_vkGetDynamicRenderingTilePropertiesQCOM vkGetDynamicRenderingTilePropertiesQCOM;
+PFN_vkCmdSetAttachmentFeedbackLoopEnableEXT vkCmdSetAttachmentFeedbackLoopEnableEXT;
 PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR;
 PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR;
 PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR;
@@ -1085,6 +1171,9 @@ PFN_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR vkGetRayTracingCaptureRepl
 PFN_vkCmdTraceRaysIndirectKHR vkCmdTraceRaysIndirectKHR;
 PFN_vkGetRayTracingShaderGroupStackSizeKHR vkGetRayTracingShaderGroupStackSizeKHR;
 PFN_vkCmdSetRayTracingPipelineStackSizeKHR vkCmdSetRayTracingPipelineStackSizeKHR;
+PFN_vkCmdDrawMeshTasksEXT vkCmdDrawMeshTasksEXT;
+PFN_vkCmdDrawMeshTasksIndirectEXT vkCmdDrawMeshTasksIndirectEXT;
+PFN_vkCmdDrawMeshTasksIndirectCountEXT vkCmdDrawMeshTasksIndirectCountEXT;
 
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
 PFN_vkCreateAndroidSurfaceKHR vkCreateAndroidSurfaceKHR;
@@ -1173,6 +1262,11 @@ PFN_vkReleaseFullScreenExclusiveModeEXT vkReleaseFullScreenExclusiveModeEXT;
 PFN_vkGetDeviceGroupSurfacePresentModes2EXT vkGetDeviceGroupSurfacePresentModes2EXT;
 #endif
 
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+PFN_vkAcquireWinrtDisplayNV vkAcquireWinrtDisplayNV;
+PFN_vkGetWinrtDisplayNV vkGetWinrtDisplayNV;
+#endif
+
 #ifdef VK_USE_PLATFORM_XCB_KHR
 PFN_vkCreateXcbSurfaceKHR vkCreateXcbSurfaceKHR;
 PFN_vkGetPhysicalDeviceXcbPresentationSupportKHR vkGetPhysicalDeviceXcbPresentationSupportKHR;
@@ -1200,25 +1294,6 @@ PFN_vkCreateStreamDescriptorSurfaceGGP vkCreateStreamDescriptorSurfaceGGP;
 #ifdef VK_USE_PLATFORM_SCREEN_QNX
 PFN_vkCreateScreenSurfaceQNX vkCreateScreenSurfaceQNX;
 PFN_vkGetPhysicalDeviceScreenPresentationSupportQNX vkGetPhysicalDeviceScreenPresentationSupportQNX;
-#endif
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-PFN_vkGetPhysicalDeviceVideoCapabilitiesKHR vkGetPhysicalDeviceVideoCapabilitiesKHR;
-PFN_vkGetPhysicalDeviceVideoFormatPropertiesKHR vkGetPhysicalDeviceVideoFormatPropertiesKHR;
-PFN_vkCreateVideoSessionKHR vkCreateVideoSessionKHR;
-PFN_vkDestroyVideoSessionKHR vkDestroyVideoSessionKHR;
-PFN_vkGetVideoSessionMemoryRequirementsKHR vkGetVideoSessionMemoryRequirementsKHR;
-PFN_vkBindVideoSessionMemoryKHR vkBindVideoSessionMemoryKHR;
-PFN_vkCreateVideoSessionParametersKHR vkCreateVideoSessionParametersKHR;
-PFN_vkUpdateVideoSessionParametersKHR vkUpdateVideoSessionParametersKHR;
-PFN_vkDestroyVideoSessionParametersKHR vkDestroyVideoSessionParametersKHR;
-PFN_vkCmdBeginVideoCodingKHR vkCmdBeginVideoCodingKHR;
-PFN_vkCmdEndVideoCodingKHR vkCmdEndVideoCodingKHR;
-PFN_vkCmdControlVideoCodingKHR vkCmdControlVideoCodingKHR;
-#endif
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-PFN_vkCmdDecodeVideoKHR vkCmdDecodeVideoKHR;
 #endif
 
 #ifdef VK_ENABLE_BETA_EXTENSIONS

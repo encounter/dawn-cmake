@@ -90,6 +90,16 @@ except ValueError:
     # --jinja2-path isn't passed, ignore the exception and just import Jinja2
     # assuming it already is in the Python PATH.
     pass
+kMarkupSafePath = '--markupsafe-path'
+try:
+    markupsafe_path_argv_index = sys.argv.index(kMarkupSafePath)
+    # Add parent path for the import to succeed.
+    path = os.path.join(sys.argv[markupsafe_path_argv_index + 1], os.pardir)
+    sys.path.insert(1, path)
+except ValueError:
+    # --markupsafe-path isn't passed, ignore the exception and just import
+    # assuming it already is in the Python PATH.
+    pass
 
 import jinja2
 
@@ -237,6 +247,11 @@ def run_generator(generator):
         type=str,
         help='Additional python path to set before loading Jinja2')
     parser.add_argument(
+        kMarkupSafePath,
+        default=None,
+        type=str,
+        help='Additional python path to set before loading MarkupSafe')
+    parser.add_argument(
         '--output-json-tarball',
         default=None,
         type=str,
@@ -258,12 +273,6 @@ def run_generator(generator):
         type=str,
         help=('Optional source root directory for Python dependency '
               'computations'))
-    parser.add_argument(
-        '--allowed-output-dirs-file',
-        default=None,
-        type=str,
-        help=("File containing a list of allowed directories where files "
-              "can be output."))
     parser.add_argument(
         '--print-cmake-dependencies',
         default=False,
@@ -326,32 +335,6 @@ def run_generator(generator):
 
     outputs = _do_renders(renders, args.template_dir)
 
-    # The caller wants to assert that the outputs are only in specific
-    # directories.
-    if args.allowed_output_dirs_file != None:
-        with open(args.allowed_output_dirs_file) as f:
-            allowed_dirs = set([line.strip() for line in f.readlines()])
-
-        for directory in allowed_dirs:
-            if not directory.endswith('/'):
-                print('Allowed directory entry "{}" doesn\'t '
-                      'end with /'.format(directory))
-                return 1
-
-        def check_in_subdirectory(path, directory):
-            return path.startswith(
-                directory) and not '/' in path[len(directory):]
-
-        for render in renders:
-            if not any(
-                    check_in_subdirectory(render.output, directory)
-                    for directory in allowed_dirs):
-                print('Output file "{}" is not in the allowed directory '
-                      'list below:'.format(render.output))
-                for directory in sorted(allowed_dirs):
-                    print('    "{}"'.format(directory))
-                return 1
-
     # Output the JSON tarball
     if args.output_json_tarball != None:
         json_root = {}
@@ -367,8 +350,7 @@ def run_generator(generator):
             output_path = os.path.join(args.output_dir, output.name)
 
             directory = os.path.dirname(output_path)
-            if not os.path.exists(directory):
-                os.makedirs(directory)
+            os.makedirs(directory, exist_ok=True)
 
             with open(output_path, 'w') as outfile:
                 outfile.write(output.content)

@@ -18,9 +18,11 @@
 #include "src/tint/ast/call_statement.h"
 #include "src/tint/ast/variable_decl_statement.h"
 #include "src/tint/debug.h"
-#include "src/tint/demangler.h"
-#include "src/tint/sem/expression.h"
+#include "src/tint/sem/type_expression.h"
+#include "src/tint/sem/value_expression.h"
 #include "src/tint/sem/variable.h"
+#include "src/tint/switch.h"
+#include "src/tint/utils/compiler_macros.h"
 
 using namespace tint::number_suffixes;  // NOLINT
 
@@ -36,9 +38,9 @@ ProgramBuilder::ProgramBuilder()
       ast_(ast_nodes_.Create<ast::Module>(id_, AllocateNodeID(), Source{})) {}
 
 ProgramBuilder::ProgramBuilder(ProgramBuilder&& rhs)
-    : id_(std::move(rhs.id_)),
+    : constants(std::move(rhs.constants)),
+      id_(std::move(rhs.id_)),
       last_ast_node_id_(std::move(rhs.last_ast_node_id_)),
-      types_(std::move(rhs.types_)),
       ast_nodes_(std::move(rhs.ast_nodes_)),
       sem_nodes_(std::move(rhs.sem_nodes_)),
       ast_(std::move(rhs.ast_)),
@@ -55,7 +57,7 @@ ProgramBuilder& ProgramBuilder::operator=(ProgramBuilder&& rhs) {
     AssertNotMoved();
     id_ = std::move(rhs.id_);
     last_ast_node_id_ = std::move(rhs.last_ast_node_id_);
-    types_ = std::move(rhs.types_);
+    constants = std::move(rhs.constants);
     ast_nodes_ = std::move(rhs.ast_nodes_);
     sem_nodes_ = std::move(rhs.sem_nodes_);
     ast_ = std::move(rhs.ast_);
@@ -70,11 +72,11 @@ ProgramBuilder ProgramBuilder::Wrap(const Program* program) {
     ProgramBuilder builder;
     builder.id_ = program->ID();
     builder.last_ast_node_id_ = program->HighestASTNodeID();
-    builder.types_ = sem::Manager::Wrap(program->Types());
+    builder.constants = constant::Manager::Wrap(program->Constants());
     builder.ast_ =
         builder.create<ast::Module>(program->AST().source, program->AST().GlobalDeclarations());
     builder.sem_ = sem::Info::Wrap(program->Sem());
-    builder.symbols_ = program->Symbols();
+    builder.symbols_.Wrap(program->Symbols());
     builder.diagnostics_ = program->Diagnostics();
     return builder;
 }
@@ -89,32 +91,26 @@ void ProgramBuilder::MarkAsMoved() {
 }
 
 void ProgramBuilder::AssertNotMoved() const {
-    if (moved_) {
+    if (TINT_UNLIKELY(moved_)) {
         TINT_ICE(ProgramBuilder, const_cast<ProgramBuilder*>(this)->diagnostics_)
             << "Attempting to use ProgramBuilder after it has been moved";
     }
 }
 
-const sem::Type* ProgramBuilder::TypeOf(const ast::Expression* expr) const {
-    auto* sem = Sem().Get(expr);
-    return sem ? sem->Type() : nullptr;
+const type::Type* ProgramBuilder::TypeOf(const ast::Expression* expr) const {
+    return tint::Switch(
+        Sem().Get(expr),  //
+        [](const sem::ValueExpression* e) { return e->Type(); },
+        [](const sem::TypeExpression* e) { return e->Type(); });
 }
 
-const sem::Type* ProgramBuilder::TypeOf(const ast::Variable* var) const {
+const type::Type* ProgramBuilder::TypeOf(const ast::Variable* var) const {
     auto* sem = Sem().Get(var);
     return sem ? sem->Type() : nullptr;
 }
 
-const sem::Type* ProgramBuilder::TypeOf(const ast::Type* type) const {
-    return Sem().Get(type);
-}
-
-const sem::Type* ProgramBuilder::TypeOf(const ast::TypeDecl* type_decl) const {
+const type::Type* ProgramBuilder::TypeOf(const ast::TypeDecl* type_decl) const {
     return Sem().Get(type_decl);
-}
-
-const ast::TypeName* ProgramBuilder::TypesBuilder::Of(const ast::TypeDecl* decl) const {
-    return type_name(decl->name);
 }
 
 ProgramBuilder::TypesBuilder::TypesBuilder(ProgramBuilder* pb) : builder(pb) {}

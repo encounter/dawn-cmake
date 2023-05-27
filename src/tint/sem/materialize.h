@@ -15,7 +15,7 @@
 #ifndef SRC_TINT_SEM_MATERIALIZE_H_
 #define SRC_TINT_SEM_MATERIALIZE_H_
 
-#include "src/tint/sem/expression.h"
+#include "src/tint/sem/value_expression.h"
 
 namespace tint::sem {
 
@@ -25,22 +25,26 @@ namespace tint::sem {
 /// the same AST node as the inner semantic node.
 /// Abstract numerics types may only be used by compile-time expressions, so a Materialize semantic
 /// node must have a valid Constant value.
-class Materialize final : public Castable<Materialize, Expression> {
+class Materialize final : public utils::Castable<Materialize, ValueExpression> {
   public:
     /// Constructor
     /// @param expr the inner expression, being materialized
     /// @param statement the statement that owns this expression
-    /// @param constant the constant value of this expression
-    Materialize(const Expression* expr, const Statement* statement, const Constant* constant);
+    /// @param type concrete type to materialize to
+    /// @param constant the constant value of this expression or nullptr
+    Materialize(const ValueExpression* expr,
+                const Statement* statement,
+                const type::Type* type,
+                const constant::Value* constant);
 
     /// Destructor
     ~Materialize() override;
 
-    /// @return the target of the call
-    const Expression* Expr() const { return expr_; }
+    /// @return the expression being materialized
+    const ValueExpression* Expr() const { return expr_; }
 
   private:
-    Expression const* const expr_;
+    ValueExpression const* const expr_;
 };
 
 }  // namespace tint::sem

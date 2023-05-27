@@ -22,6 +22,7 @@
 #include "dawn/native/Format.h"
 #include "dawn/native/ObjectBase.h"
 #include "dawn/native/PerStage.h"
+#include "dawn/native/ProgrammableEncoder.h"
 #include "dawn/native/ShaderModule.h"
 #include "dawn/native/Subresource.h"
 #include "dawn/native/Surface.h"
@@ -46,6 +47,18 @@ AbslFormatConvert(const Color* value, const absl::FormatConversionSpec& spec, ab
 }
 
 absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const Extent2D* value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s) {
+    if (value == nullptr) {
+        s->Append("[null]");
+        return {true};
+    }
+    s->Append(absl::StrFormat("[Extent2D width:%u, height:%u]", value->width, value->height));
+    return {true};
+}
+
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
     const Extent3D* value,
     const absl::FormatConversionSpec& spec,
     absl::FormatSink* s) {
@@ -55,6 +68,18 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
     }
     s->Append(absl::StrFormat("[Extent3D width:%u, height:%u, depthOrArrayLayers:%u]", value->width,
                               value->height, value->depthOrArrayLayers));
+    return {true};
+}
+
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const Origin2D* value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s) {
+    if (value == nullptr) {
+        s->Append("[null]");
+        return {true};
+    }
+    s->Append(absl::StrFormat("[Origin2D x:%u, y:%u]", value->x, value->y));
     return {true};
 }
 
@@ -132,36 +157,7 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
     if (value->IsError()) {
         s->Append("Invalid ");
     }
-    s->Append(ObjectTypeAsString(value->GetType()));
-    const std::string& label = value->GetLabel();
-    if (!label.empty()) {
-        s->Append(absl::StrFormat(" \"%s\"", label));
-    }
-    s->Append("]");
-    return {true};
-}
-
-absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
-    const TextureViewBase* value,
-    const absl::FormatConversionSpec& spec,
-    absl::FormatSink* s) {
-    if (value == nullptr) {
-        s->Append("[null]");
-        return {true};
-    }
-    s->Append("[");
-    if (value->IsError()) {
-        s->Append("Invalid ");
-    }
-    s->Append(ObjectTypeAsString(value->GetType()));
-    const std::string& label = value->GetLabel();
-    if (!label.empty()) {
-        s->Append(absl::StrFormat(" \"%s\"", label));
-    }
-    const std::string& textureLabel = value->GetTexture()->GetLabel();
-    if (!textureLabel.empty()) {
-        s->Append(absl::StrFormat(" of Texture \"%s\"", textureLabel));
-    }
+    value->FormatLabel(s);
     s->Append("]");
     return {true};
 }
@@ -385,14 +381,17 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
     const absl::FormatConversionSpec& spec,
     absl::FormatSink* s) {
     switch (value) {
-        case InterStageComponentType::Float:
-            s->Append("Float");
+        case InterStageComponentType::F32:
+            s->Append("f32");
             break;
-        case InterStageComponentType::Uint:
-            s->Append("Uint");
+        case InterStageComponentType::F16:
+            s->Append("f16");
             break;
-        case InterStageComponentType::Sint:
-            s->Append("Sint");
+        case InterStageComponentType::U32:
+            s->Append("u32");
+            break;
+        case InterStageComponentType::I32:
+            s->Append("i32");
             break;
     }
     return {true};
@@ -432,6 +431,24 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
             break;
         case InterpolationSampling::Sample:
             s->Append("Sample");
+            break;
+    }
+    return {true};
+}
+
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    TextureComponentType value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s) {
+    switch (value) {
+        case TextureComponentType::Float:
+            s->Append("Float");
+            break;
+        case TextureComponentType::Sint:
+            s->Append("Sint");
+            break;
+        case TextureComponentType::Uint:
+            s->Append("Uint");
             break;
     }
     return {true};

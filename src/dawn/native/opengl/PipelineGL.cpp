@@ -65,7 +65,7 @@ MaybeError PipelineGL::InitializeBase(const OpenGLFunctions& gl,
         SamplerDescriptor desc = {};
         ASSERT(desc.minFilter == wgpu::FilterMode::Nearest);
         ASSERT(desc.magFilter == wgpu::FilterMode::Nearest);
-        ASSERT(desc.mipmapFilter == wgpu::FilterMode::Nearest);
+        ASSERT(desc.mipmapFilter == wgpu::MipmapFilterMode::Nearest);
         mPlaceholderSampler =
             ToBackend(layout->GetDevice()->GetOrCreateSampler(&desc).AcquireSuccess());
     }
@@ -82,7 +82,7 @@ MaybeError PipelineGL::InitializeBase(const OpenGLFunctions& gl,
         if (infoLogLength > 1) {
             std::vector<char> buffer(infoLogLength);
             gl.GetProgramInfoLog(mProgram, infoLogLength, nullptr, &buffer[0]);
-            return DAWN_FORMAT_VALIDATION_ERROR("Program link failed:\n%s", buffer.data());
+            return DAWN_VALIDATION_ERROR("Program link failed:\n%s", buffer.data());
         }
     }
 

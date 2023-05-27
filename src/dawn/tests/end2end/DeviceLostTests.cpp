@@ -22,6 +22,9 @@
 #include "dawn/utils/WGPUHelpers.h"
 #include "gmock/gmock.h"
 
+namespace dawn {
+namespace {
+
 using testing::_;
 using testing::Exactly;
 using testing::MockCallback;
@@ -54,6 +57,24 @@ class DeviceLostTest : public DawnTest {
     static void MapFailCallback(WGPUBufferMapAsyncStatus status, void* userdata) {
         EXPECT_EQ(WGPUBufferMapAsyncStatus_DeviceLost, status);
         EXPECT_EQ(&fakeUserData, userdata);
+    }
+
+    void MapAsyncAndWait(const wgpu::Buffer& buffer,
+                         wgpu::MapMode mode,
+                         size_t offset,
+                         size_t size) {
+        bool done = false;
+        buffer.MapAsync(
+            mode, offset, size,
+            [](WGPUBufferMapAsyncStatus status, void* userdata) {
+                ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
+                *static_cast<bool*>(userdata) = true;
+            },
+            &done);
+
+        while (!done) {
+            WaitABit();
+        }
     }
 };
 
@@ -90,7 +111,7 @@ TEST_P(DeviceLostTest, CreateBindGroupLayoutFails) {
 TEST_P(DeviceLostTest, GetBindGroupLayoutFails) {
     wgpu::ShaderModule csModule = utils::CreateShaderModule(device, R"(
         struct UniformBuffer {
-            pos : vec4<f32>
+            pos : vec4f
         }
         @group(0) @binding(0) var<uniform> ubo : UniformBuffer;
         @compute @workgroup_size(1) fn main() {
@@ -177,18 +198,14 @@ TEST_P(DeviceLostTest, CreateShaderModuleFails) {
 
     ASSERT_DEVICE_ERROR(utils::CreateShaderModule(device, R"(
         @fragment
-        fn main(@location(0) color : vec4<f32>) -> @location(0) vec4<f32> {
+        fn main(@location(0) color : vec4f) -> @location(0) vec4f {
             return color;
         })"));
 }
 
-// Tests that CreateSwapChain fails when device is lost
-TEST_P(DeviceLostTest, CreateSwapChainFails) {
-    LoseDeviceForTesting();
-
-    wgpu::SwapChainDescriptor descriptor = {};
-    ASSERT_DEVICE_ERROR(device.CreateSwapChain(nullptr, &descriptor));
-}
+// Note that no device lost tests are done for swapchain because it is awkward to create a
+// wgpu::Surface in this file. SwapChainValidationTests.CreateSwapChainFailsAfterDevLost covers
+// this validation.
 
 // Tests that CreateTexture fails when device is lost
 TEST_P(DeviceLostTest, CreateTextureFails) {
@@ -338,7 +355,7 @@ TEST_P(DeviceLostTest, GetMappedRange_MapAsyncReading) {
     desc.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
     wgpu::Buffer buffer = device.CreateBuffer(&desc);
 
-    buffer.MapAsync(wgpu::MapMode::Read, 0, 4, nullptr, nullptr);
+    MapAsyncAndWait(buffer, wgpu::MapMode::Read, 0, 4);
     queue.Submit(0, nullptr);
 
     const void* rangeBeforeLoss = buffer.GetConstMappedRange();
@@ -355,7 +372,7 @@ TEST_P(DeviceLostTest, GetMappedRange_MapAsyncWriting) {
     desc.usage = wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::CopySrc;
     wgpu::Buffer buffer = device.CreateBuffer(&desc);
 
-    buffer.MapAsync(wgpu::MapMode::Write, 0, 4, nullptr, nullptr);
+    MapAsyncAndWait(buffer, wgpu::MapMode::Write, 0, 4);
     queue.Submit(0, nullptr);
 
     const void* rangeBeforeLoss = buffer.GetConstMappedRange();
@@ -408,7 +425,7 @@ TEST_P(DeviceLostTest, LoseDeviceForTestingOnce) {
                                  mDeviceLostCallback.MakeUserdata(device.Get()));
     EXPECT_CALL(mDeviceLostCallback, Call(WGPUDeviceLostReason_Undefined, testing::_, device.Get()))
         .Times(0);
-    device.LoseForTesting();
+    device.ForceLoss(wgpu::DeviceLostReason::Undefined, "Device lost for testing");
     FlushWire();
     testing::Mock::VerifyAndClearExpectations(&mDeviceLostCallback);
 }
@@ -475,6 +492,37 @@ TEST_P(DeviceLostTest, FreeBindGroupAfterDeviceLossWithPendingCommands) {
     bg = nullptr;
 }
 
+// This is a regression test for crbug.com/1365011 where ending a render pass with an indirect draw
+// in it after the device is lost would cause render commands to be leaked.
+TEST_P(DeviceLostTest, DeviceLostInRenderPassWithDrawIndirect) {
+    utils::BasicRenderPass renderPass = utils::CreateBasicRenderPass(device, 4u, 4u);
+    utils::ComboRenderPipelineDescriptor desc;
+    desc.vertex.module = utils::CreateShaderModule(device, R"(
+        @vertex fn main(@builtin(vertex_index) i : u32) -> @builtin(position) vec4f {
+            var pos = array(
+                vec2f(-1.0, -1.0),
+                vec2f(3.0, -1.0),
+                vec2f(-1.0, 3.0));
+            return vec4f(pos[i], 0.0, 1.0);
+        }
+    )");
+    desc.cFragment.module = utils::CreateShaderModule(device, R"(
+        @fragment fn main() -> @location(0) vec4f {
+            return vec4f(0.0, 1.0, 0.0, 1.0);
+        }
+    )");
+    desc.cTargets[0].format = renderPass.colorFormat;
+    wgpu::Buffer indirectBuffer =
+        utils::CreateBufferFromData<uint32_t>(device, wgpu::BufferUsage::Indirect, {3, 1, 0, 0});
+    wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&desc);
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPass.renderPassInfo);
+    pass.SetPipeline(pipeline);
+    pass.DrawIndirect(indirectBuffer, 0);
+    LoseDeviceForTesting();
+    pass.End();
+}
+
 // Attempting to set an object label after device loss should not cause an error.
 TEST_P(DeviceLostTest, SetLabelAfterDeviceLoss) {
     DAWN_TEST_UNSUPPORTED_IF(UsesWire());
@@ -488,9 +536,13 @@ TEST_P(DeviceLostTest, SetLabelAfterDeviceLoss) {
 }
 
 DAWN_INSTANTIATE_TEST(DeviceLostTest,
+                      D3D11Backend(),
                       D3D12Backend(),
                       MetalBackend(),
                       NullBackend(),
                       OpenGLBackend(),
                       OpenGLESBackend(),
                       VulkanBackend());
+
+}  // anonymous namespace
+}  // namespace dawn

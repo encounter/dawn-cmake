@@ -1,8 +1,17 @@
 SKIP: FAILED
 
+RWByteAddressBuffer prevent_dce : register(u0, space2);
+
+void prevent_dce_store(uint offset, matrix<float16_t, 3, 4> value) {
+  prevent_dce.Store<vector<float16_t, 4> >((offset + 0u), value[0u]);
+  prevent_dce.Store<vector<float16_t, 4> >((offset + 8u), value[1u]);
+  prevent_dce.Store<vector<float16_t, 4> >((offset + 16u), value[2u]);
+}
+
 void transpose_5f36bf() {
-  matrix<float16_t, 4, 3> arg_0 = matrix<float16_t, 4, 3>((float16_t(0.0h)).xxx, (float16_t(0.0h)).xxx, (float16_t(0.0h)).xxx, (float16_t(0.0h)).xxx);
+  matrix<float16_t, 4, 3> arg_0 = matrix<float16_t, 4, 3>((float16_t(1.0h)).xxx, (float16_t(1.0h)).xxx, (float16_t(1.0h)).xxx, (float16_t(1.0h)).xxx);
   matrix<float16_t, 3, 4> res = transpose(arg_0);
+  prevent_dce_store(0u, res);
 }
 
 struct tint_symbol {
@@ -31,7 +40,3 @@ void compute_main() {
   transpose_5f36bf();
   return;
 }
-FXC validation failure:
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000002500869E2F0(2,10-18): error X3000: syntax error: unexpected token 'float16_t'
-D:\Projects\RampUp\dawn\test\tint\builtins\Shader@0x000002500869E2F0(3,10-18): error X3000: syntax error: unexpected token 'float16_t'
-

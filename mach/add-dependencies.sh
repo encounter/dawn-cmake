@@ -11,9 +11,9 @@ rm -rf third_party/angle
 rm -rf third_party/benchmark
 rm -rf third_party/catapult
 rm -rf third_party/googletest
+rm -rf third_party/google_benchmark
 rm -rf third_party/gpuweb-cts
 rm -rf third_party/llvm-build
-rm -rf third_party/markupsafe
 rm -rf third_party/protobuf
 rm -rf third_party/swiftshader
 rm -rf third_party/vulkan_memory_allocator

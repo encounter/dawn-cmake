@@ -1,8 +1,11 @@
 @group(1) @binding(0) var arg_0 : texture_2d_array<i32>;
 
 fn textureLoad_79e697() {
-  var res : vec4<i32> = textureLoad(arg_0, vec2<i32>(), 1, 0);
+  var res : vec4<i32> = textureLoad(arg_0, vec2<i32>(1i), 1i, 1i);
+  prevent_dce = res;
 }
+
+@group(2) @binding(0) var<storage, read_write> prevent_dce : vec4<i32>;
 
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {

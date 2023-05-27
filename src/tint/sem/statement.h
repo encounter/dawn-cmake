@@ -15,8 +15,11 @@
 #ifndef SRC_TINT_SEM_STATEMENT_H_
 #define SRC_TINT_SEM_STATEMENT_H_
 
+#include "src/tint/ast/diagnostic_control.h"
 #include "src/tint/sem/behavior.h"
 #include "src/tint/sem/node.h"
+#include "src/tint/symbol.h"
+#include "src/tint/utils/hashmap.h"
 
 // Forward declarations
 namespace tint::ast {
@@ -26,6 +29,7 @@ namespace tint::sem {
 class BlockStatement;
 class CompoundStatement;
 class Function;
+class LocalVariable;
 }  // namespace tint::sem
 
 namespace tint::sem {
@@ -53,7 +57,7 @@ using FindFirstParentReturnType = typename FindFirstParentReturn<TYPES...>::type
 }  // namespace detail
 
 /// Statement holds the semantic information for a statement.
-class Statement : public Castable<Statement, Node> {
+class Statement : public utils::Castable<Statement, Node> {
   public:
     /// Constructor
     /// @param declaration the AST node for this statement
@@ -106,17 +110,30 @@ class Statement : public Castable<Statement, Node> {
     /// according to the behavior analysis
     void SetIsReachable(bool is_reachable) { is_reachable_ = is_reachable; }
 
+    /// Modifies the severity of a specific diagnostic rule for this statement.
+    /// @param rule the diagnostic rule
+    /// @param severity the new diagnostic severity
+    void SetDiagnosticSeverity(builtin::DiagnosticRule rule, builtin::DiagnosticSeverity severity) {
+        diagnostic_severities_[rule] = severity;
+    }
+
+    /// @returns the diagnostic severity modifications applied to this statement
+    const builtin::DiagnosticRuleSeverities& DiagnosticSeverities() const {
+        return diagnostic_severities_;
+    }
+
   private:
     const ast::Statement* const declaration_;
     const CompoundStatement* const parent_;
     const sem::Function* const function_;
     sem::Behaviors behaviors_{sem::Behavior::kNext};
     bool is_reachable_ = true;
+    builtin::DiagnosticRuleSeverities diagnostic_severities_;
 };
 
 /// CompoundStatement is the base class of statements that can hold other
 /// statements.
-class CompoundStatement : public Castable<Statement, Statement> {
+class CompoundStatement : public utils::Castable<CompoundStatement, Statement> {
   public:
     /// Constructor
     /// @param declaration the AST node for this statement
@@ -128,6 +145,25 @@ class CompoundStatement : public Castable<Statement, Statement> {
 
     /// Destructor
     ~CompoundStatement() override;
+
+    /// OrderedLocalVariable describes a local variable declaration, and order of declaration.
+    struct OrderedLocalVariable {
+        /// The 0-based declaration order index of the variable
+        size_t order;
+        /// The variable
+        const LocalVariable* variable;
+    };
+
+    /// @returns a map of variable name to variable declarations associated with this block
+    const utils::Hashmap<Symbol, OrderedLocalVariable, 4>& Decls() const { return decls_; }
+
+    /// Associates a declaration with this block.
+    /// @note this method must be called in variable declaration order
+    /// @param var a variable declaration to be added to the block
+    void AddDecl(const LocalVariable* var);
+
+  private:
+    utils::Hashmap<Symbol, OrderedLocalVariable, 4> decls_;
 };
 
 template <typename Pred>

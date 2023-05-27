@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "src/tint/ast/test_helper.h"
 #include "src/tint/reader/wgsl/parser_impl_test_helper.h"
 
 namespace tint::reader::wgsl {
@@ -31,9 +32,14 @@ TEST_F(ParserImplTest, AttributeList_Parses) {
     ASSERT_NE(attr_1, nullptr);
 
     ASSERT_TRUE(attr_0->Is<ast::LocationAttribute>());
-    EXPECT_EQ(attr_0->As<ast::LocationAttribute>()->value, 4u);
+
+    auto* loc = attr_0->As<ast::LocationAttribute>();
+    ASSERT_TRUE(loc->expr->Is<ast::IntLiteralExpression>());
+    auto* exp = loc->expr->As<ast::IntLiteralExpression>();
+    EXPECT_EQ(exp->value, 4u);
+
     ASSERT_TRUE(attr_1->Is<ast::BuiltinAttribute>());
-    EXPECT_EQ(attr_1->As<ast::BuiltinAttribute>()->builtin, ast::BuiltinValue::kPosition);
+    ast::CheckIdentifier(attr_1->As<ast::BuiltinAttribute>()->builtin, "position");
 }
 
 TEST_F(ParserImplTest, AttributeList_Invalid) {
@@ -43,17 +49,9 @@ TEST_F(ParserImplTest, AttributeList_Invalid) {
     EXPECT_TRUE(attrs.errored);
     EXPECT_FALSE(attrs.matched);
     EXPECT_TRUE(attrs.value.IsEmpty());
-    EXPECT_EQ(p->error(), R"(1:2: expected attribute)");
-}
-
-TEST_F(ParserImplTest, AttributeList_InvalidValue) {
-    auto p = parser("@builtin(invalid)");
-    auto attrs = p->attribute_list();
-    EXPECT_TRUE(p->has_error());
-    EXPECT_TRUE(attrs.errored);
-    EXPECT_FALSE(attrs.matched);
-    EXPECT_TRUE(attrs.value.IsEmpty());
-    EXPECT_EQ(p->error(), "1:10: invalid value for builtin attribute");
+    EXPECT_EQ(p->error(), R"(1:2: expected attribute
+Did you mean 'invariant'?
+Possible values: 'align', 'binding', 'builtin', 'compute', 'diagnostic', 'fragment', 'group', 'id', 'interpolate', 'invariant', 'location', 'must_use', 'size', 'vertex', 'workgroup_size')");
 }
 
 }  // namespace

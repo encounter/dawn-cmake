@@ -1,9 +1,8 @@
-float3 tint_atanh(float3 x) {
-  return (log(((1.0f + x) / (1.0f - x))) * 0.5f);
-}
+RWByteAddressBuffer prevent_dce : register(u0, space2);
 
 void atanh_440cca() {
-  float3 res = tint_atanh((1.0f).xxx);
+  float3 res = (0.54930615425109863281f).xxx;
+  prevent_dce.Store3(0u, asuint(res));
 }
 
 struct tint_symbol {

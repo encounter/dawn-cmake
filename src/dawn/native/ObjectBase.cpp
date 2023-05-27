@@ -13,9 +13,12 @@
 // limitations under the License.
 
 #include <mutex>
+#include <utility>
 
+#include "absl/strings/str_format.h"
 #include "dawn/native/Device.h"
 #include "dawn/native/ObjectBase.h"
+#include "dawn/native/ObjectType_autogen.h"
 
 namespace dawn::native {
 
@@ -37,13 +40,43 @@ DeviceBase* ObjectBase::GetDevice() const {
     return mDevice.Get();
 }
 
+void ApiObjectList::Track(ApiObjectBase* object) {
+    if (mMarkedDestroyed) {
+        object->DestroyImpl();
+        return;
+    }
+    std::lock_guard<std::mutex> lock(mMutex);
+    mObjects.Prepend(object);
+}
+
+bool ApiObjectList::Untrack(ApiObjectBase* object) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    return object->RemoveFromList();
+}
+
+void ApiObjectList::Destroy() {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mMarkedDestroyed = true;
+    while (!mObjects.empty()) {
+        auto* head = mObjects.head();
+        bool removed = head->RemoveFromList();
+        ASSERT(removed);
+        head->value()->DestroyImpl();
+    }
+}
+
 ApiObjectBase::ApiObjectBase(DeviceBase* device, const char* label) : ObjectBase(device) {
     if (label) {
         mLabel = label;
     }
 }
 
-ApiObjectBase::ApiObjectBase(DeviceBase* device, ErrorTag tag) : ObjectBase(device, tag) {}
+ApiObjectBase::ApiObjectBase(DeviceBase* device, ErrorTag tag, const char* label)
+    : ObjectBase(device, tag) {
+    if (label) {
+        mLabel = label;
+    }
+}
 
 ApiObjectBase::ApiObjectBase(DeviceBase* device, LabelNotImplementedTag tag) : ObjectBase(device) {}
 
@@ -52,12 +85,32 @@ ApiObjectBase::~ApiObjectBase() {
 }
 
 void ApiObjectBase::APISetLabel(const char* label) {
-    mLabel = label;
+    SetLabel(label);
+}
+
+void ApiObjectBase::APIRelease() {
+    // TODO(crbug.com/dawn/1769): We have to lock the entire APIRelease() method.
+    // This is because some objects are cached as raw pointers by the device. And the cache lookup
+    // would have been racing with the ref count's decrement here if there had not been any locking
+    // in place. This is temporary solution until we improve the cache's implementation.
+    auto deviceLock(GetDevice()->GetScopedLockSafeForDelete());
+    Release();
+}
+
+void ApiObjectBase::SetLabel(std::string label) {
+    mLabel = std::move(label);
     SetLabelImpl();
 }
 
 const std::string& ApiObjectBase::GetLabel() const {
     return mLabel;
+}
+
+void ApiObjectBase::FormatLabel(absl::FormatSink* s) const {
+    s->Append(ObjectTypeAsString(GetType()));
+    if (!mLabel.empty()) {
+        s->Append(absl::StrFormat(" \"%s\"", mLabel));
+    }
 }
 
 void ApiObjectBase::SetLabelImpl() {}
@@ -71,14 +124,23 @@ void ApiObjectBase::DeleteThis() {
     RefCounted::DeleteThis();
 }
 
-void ApiObjectBase::TrackInDevice() {
+void ApiObjectBase::LockAndDeleteThis() {
+    auto deviceLock(GetDevice()->GetScopedLockSafeForDelete());
+    DeleteThis();
+}
+
+ApiObjectList* ApiObjectBase::GetObjectTrackingList() {
     ASSERT(GetDevice() != nullptr);
-    GetDevice()->TrackObject(this);
+    return GetDevice()->GetObjectTrackingList(GetType());
 }
 
 void ApiObjectBase::Destroy() {
-    const std::lock_guard<std::mutex> lock(*GetDevice()->GetObjectListMutex(GetType()));
-    if (RemoveFromList()) {
+    if (!IsAlive()) {
+        return;
+    }
+    ApiObjectList* list = GetObjectTrackingList();
+    ASSERT(list != nullptr);
+    if (list->Untrack(this)) {
         DestroyImpl();
     }
 }

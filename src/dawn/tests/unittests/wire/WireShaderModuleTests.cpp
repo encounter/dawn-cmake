@@ -18,14 +18,13 @@
 #include "dawn/wire/WireClient.h"
 
 namespace dawn::wire {
+namespace {
 
 using testing::_;
 using testing::InvokeWithoutArgs;
 using testing::Mock;
 using testing::Return;
 using testing::StrictMock;
-
-namespace {
 
 // Mock class to add expectations on the wire calling callbacks
 class MockCompilationInfoCallback {
@@ -43,8 +42,6 @@ void ToMockGetCompilationInfoCallback(WGPUCompilationInfoRequestStatus status,
                                       void* userdata) {
     mockCompilationInfoCallback->Call(status, info, userdata);
 }
-
-}  // anonymous namespace
 
 class WireShaderModuleTests : public WireTest {
   public:
@@ -93,7 +90,7 @@ TEST_F(WireShaderModuleTests, GetCompilationInfo) {
     wgpuShaderModuleGetCompilationInfo(shaderModule, ToMockGetCompilationInfoCallback, nullptr);
 
     WGPUCompilationMessage message = {
-        nullptr, "Test Message", WGPUCompilationMessageType_Info, 2, 4, 6, 8};
+        nullptr, "Test Message", WGPUCompilationMessageType_Info, 2, 4, 6, 8, 4, 6, 8};
     WGPUCompilationInfo compilationInfo;
     compilationInfo.nextInChain = nullptr;
     compilationInfo.messageCount = 1;
@@ -133,7 +130,7 @@ TEST_F(WireShaderModuleTests, GetCompilationInfoBeforeDisconnect) {
     wgpuShaderModuleGetCompilationInfo(shaderModule, ToMockGetCompilationInfoCallback, nullptr);
 
     WGPUCompilationMessage message = {
-        nullptr, "Test Message", WGPUCompilationMessageType_Info, 2, 4, 6, 8};
+        nullptr, "Test Message", WGPUCompilationMessageType_Info, 2, 4, 6, 8, 4, 6, 8};
     WGPUCompilationInfo compilationInfo;
     compilationInfo.nextInChain = nullptr;
     compilationInfo.messageCount = 1;
@@ -193,7 +190,7 @@ TEST_F(WireShaderModuleTests, GetCompilationInfoInsideCallbackBeforeDisconnect) 
                                        &testData);
 
     WGPUCompilationMessage message = {
-        nullptr, "Test Message", WGPUCompilationMessageType_Info, 2, 4, 6, 8};
+        nullptr, "Test Message", WGPUCompilationMessageType_Info, 2, 4, 6, 8, 4, 6, 8};
     WGPUCompilationInfo compilationInfo;
     compilationInfo.nextInChain = nullptr;
     compilationInfo.messageCount = 1;
@@ -220,7 +217,7 @@ TEST_F(WireShaderModuleTests, GetCompilationInfoInsideCallbackBeforeDestruction)
                                        &testData);
 
     WGPUCompilationMessage message = {
-        nullptr, "Test Message", WGPUCompilationMessageType_Info, 2, 4, 6, 8};
+        nullptr, "Test Message", WGPUCompilationMessageType_Info, 2, 4, 6, 8, 4, 6, 8};
     WGPUCompilationInfo compilationInfo;
     compilationInfo.nextInChain = nullptr;
     compilationInfo.messageCount = 1;
@@ -239,4 +236,5 @@ TEST_F(WireShaderModuleTests, GetCompilationInfoInsideCallbackBeforeDestruction)
     wgpuShaderModuleRelease(shaderModule);
 }
 
+}  // anonymous namespace
 }  // namespace dawn::wire

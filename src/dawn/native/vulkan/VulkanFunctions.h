@@ -20,7 +20,9 @@
 
 #include "dawn/native/Error.h"
 
+namespace dawn {
 class DynamicLib;
+}  // namespace dawn
 
 namespace dawn::native::vulkan {
 
@@ -165,7 +167,14 @@ struct VulkanFunctions {
 #endif  // DAWN_PLATFORM_IS(WINDOWS)
 
 #if DAWN_PLATFORM_IS(ANDROID)
+    // KHR_android_surface
     VkFn<PFN_vkCreateAndroidSurfaceKHR> CreateAndroidSurfaceKHR = nullptr;
+
+    // VK_ANDROID_external_memory_android_hardware_buffer
+    VkFn<PFN_vkGetAndroidHardwareBufferPropertiesANDROID>
+        GetAndroidHardwareBufferPropertiesANDROID = nullptr;
+    VkFn<PFN_vkGetMemoryAndroidHardwareBufferANDROID> GetMemoryAndroidHardwareBufferANDROID =
+        nullptr;
 #endif  // DAWN_PLATFORM_IS(ANDROID)
 
 #if defined(DAWN_USE_X11)

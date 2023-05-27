@@ -8,10 +8,20 @@ struct S {
   int a;
 };
 
-layout(binding = 0, std430) buffer S_1 {
-  int a;
+layout(binding = 0, std430) buffer v_block_ssbo {
+  S inner;
 } v;
+
+int tint_mod(int lhs, int rhs) {
+  int rhs_or_one = (bool(uint((rhs == 0)) | uint(bool(uint((lhs == (-2147483647 - 1))) & uint((rhs == -1))))) ? 1 : rhs);
+  if (((uint((lhs | rhs_or_one)) & 2147483648u) != 0u)) {
+    return (lhs - ((lhs / rhs_or_one) * rhs_or_one));
+  } else {
+    return (lhs % rhs_or_one);
+  }
+}
+
 void foo() {
-  v.a = (v.a % 2);
+  v.inner.a = tint_mod(v.inner.a, 2);
 }
 

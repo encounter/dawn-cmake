@@ -1,4 +1,4 @@
-// Copyright 2021 The Tint Authors.
+// Copyright 2022 The Tint Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,8 +24,10 @@
 
 // fn textureLoad(texture: texture_2d<u32>, coords: vec2<i32>, level: i32) -> vec4<u32>
 fn textureLoad_6154d4() {
-  var res: vec4<u32> = textureLoad(arg_0, vec2<i32>(), 0);
+  var res: vec4<u32> = textureLoad(arg_0, vec2<i32>(1i), 1i);
+  prevent_dce = res;
 }
+@group(2) @binding(0) var<storage, read_write> prevent_dce : vec4<u32>;
 
 @vertex
 fn vertex_main() -> @builtin(position) vec4<f32> {

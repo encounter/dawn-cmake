@@ -36,6 +36,39 @@ WGPUCompilationMessageType tintSeverityToMessageType(tint::diag::Severity severi
 
 }  // anonymous namespace
 
+ResultOrError<uint64_t> CountUTF16CodeUnitsFromUTF8String(const std::string_view& utf8String) {
+    if (tint::utils::utf8::IsASCII(utf8String)) {
+        return utf8String.size();
+    }
+
+    uint64_t numberOfUTF16CodeUnits = 0;
+    std::string_view remaining = utf8String;
+    while (!remaining.empty()) {
+        auto [codePoint, utf8CharacterByteLength] = tint::utils::utf8::Decode(remaining);
+        // Directly return as something wrong has happened during the UTF-8 decoding.
+        if (utf8CharacterByteLength == 0) {
+            return DAWN_INTERNAL_ERROR("Fail to decode the unicode string");
+        }
+        remaining = remaining.substr(utf8CharacterByteLength);
+
+        // Count the number of code units in UTF-16. See https://en.wikipedia.org/wiki/UTF-16 for
+        // more details.
+        if (codePoint.value <= 0xD7FF || (codePoint.value >= 0xE000 && codePoint.value <= 0xFFFF)) {
+            // Code points from U+0000 to U+D7FF and U+E000 to U+FFFF are encoded as single 16-bit
+            // code units.
+            ++numberOfUTF16CodeUnits;
+        } else if (codePoint.value >= 0x10000) {
+            // Code points from U+010000 to U+10FFFF are encoded as two 16-bit code units.
+            numberOfUTF16CodeUnits += 2;
+        } else {
+            // UTF-16 cannot encode the code points from U+D800 to U+DFFF.
+            return DAWN_INTERNAL_ERROR("The unicode string contains illegal unicode code point.");
+        }
+    }
+
+    return numberOfUTF16CodeUnits;
+}
+
 OwnedCompilationMessages::OwnedCompilationMessages() {
     mCompilationInfo.nextInChain = 0;
     mCompilationInfo.messageCount = 0;
@@ -44,70 +77,78 @@ OwnedCompilationMessages::OwnedCompilationMessages() {
 
 OwnedCompilationMessages::~OwnedCompilationMessages() = default;
 
-void OwnedCompilationMessages::AddMessageForTesting(std::string message,
-                                                    wgpu::CompilationMessageType type,
-                                                    uint64_t lineNum,
-                                                    uint64_t linePos,
-                                                    uint64_t offset,
-                                                    uint64_t length) {
+void OwnedCompilationMessages::AddMessage(std::string message,
+                                          wgpu::CompilationMessageType type,
+                                          uint64_t lineNum,
+                                          uint64_t linePos,
+                                          uint64_t offset,
+                                          uint64_t length) {
     // Cannot add messages after GetCompilationInfo has been called.
     ASSERT(mCompilationInfo.messages == nullptr);
 
+    // Message can only contain ascii characters.
+    ASSERT(tint::utils::utf8::IsASCII(message));
+
     mMessageStrings.push_back(message);
     mMessages.push_back({nullptr, nullptr, static_cast<WGPUCompilationMessageType>(type), lineNum,
-                         linePos, offset, length});
+                         linePos, offset, length, linePos, offset, length});
 }
 
-void OwnedCompilationMessages::AddMessage(const tint::diag::Diagnostic& diagnostic) {
+MaybeError OwnedCompilationMessages::AddMessage(const tint::diag::Diagnostic& diagnostic) {
     // Cannot add messages after GetCompilationInfo has been called.
     ASSERT(mCompilationInfo.messages == nullptr);
 
     // Tint line and column values are 1-based.
     uint64_t lineNum = diagnostic.source.range.begin.line;
-    uint64_t linePos = diagnostic.source.range.begin.column;
+    uint64_t linePosInBytes = diagnostic.source.range.begin.column;
     // The offset is 0-based.
-    uint64_t offset = 0;
-    uint64_t length = 0;
+    uint64_t offsetInBytes = 0;
+    uint64_t lengthInBytes = 0;
+    uint64_t linePosInUTF16 = 0;
+    uint64_t offsetInUTF16 = 0;
+    uint64_t lengthInUTF16 = 0;
 
-    if (lineNum && linePos && diagnostic.source.file) {
-        const auto& lines = diagnostic.source.file->content.lines;
-        size_t i = 0;
-        // To find the offset of the message position, loop through each of the first lineNum-1
-        // lines and add it's length (+1 to account for the line break) to the offset.
-        for (; i < lineNum - 1; ++i) {
-            offset += lines[i].length() + 1;
-        }
+    if (lineNum && linePosInBytes && diagnostic.source.file) {
+        const tint::Source::FileContent& content = diagnostic.source.file->content;
 
-        // If the end line is on a different line from the beginning line, add the length of the
-        // lines in between to the ending offset.
+        // Tint stores line as std::string_view in a complete source std::string that's in the
+        // source file. So to get the offset in bytes of a line we just need to substract its start
+        // pointer with the start of the file's content. Note that line numbering in Tint source
+        // range starts at 1 while the array of lines start at 0 (hence the -1).
+        const char* fileStart = content.data.data();
+        const char* lineStart = content.lines[lineNum - 1].data();
+        offsetInBytes = static_cast<uint64_t>(lineStart - fileStart) + linePosInBytes - 1;
+
+        // The linePosInBytes is 1-based.
+        uint64_t linePosOffsetInUTF16 = 0;
+        DAWN_TRY_ASSIGN(linePosOffsetInUTF16, CountUTF16CodeUnitsFromUTF8String(
+                                                  std::string_view(lineStart, linePosInBytes - 1)));
+        linePosInUTF16 = linePosOffsetInUTF16 + 1;
+
+        // The offset is 0-based.
+        uint64_t lineStartToFileStartOffsetInUTF16 = 0;
+        DAWN_TRY_ASSIGN(lineStartToFileStartOffsetInUTF16,
+                        CountUTF16CodeUnitsFromUTF8String(std::string_view(
+                            fileStart, static_cast<uint64_t>(lineStart - fileStart))));
+        offsetInUTF16 = lineStartToFileStartOffsetInUTF16 + linePosInUTF16 - 1;
+
+        // If the range has a valid start but the end is not specified, clamp it to the start.
         uint64_t endLineNum = diagnostic.source.range.end.line;
-        uint64_t endLinePos = diagnostic.source.range.end.column;
-
-        // If the range has a valid start but the end it not specified, clamp it to the start.
-        if (endLineNum == 0 || endLinePos == 0) {
+        uint64_t endLineCol = diagnostic.source.range.end.column;
+        if (endLineNum == 0 || endLineCol == 0) {
             endLineNum = lineNum;
-            endLinePos = linePos;
+            endLineCol = linePosInBytes;
         }
 
-        // Negative ranges aren't allowed
-        ASSERT(endLineNum >= lineNum);
-
-        uint64_t endOffset = offset;
-        for (; i < endLineNum - 1; ++i) {
-            endOffset += lines[i].length() + 1;
-        }
-
-        // Add the line positions to the offset and endOffset to get their final positions
-        // within the code string.
-        offset += linePos - 1;
-        endOffset += endLinePos - 1;
-
-        // Negative ranges aren't allowed
-        ASSERT(endOffset >= offset);
-
+        const char* endLineStart = content.lines[endLineNum - 1].data();
+        uint64_t endOffsetInBytes =
+            static_cast<uint64_t>(endLineStart - fileStart) + endLineCol - 1;
         // The length of the message is the difference between the starting offset and the
-        // ending offset.
-        length = endOffset - offset;
+        // ending offset. Negative ranges aren't allowed.
+        ASSERT(endOffsetInBytes >= offsetInBytes);
+        lengthInBytes = endOffsetInBytes - offsetInBytes;
+        DAWN_TRY_ASSIGN(lengthInUTF16, CountUTF16CodeUnitsFromUTF8String(std::string_view(
+                                           fileStart + offsetInBytes, lengthInBytes)));
     }
 
     if (diagnostic.code) {
@@ -117,18 +158,23 @@ void OwnedCompilationMessages::AddMessage(const tint::diag::Diagnostic& diagnost
     }
 
     mMessages.push_back({nullptr, nullptr, tintSeverityToMessageType(diagnostic.severity), lineNum,
-                         linePos, offset, length});
+                         linePosInBytes, offsetInBytes, lengthInBytes, linePosInUTF16,
+                         offsetInUTF16, lengthInUTF16});
+
+    return {};
 }
 
-void OwnedCompilationMessages::AddMessages(const tint::diag::List& diagnostics) {
+MaybeError OwnedCompilationMessages::AddMessages(const tint::diag::List& diagnostics) {
     // Cannot add messages after GetCompilationInfo has been called.
     ASSERT(mCompilationInfo.messages == nullptr);
 
     for (const auto& diag : diagnostics) {
-        AddMessage(diag);
+        DAWN_TRY(AddMessage(diag));
     }
 
     AddFormattedTintMessages(diagnostics);
+
+    return {};
 }
 
 void OwnedCompilationMessages::ClearMessages() {

@@ -35,6 +35,7 @@ struct ExternalTextureParams {
     std::array<float, 8> gammaDecodingParams = {};
     std::array<float, 8> gammaEncodingParams = {};
     std::array<float, 12> gamutConversionMatrix = {};
+    std::array<float, 6> coordTransformMatrix = {};
 };
 
 MaybeError ValidateExternalTextureDescriptor(const DeviceBase* device,
@@ -50,28 +51,39 @@ class ExternalTextureBase : public ApiObjectBase {
     const std::array<Ref<TextureViewBase>, kMaxPlanesPerFormat>& GetTextureViews() const;
     ObjectType GetType() const override;
 
-    MaybeError ValidateCanUseInSubmitNow() const;
-    static ExternalTextureBase* MakeError(DeviceBase* device);
+    const Extent2D& GetVisibleSize() const;
+    const Origin2D& GetVisibleOrigin() const;
 
+    MaybeError ValidateCanUseInSubmitNow() const;
+    static ExternalTextureBase* MakeError(DeviceBase* device, const char* label = nullptr);
+
+    void APIExpire();
     void APIDestroy();
+    void APIRefresh();
 
   protected:
-    // Constructor used only for mocking and testing.
-    explicit ExternalTextureBase(DeviceBase* device);
+    ExternalTextureBase(DeviceBase* device, const ExternalTextureDescriptor* descriptor);
     void DestroyImpl() override;
+
+    MaybeError Initialize(DeviceBase* device, const ExternalTextureDescriptor* descriptor);
 
     ~ExternalTextureBase() override;
 
   private:
-    ExternalTextureBase(DeviceBase* device, const ExternalTextureDescriptor* descriptor);
+    enum class ExternalTextureState { Active, Expired, Destroyed };
+    ExternalTextureBase(DeviceBase* device, ObjectBase::ErrorTag tag, const char* label);
 
-    enum class ExternalTextureState { Alive, Destroyed };
-    ExternalTextureBase(DeviceBase* device, ObjectBase::ErrorTag tag);
-    MaybeError Initialize(DeviceBase* device, const ExternalTextureDescriptor* descriptor);
+    MaybeError ValidateRefresh();
+    MaybeError ValidateExpire();
 
     Ref<TextureBase> mPlaceholderTexture;
     Ref<BufferBase> mParamsBuffer;
     std::array<Ref<TextureViewBase>, kMaxPlanesPerFormat> mTextureViews;
+
+    // TODO(dawn:1082) Use the visible size and origin in the external texture shader
+    // code to sample video content.
+    Origin2D mVisibleOrigin;
+    Extent2D mVisibleSize;
 
     ExternalTextureState mState;
 };

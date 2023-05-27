@@ -13,6 +13,8 @@
 
 #include "dawn/common/Assert.h"
 
+namespace dawn {
+
 // Simple LinkedList type. (See the Q&A section to understand how this
 // differs from std::list).
 //
@@ -116,6 +118,12 @@ class LinkNode {
         }
     }
 
+    ~LinkNode() {
+        // Remove the node from any list, otherwise there can be outstanding references to the node
+        // even after it has been freed.
+        RemoveFromList();
+    }
+
     // Insert |this| into the linked list, before |e|.
     void InsertBefore(LinkNode<T>* e) {
         this->next_ = e;
@@ -175,15 +183,11 @@ class LinkedList {
     // and root_->previous() wraps around to the end of the list).
     LinkedList() : root_(&root_, &root_) {}
 
-    ~LinkedList() {
-        // If any LinkNodes still exist in the LinkedList, there will be outstanding references to
-        // root_ even after it has been freed. We should remove root_ from the list to prevent any
-        // future access.
-        root_.RemoveFromList();
-    }
-
     // Appends |e| to the end of the linked list.
     void Append(LinkNode<T>* e) { e->InsertBefore(&root_); }
+
+    // Prepends |e| to the front og the linked list.
+    void Prepend(LinkNode<T>* e) { e->InsertAfter(&root_); }
 
     // Moves all elements (in order) of the list and appends them into |l| leaving the list empty.
     void MoveInto(LinkedList<T>* l) {
@@ -244,5 +248,7 @@ template <typename T>
 LinkedListIterator<T> end(LinkedList<T>& l) {
     return LinkedListIterator<T>(l.tail()->next());
 }
+
+}  // namespace dawn
 
 #endif  // SRC_DAWN_COMMON_LINKEDLIST_H_

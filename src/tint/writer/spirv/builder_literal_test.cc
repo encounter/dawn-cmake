@@ -27,11 +27,11 @@ TEST_F(BuilderTest, Literal_Bool_True) {
 
     spirv::Builder& b = Build();
 
-    auto id = b.GenerateLiteralIfNeeded(nullptr, b_true);
-    ASSERT_FALSE(b.has_error()) << b.error();
+    auto id = b.GenerateLiteralIfNeeded(b_true);
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
     EXPECT_EQ(2u, id);
 
-    EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeBool
+    EXPECT_EQ(DumpInstructions(b.Module().Types()), R"(%1 = OpTypeBool
 %2 = OpConstantTrue %1
 )");
 }
@@ -42,11 +42,11 @@ TEST_F(BuilderTest, Literal_Bool_False) {
 
     spirv::Builder& b = Build();
 
-    auto id = b.GenerateLiteralIfNeeded(nullptr, b_false);
-    ASSERT_FALSE(b.has_error()) << b.error();
+    auto id = b.GenerateLiteralIfNeeded(b_false);
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
     EXPECT_EQ(2u, id);
 
-    EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeBool
+    EXPECT_EQ(DumpInstructions(b.Module().Types()), R"(%1 = OpTypeBool
 %2 = OpConstantFalse %1
 )");
 }
@@ -58,14 +58,14 @@ TEST_F(BuilderTest, Literal_Bool_Dedup) {
 
     spirv::Builder& b = Build();
 
-    ASSERT_NE(b.GenerateLiteralIfNeeded(nullptr, b_true), 0u);
-    ASSERT_FALSE(b.has_error()) << b.error();
-    ASSERT_NE(b.GenerateLiteralIfNeeded(nullptr, b_false), 0u);
-    ASSERT_FALSE(b.has_error()) << b.error();
-    ASSERT_NE(b.GenerateLiteralIfNeeded(nullptr, b_true), 0u);
-    ASSERT_FALSE(b.has_error()) << b.error();
+    ASSERT_NE(b.GenerateLiteralIfNeeded(b_true), 0u);
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
+    ASSERT_NE(b.GenerateLiteralIfNeeded(b_false), 0u);
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
+    ASSERT_NE(b.GenerateLiteralIfNeeded(b_true), 0u);
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
 
-    EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeBool
+    EXPECT_EQ(DumpInstructions(b.Module().Types()), R"(%1 = OpTypeBool
 %2 = OpConstantTrue %1
 %3 = OpConstantFalse %1
 )");
@@ -76,11 +76,11 @@ TEST_F(BuilderTest, Literal_I32) {
     WrapInFunction(i);
     spirv::Builder& b = Build();
 
-    auto id = b.GenerateLiteralIfNeeded(nullptr, i);
-    ASSERT_FALSE(b.has_error()) << b.error();
+    auto id = b.GenerateLiteralIfNeeded(i);
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
     EXPECT_EQ(2u, id);
 
-    EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeInt 32 1
+    EXPECT_EQ(DumpInstructions(b.Module().Types()), R"(%1 = OpTypeInt 32 1
 %2 = OpConstant %1 -23
 )");
 }
@@ -92,11 +92,11 @@ TEST_F(BuilderTest, Literal_I32_Dedup) {
 
     spirv::Builder& b = Build();
 
-    ASSERT_NE(b.GenerateLiteralIfNeeded(nullptr, i1), 0u);
-    ASSERT_NE(b.GenerateLiteralIfNeeded(nullptr, i2), 0u);
-    ASSERT_FALSE(b.has_error()) << b.error();
+    ASSERT_NE(b.GenerateLiteralIfNeeded(i1), 0u);
+    ASSERT_NE(b.GenerateLiteralIfNeeded(i2), 0u);
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
 
-    EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeInt 32 1
+    EXPECT_EQ(DumpInstructions(b.Module().Types()), R"(%1 = OpTypeInt 32 1
 %2 = OpConstant %1 -23
 )");
 }
@@ -107,11 +107,11 @@ TEST_F(BuilderTest, Literal_U32) {
 
     spirv::Builder& b = Build();
 
-    auto id = b.GenerateLiteralIfNeeded(nullptr, i);
-    ASSERT_FALSE(b.has_error()) << b.error();
+    auto id = b.GenerateLiteralIfNeeded(i);
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
     EXPECT_EQ(2u, id);
 
-    EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeInt 32 0
+    EXPECT_EQ(DumpInstructions(b.Module().Types()), R"(%1 = OpTypeInt 32 0
 %2 = OpConstant %1 23
 )");
 }
@@ -123,11 +123,11 @@ TEST_F(BuilderTest, Literal_U32_Dedup) {
 
     spirv::Builder& b = Build();
 
-    ASSERT_NE(b.GenerateLiteralIfNeeded(nullptr, i1), 0u);
-    ASSERT_NE(b.GenerateLiteralIfNeeded(nullptr, i2), 0u);
-    ASSERT_FALSE(b.has_error()) << b.error();
+    ASSERT_NE(b.GenerateLiteralIfNeeded(i1), 0u);
+    ASSERT_NE(b.GenerateLiteralIfNeeded(i2), 0u);
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
 
-    EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeInt 32 0
+    EXPECT_EQ(DumpInstructions(b.Module().Types()), R"(%1 = OpTypeInt 32 0
 %2 = OpConstant %1 23
 )");
 }
@@ -138,11 +138,11 @@ TEST_F(BuilderTest, Literal_F32) {
 
     spirv::Builder& b = Build();
 
-    auto id = b.GenerateLiteralIfNeeded(nullptr, i);
-    ASSERT_FALSE(b.has_error()) << b.error();
+    auto id = b.GenerateLiteralIfNeeded(i);
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
     EXPECT_EQ(2u, id);
 
-    EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeFloat 32
+    EXPECT_EQ(DumpInstructions(b.Module().Types()), R"(%1 = OpTypeFloat 32
 %2 = OpConstant %1 23.2450008
 )");
 }
@@ -154,34 +154,34 @@ TEST_F(BuilderTest, Literal_F32_Dedup) {
 
     spirv::Builder& b = Build();
 
-    ASSERT_NE(b.GenerateLiteralIfNeeded(nullptr, i1), 0u);
-    ASSERT_NE(b.GenerateLiteralIfNeeded(nullptr, i2), 0u);
-    ASSERT_FALSE(b.has_error()) << b.error();
+    ASSERT_NE(b.GenerateLiteralIfNeeded(i1), 0u);
+    ASSERT_NE(b.GenerateLiteralIfNeeded(i2), 0u);
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
 
-    EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeFloat 32
+    EXPECT_EQ(DumpInstructions(b.Module().Types()), R"(%1 = OpTypeFloat 32
 %2 = OpConstant %1 23.2450008
 )");
 }
 
 TEST_F(BuilderTest, Literal_F16) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
     auto* i = create<ast::FloatLiteralExpression>(23.245, ast::FloatLiteralExpression::Suffix::kH);
     WrapInFunction(i);
 
     spirv::Builder& b = Build();
 
-    auto id = b.GenerateLiteralIfNeeded(nullptr, i);
-    ASSERT_FALSE(b.has_error()) << b.error();
+    auto id = b.GenerateLiteralIfNeeded(i);
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
     EXPECT_EQ(2u, id);
 
-    EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeFloat 16
+    EXPECT_EQ(DumpInstructions(b.Module().Types()), R"(%1 = OpTypeFloat 16
 %2 = OpConstant %1 0x1.73cp+4
 )");
 }
 
 TEST_F(BuilderTest, Literal_F16_Dedup) {
-    Enable(ast::Extension::kF16);
+    Enable(builtin::Extension::kF16);
 
     auto* i1 = create<ast::FloatLiteralExpression>(23.245, ast::FloatLiteralExpression::Suffix::kH);
     auto* i2 = create<ast::FloatLiteralExpression>(23.245, ast::FloatLiteralExpression::Suffix::kH);
@@ -189,11 +189,11 @@ TEST_F(BuilderTest, Literal_F16_Dedup) {
 
     spirv::Builder& b = Build();
 
-    ASSERT_NE(b.GenerateLiteralIfNeeded(nullptr, i1), 0u);
-    ASSERT_NE(b.GenerateLiteralIfNeeded(nullptr, i2), 0u);
-    ASSERT_FALSE(b.has_error()) << b.error();
+    ASSERT_NE(b.GenerateLiteralIfNeeded(i1), 0u);
+    ASSERT_NE(b.GenerateLiteralIfNeeded(i2), 0u);
+    ASSERT_FALSE(b.has_error()) << b.Diagnostics();
 
-    EXPECT_EQ(DumpInstructions(b.types()), R"(%1 = OpTypeFloat 16
+    EXPECT_EQ(DumpInstructions(b.Module().Types()), R"(%1 = OpTypeFloat 16
 %2 = OpConstant %1 0x1.73cp+4
 )");
 }

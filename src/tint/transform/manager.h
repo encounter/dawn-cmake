@@ -19,7 +19,15 @@
 #include <utility>
 #include <vector>
 
+#include "src/tint/program.h"
 #include "src/tint/transform/transform.h"
+
+#if TINT_BUILD_IR
+// Forward declarations
+namespace tint::ir {
+class Module;
+}  // namespace tint::ir
+#endif  // TINT_BUILD_IR
 
 namespace tint::transform {
 
@@ -27,11 +35,11 @@ namespace tint::transform {
 /// The inner transforms will execute in the appended order.
 /// If any inner transform fails the manager will return immediately and
 /// the error can be retrieved with the Output's diagnostics.
-class Manager final : public Castable<Manager, Transform> {
+class Manager {
   public:
     /// Constructor
     Manager();
-    ~Manager() override;
+    ~Manager();
 
     /// Add pass to the manager
     /// @param transform the transform to append
@@ -41,20 +49,32 @@ class Manager final : public Castable<Manager, Transform> {
 
     /// Add pass to the manager of type `T`, constructed with the provided
     /// arguments.
-    /// @param args the arguments to forward to the `T` constructor
+    /// @param args the arguments to forward to the `T` initializer
     template <typename T, typename... ARGS>
     void Add(ARGS&&... args) {
         transforms_.emplace_back(std::make_unique<T>(std::forward<ARGS>(args)...));
     }
 
-    /// Runs the transforms on `program`, returning the transformation result.
+    /// Runs the transforms on @p program, returning the transformed clone of @p program.
     /// @param program the source program to transform
-    /// @param data optional extra transform-specific input data
-    /// @returns the transformed program and diagnostics
-    Output Run(const Program* program, const DataMap& data = {}) const override;
+    /// @param inputs optional extra transform-specific input data
+    /// @param outputs optional extra transform-specific output data
+    /// @returns the transformed program
+    Program Run(const Program* program, const DataMap& inputs, DataMap& outputs) const;
+
+#if TINT_BUILD_IR
+    /// Runs the transforms on @p module
+    /// @param module the module to transform
+    /// @param inputs optional extra transform-specific input data
+    /// @param outputs optional extra transform-specific output data
+    void Run(ir::Module* module, const DataMap& inputs, DataMap& outputs) const;
+#endif  // TINT_BUILD_IR
 
   private:
     std::vector<std::unique_ptr<Transform>> transforms_;
+
+    template <typename OUTPUT, typename INPUT>
+    OUTPUT RunTransforms(INPUT in, const DataMap& inputs, DataMap& outputs) const;
 };
 
 }  // namespace tint::transform
