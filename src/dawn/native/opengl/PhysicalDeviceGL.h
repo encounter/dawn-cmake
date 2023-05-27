@@ -23,7 +23,11 @@ namespace dawn::native::opengl {
 
 class PhysicalDevice : public PhysicalDeviceBase {
   public:
-    PhysicalDevice(InstanceBase* instance, wgpu::BackendType backendType);
+    PhysicalDevice(InstanceBase* instance,
+                   wgpu::BackendType backendType,
+                   void (*makeCurrent)(void*),
+                   void (*destroy)(void*),
+                   void* userData);
 
     MaybeError InitializeGLFunctions(void* (*getProc)(const char*));
 
@@ -48,6 +52,9 @@ class PhysicalDevice : public PhysicalDeviceBase {
 
     OpenGLFunctions mFunctions;
     EGLFunctions mEGLFunctions;
+    void (*mMakeCurrent)(void*);
+    void (*mDestroy)(void*);
+    void* mUserData;
 };
 
 }  // namespace dawn::native::opengl

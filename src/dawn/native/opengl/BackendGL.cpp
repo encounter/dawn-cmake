@@ -97,8 +97,9 @@ ResultOrError<std::vector<Ref<PhysicalDeviceBase>>> Backend::DiscoverPhysicalDev
     DAWN_INVALID_IF(options->getProc == nullptr,
                     "PhysicalDeviceDiscoveryOptions::getProc must be set");
 
-    Ref<PhysicalDevice> physicalDevice = AcquireRef(new PhysicalDevice(
-        GetInstance(), static_cast<wgpu::BackendType>(optionsBase->backendType)));
+    Ref<PhysicalDevice> physicalDevice = AcquireRef(
+        new PhysicalDevice(GetInstance(), static_cast<wgpu::BackendType>(optionsBase->backendType),
+                           options->makeCurrent, options->destroy, options->userData));
     DAWN_TRY(physicalDevice->InitializeGLFunctions(options->getProc));
     DAWN_TRY(physicalDevice->Initialize());
 
