@@ -18,6 +18,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <cstdint>
 
 #include "src/tint/reader/spirv/fail_stream.h"
 
