@@ -509,7 +509,6 @@ function(tint_default_compile_options TARGET)
 
   set(COMMON_GNU_OPTIONS
     -Wall
-    -Werror
     -Wextra
     -Wno-documentation-unknown-command
     -Wno-padded
